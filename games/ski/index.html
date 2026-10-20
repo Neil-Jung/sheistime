@@ -120,6 +120,8 @@ button { font-family: var(--font-ui); cursor: pointer; border: 0; }
 #speedo b { font-family: var(--font-title); font-weight: 400; font-size: 22px; color: var(--ice); }
 #speedo .sep { opacity: 0.5; margin: 0 4px; }
 #speedo.fast b.spd { color: var(--gold); }
+#speedo.rush { box-shadow: inset 0 0 0 2px rgba(255, 196, 77, 0.55), 0 0 14px rgba(255, 196, 77, 0.35); }
+#speedo.rush b.spd { color: var(--gold); }
 #banner {
   position: absolute; left: 50%; bottom: calc(74px + var(--sab)); transform: translate(-50%, 10px);
   padding: 10px 20px; border-radius: 16px; background: rgba(14, 35, 64, 0.86);
@@ -261,7 +263,7 @@ button { font-family: var(--font-ui); cursor: pointer; border: 0; }
       <div class="howto">
         <div><span class="tag">터치</span><span>화면을 <em>탭할 때마다</em> 스키 방향이 왼쪽, 오른쪽으로 휙 바뀌어요.</span></div>
         <div><span class="tag">키보드</span><span><em>스페이스바</em>로 방향을 바꿔요. ←/→ 키도 돼요. 일시정지는 Esc나 P예요.</span></div>
-        <div><span class="tag">규칙</span><span><b class="r">빨강</b>·<b class="bl">파랑</b> 깃발 두 개 사이를 꼭 지나가요. 놓치면 꽈당! <em>한가운데</em>로 지나면 완벽 콤보예요.</span></div>
+        <div><span class="tag">규칙</span><span><b class="r">빨강</b>·<b class="bl">파랑</b> 깃발 두 개 사이를 꼭 지나가요. 놓치면 꽈당! <em>한가운데</em>로 지나면 완벽 콤보예요. 내려갈수록 <em>점점 빨라져요!</em></span></div>
       </div>
       <div class="btns"><button class="btn" id="btnStart">출발하기</button></div>
       <div class="bestline">최고 기록 깃발 <b id="titleBest">0</b>개</div>
@@ -312,7 +314,7 @@ const CFG = {
   UNIT_M: 20,              // world units per metre
   VIEW_W: 470, VIEW_H: 780,
   ANCHOR: 0.3,             // skier's height on screen (fraction from top)
-  V0: 230, VADD: 330, VSCALE: 20000,
+  V0: 230, VADD: 440, VSCALE: 11000, // base speed keeps climbing with distance: ~1.6x by 200 m, ~2.2x by 550 m, capped at 670 (≈120 km/h)
   BOOST_STEP: 0.07, BOOST_MAX: 0.2, BOOST_DECAY: 0.07,
   MIN_SW_T: 0.34,          // the course never asks for two turns closer than this many seconds (at top speed)
   LIFT_X: 214,
@@ -370,6 +372,8 @@ function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255
 
 // ================= MOTION MODEL (shared by the skier, the course generator and tests) =================
 function vBase(y) { return CFG.V0 + CFG.VADD * (1 - Math.exp(-Math.max(0, y) / CFG.VSCALE)); }
+// how much faster than the start the slope is here; the course spreads gates out and widens them with it
+function speedK(y) { return vBase(y) / CFG.V0; }
 function stepGeom(st, ds) {
   const tgt = st.dir * CFG.TH0;
   const d = tgt - st.th, m = ds / CFG.R;
@@ -387,7 +391,7 @@ const S = {
   t: 0, playT: 0, timeScale: 1, acc: 0,
   gates: 0, combo: 0, maxCombo: 0, perfects: 0, grazes: 0, turns: 0, bumps: 0, best: 0, newRecord: false, recordShown: false,
   reason: '', resultAt: 0, seed: 0, fixedSeed: 0, tod: 0, todShown: 0, forceTod: -1, autoT: 0, flash: 0, flashCol: 0,
-  hintShown: false, lastMilestone: 0, nextMarker: 100, ready: 0,
+  hintShown: false, lastMilestone: 0, nextMarker: 100, ready: 0, speedBand: 0,
 };
 S.best = Math.max(0, parseInt(load(KEY_BEST, '0'), 10) || 0);
 const cam = { x: 0, y: 0, z: 1, shake: 0, sx: 0, sy: 0, lastY: 0 };
@@ -429,9 +433,10 @@ function minDistSamples(Cs, x, y) {
 }
 function genSegment(Cs) {
   const i = Cs.gateIdx, k = diffK(i), rnd = Cs.rnd, V = Cs.V, st = Cs.stats;
-  const D = lerp(300, 250, k) * (0.92 + 0.16 * rnd());
-  const y0 = Cs.lastGateY, gy = y0 + D;
-  const w = gateWidth(i, rnd);
+  const y0 = Cs.lastGateY, sf = speedK(y0);
+  const D = lerp(300, 250, k) * (0.92 + 0.16 * rnd()) * Math.pow(sf, 0.6);
+  const gy = y0 + D;
+  const w = Math.min(170, gateWidth(i, rnd) * Math.pow(sf, 0.3));
   const vmax = vBase(gy) * (1 + CFG.BOOST_MAX);
   const minSw = Math.max(CFG.R * 1.9, CFG.MIN_SW_T * vmax);
   let n = 1;
@@ -500,7 +505,7 @@ function genSegment(Cs) {
     for (let a = 0; a < 14; a++) {
       const x = (rnd() * 2 - 1) * (CFG.HALF - 22), y = y0 + 50 + rnd() * (D - 100);
       const clear = minDistSamples(Cs, x, y) - r - CFG.SKR;
-      if (clear < 20) continue;
+      if (clear < 20 + 12 * (sf - 1)) continue;
       if (nearPoles(x, y, r + 26) || nearObs(x, y, r + 24)) continue;
       st.minClear = Math.min(st.minClear, clear); st.obstacles++;
       Cs.obs.push({ k: isRock ? K_ROCK : K_TREE, x, y, r, h: isRock ? 26 : 72, v: 0, ct: 1, amp: 0, cx: x, ph: 0, sp: 0 });
@@ -964,7 +969,7 @@ function resetRun() {
   course = S.mode === 'title' ? null : newCourse(S.seed);
   resetDecor();
   S.playT = 0; S.ready = S.mode === 'title' ? 0 : CFG.READY_T; S.gates = 0; S.combo = 0; S.maxCombo = 0; S.perfects = 0; S.grazes = 0; S.turns = 0; S.bumps = 0;
-  S.newRecord = false; S.recordShown = S.best <= 0; S.reason = ''; S.acc = 0; S.flash = 0; S.todShown = 0; S.lastMilestone = 0;
+  S.newRecord = false; S.recordShown = S.best <= 0; S.reason = ''; S.acc = 0; S.flash = 0; S.todShown = 0; S.lastMilestone = 0; S.speedBand = 0;
   for (let i = 0; i < PMAX; i++) parts[i].on = false;
   for (let i = 0; i < POPMAX; i++) pops[i].on = false;
   for (let i = 0; i < gear.length; i++) gear[i].on = false;
@@ -1227,14 +1232,14 @@ function update(dt) {
 // ================= CAMERA =================
 function updateCamera(dt, ix, iy) {
   const f = clamp((sk.v - CFG.V0) / CFG.VADD, 0, 1);
-  const zt = ZB * (1 - 0.07 * f - 0.05 * sk.boost / CFG.BOOST_MAX);
+  const zt = ZB * (1 - 0.15 * f - 0.05 * sk.boost / CFG.BOOST_MAX);
   cam.z += (zt - cam.z) * Math.min(1, dt * 2);
   const vw = W / cam.z, vh = H / cam.z;
   const follow = vw < 700 ? 0.55 : 0.25;
   const tx = ix * follow;
   cam.x += (tx - cam.x) * Math.min(1, dt * 3);
   cam.lastY = cam.y;
-  cam.y = iy - vh * (CFG.ANCHOR - 0.03 * f);
+  cam.y = iy - vh * (CFG.ANCHOR - 0.07 * f);
   cam.sx = cam.shake > 0 ? (Math.random() - 0.5) * cam.shake : 0;
   cam.sy = cam.shake > 0 ? (Math.random() - 0.5) * cam.shake : 0;
   view.x0 = cam.x - vw / 2 - 10; view.x1 = cam.x + vw / 2 + 10; view.y0 = cam.y - 10; view.y1 = cam.y + vh + 10;
@@ -1714,14 +1719,17 @@ function render(dt) {
   drawPopups();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawFlakes(dt);
-  // speed streaks when boosted
-  if (sk.boost > 0.05 && S.mode === 'play' && !reduceMotion) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2; ctx.globalAlpha = Math.min(1, sk.boost * 4);
+  // speed streaks: they creep in as the slope gets faster, and flare up when boosted
+  const sf = clamp((sk.v - CFG.V0 * 1.25) / (CFG.VADD * 0.8), 0, 1);
+  const streak = Math.min(1, sk.boost * 4 + sf * 0.75);
+  if (streak > 0.05 && S.mode === 'play' && !reduceMotion) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2; ctx.globalAlpha = streak;
     ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const x = (hash(i * 13 + Math.floor(S.t * 20)) < 0.5 ? hash(i * 7) * W * 0.18 : W - hash(i * 7) * W * 0.18);
-      const y = ((hash(i * 31) * H - S.t * 900 * (0.6 + hash(i) * 0.6)) % H + H) % H;
-      ctx.moveTo(x, y); ctx.lineTo(x, y + 40 + hash(i * 3) * 40);
+    const n = 6 + Math.round(10 * streak), vy = 500 + sk.v * 1.2;
+    for (let i = 0; i < n; i++) {
+      const x = (hash(i * 13 + Math.floor(S.t * 20)) < 0.5 ? hash(i * 7) * W * 0.2 : W - hash(i * 7) * W * 0.2);
+      const y = ((hash(i * 31) * H - S.t * vy * (0.6 + hash(i) * 0.6)) % H + H) % H;
+      ctx.moveTo(x, y); ctx.lineTo(x, y + (30 + hash(i * 3) * 40) * (0.8 + streak));
     }
     ctx.stroke(); ctx.globalAlpha = 1;
   }
@@ -1747,7 +1755,12 @@ function updateHud() {
   const best = Math.max(S.best, S.gates);
   if (shown.best !== best) { shown.best = best; ui.bestV.textContent = best; ui.bestBox.classList.toggle('beaten', S.newRecord); }
   const spd = Math.round(sk.v / CFG.UNIT_M * 3.6);
-  if (shown.spd !== spd) { shown.spd = spd; ui.spdV.textContent = spd; ui.speedo.classList.toggle('fast', sk.boost > 0.03); }
+  if (shown.spd !== spd) { shown.spd = spd; ui.spdV.textContent = spd; ui.speedo.classList.toggle('fast', sk.boost > 0.03); ui.speedo.classList.toggle('rush', sk.v > CFG.V0 * 1.9); }
+  // the slope keeps getting faster: call out each new speed band
+  if (S.mode === 'play' && S.ready <= 0) {
+    const band = Math.floor(vBase(sk.y) / CFG.UNIT_M * 3.6 / 20) * 20;
+    if (band >= 60 && band > S.speedBand) { S.speedBand = band; showBanner('더 빨라져요! ' + band + 'km/h', false, 1.3); sfx.milestone(); }
+  }
   const d = Math.floor(Math.max(0, sk.y) / CFG.UNIT_M);
   if (shown.dist !== d) { shown.dist = d; ui.distV.textContent = d; }
   if (shown.combo !== S.combo) {

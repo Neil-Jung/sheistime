@@ -1330,10 +1330,14 @@ function drawObstacle(o) {
     ctx.beginPath(); ctx.moveTo(cx + rx * 0.7, bodyY - ry * 0.2); ctx.lineTo(cx + rx * 1.15, bodyY - ry * 1.1); ctx.lineTo(cx + rx * 0.95, bodyY + ry * 0.2); ctx.fill();
     ctx.fillStyle = 'rgba(200,170,120,0.5)'; ctx.beginPath(); ctx.ellipse(cx + rx * 0.15, bodyY - ry * 0.05, rx * 0.5, ry * 0.45, -0.2, 0, TAU); ctx.fill();
     const hx = SX(o.x - 0.2), hy = SY(0.29 + bob), hr = Math.max(4, 0.085 * u);
-    ctx.fillStyle = C.duck; ctx.beginPath(); ctx.moveTo(hx + hr * 0.4, hy + hr * 0.6); ctx.lineTo(cx - rx * 0.3, bodyY - ry * 0.4); ctx.lineTo(cx - rx * 0.6, bodyY); ctx.lineTo(hx - hr * 0.2, hy + hr * 0.8); ctx.fill();
+    // a full neck that flows from the chest up into the head (no floating head on a thin wedge)
+    ctx.strokeStyle = C.duck; ctx.lineCap = 'round'; ctx.lineWidth = hr * 1.25;
+    ctx.beginPath(); ctx.moveTo(hx + hr * 0.1, hy + hr * 0.3); ctx.quadraticCurveTo(hx + hr * 0.35, bodyY - ry * 0.5, cx - rx * 0.45, bodyY - ry * 0.2); ctx.stroke();
     disc(ctx, hx, hy, hr, C.duck);
-    ctx.fillStyle = C.duckBill; ctx.beginPath(); ctx.ellipse(hx - hr * 1.15, hy + hr * 0.2, hr * 0.6, hr * 0.28, 0.1, 0, TAU); ctx.fill();
-    disc(ctx, hx - hr * 0.3, hy - hr * 0.2, Math.max(1, hr * 0.17), C.ink);
+    // bill: rounded, upper lip slightly longer, set at mouth height on the front of the head
+    ctx.fillStyle = C.duckBill; ctx.beginPath(); ctx.ellipse(hx - hr * 1.05, hy + hr * 0.25, hr * 0.55, hr * 0.26, 0.08, 0, TAU); ctx.fill();
+    disc(ctx, hx - hr * 0.38, hy - hr * 0.12, Math.max(1, hr * 0.16), C.ink);
+    disc(ctx, hx - hr * 0.42, hy - hr * 0.17, Math.max(0.5, hr * 0.05), '#ffffff');
     ctx.fillStyle = 'rgba(255,140,160,0.45)'; disc(ctx, hx - hr * 0.1, hy + hr * 0.35, hr * 0.22, 'rgba(255,140,160,0.45)');
   } else if (o.k === 'buoy') {
     const cx = SX(o.x); if (cx < -40 || cx > W + 40) return;
@@ -1403,6 +1407,21 @@ function ik(ax, ay, bx, by, l1, l2, bendSign, out) {
   out.x = ax + Math.cos(base) * l1; out.y = ay + Math.sin(base) * l1;
   return { hx: ax + dx, hy: ay + dy };
 }
+// two-bone arm with the elbow bending smoothly toward the back/down side (never over the head):
+// the bend side is a continuous function of the reach direction, so the elbow never pops across
+function armIk(ax, ay, bx, by, l, out) {
+  let dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy) || 1e-6;
+  const maxd = 2 * l * 0.999;
+  if (d > maxd) { dx *= maxd / d; dy *= maxd / d; d = maxd; }
+  const nx = -dy / d, ny = dx / d;                          // CCW perpendicular (y up)
+  // reach angle (deg, y up): hand back-and-up -> elbow drops below the line (+1, CCW side);
+  // hand low or in front -> elbow points back/down (-1); short straight-arm ramps in between
+  let th = Math.atan2(dy, dx) / D2R; if (th < -90) th += 360;   // range [-90, 270)
+  const side = th < 75 ? -1 : th < 105 ? lerp(-1, 1, (th - 75) / 30) : th < 175 ? 1 : th < 215 ? lerp(1, -1, (th - 175) / 40) : -1;
+  const off = Math.sqrt(Math.max(0, l * l - d * d / 4)) * side;
+  out.x = ax + dx / 2 + nx * off; out.y = ay + dy / 2 + ny * off;
+  return { hx: ax + dx, hy: ay + dy };
+}
 function drawThrower() {
   const h = S.P.h, u = cam.s * VEX;
   const rock = Math.max(0, h - 1.5);
@@ -1445,7 +1464,7 @@ function drawThrower() {
   // back arm (balance)
   ctx.strokeStyle = C.skin; ctx.lineWidth = lw;
   const bh = { x: shX - 0.3, y: shY - 0.3 + c * 0.1 };
-  ik(shX, shY, bh.x, bh.y, 0.25, 0.25, -1, kn);
+  armIk(shX, shY, bh.x, bh.y, 0.25, kn);
   ctx.beginPath(); ctx.moveTo(KX(shX), KY(shY)); ctx.lineTo(KX(kn.x), KY(kn.y)); ctx.lineTo(KX(bh.x), KY(bh.y)); ctx.stroke();
   // torso
   ctx.strokeStyle = C.shirt; ctx.lineWidth = lw * 2.3;
@@ -1454,17 +1473,25 @@ function drawThrower() {
   ctx.beginPath(); ctx.moveTo(KX(lerp(hipX, shX, 0.3)) + lw * 0.6, KY(lerp(hipY, shY, 0.3))); ctx.lineTo(KX(lerp(hipX, shX, 0.75)) + lw * 0.6, KY(lerp(hipY, shY, 0.75))); ctx.stroke();
   // head + bucket hat
   const hr = 0.13 * u;
-  disc(ctx, KX(hdX), KY(hdY), hr, C.skin);
-  disc(ctx, KX(hdX) + hr * 0.45, KY(hdY) - hr * 0.05, Math.max(1, hr * 0.12), C.ink);
-  ctx.fillStyle = 'rgba(255,120,120,0.35)'; disc(ctx, KX(hdX) + hr * 0.35, KY(hdY) + hr * 0.35, hr * 0.2, 'rgba(255,120,120,0.35)');
-  ctx.save(); ctx.translate(KX(hdX), KY(hdY)); ctx.rotate(lean * 0.8);
+  // short neck so the head sits on the shoulders instead of floating
+  ctx.strokeStyle = C.skin; ctx.lineWidth = lw * 1.1;
+  ctx.beginPath(); ctx.moveTo(KX(shX), KY(shY)); ctx.lineTo(KX(lerp(shX, hdX, 0.8)), KY(lerp(shY, hdY, 0.8))); ctx.stroke();
+  // face turns with the head (profile, looking toward the lake)
+  ctx.save(); ctx.translate(KX(hdX), KY(hdY)); ctx.rotate(lean * 0.6);
+  disc(ctx, 0, 0, hr, C.skin);
+  disc(ctx, -hr * 0.12, hr * 0.08, hr * 0.2, mix(C.skin, '#c07a5a', 0.3));      // ear
+  disc(ctx, hr * 0.5, -hr * 0.08, Math.max(1, hr * 0.12), C.ink);                // eye
+  disc(ctx, hr * 0.42, hr * 0.34, hr * 0.18, 'rgba(255,120,120,0.35)');         // cheek
+  ctx.strokeStyle = '#8a4a3a'; ctx.lineWidth = Math.max(1, hr * 0.1);
+  ctx.beginPath(); ctx.arc(hr * 0.66, hr * 0.38, hr * 0.16, 0.2 * Math.PI, 0.75 * Math.PI); ctx.stroke(); // small smile
+  ctx.rotate(lean * 0.2);
   ctx.fillStyle = C.hat; ctx.beginPath(); ctx.ellipse(0, -hr * 0.55, hr * 1.35, hr * 0.28, 0, 0, TAU); ctx.fill();
   ctx.beginPath(); ctx.ellipse(0, -hr * 0.75, hr * 0.85, hr * 0.62, 0, Math.PI, TAU); ctx.fill();
   ctx.fillStyle = C.accentDeep; ctx.fillRect(-hr * 0.85, -hr * 0.8, hr * 1.7, hr * 0.18);
   ctx.restore();
   // throwing arm
   ctx.strokeStyle = C.skin; ctx.lineWidth = lw;
-  const e = ik(shX, shY, hx, hy, 0.36, 0.36, -1, kn);
+  const e = armIk(shX, shY, hx, hy, 0.36, kn);
   ctx.beginPath(); ctx.moveTo(KX(shX), KY(shY)); ctx.lineTo(KX(kn.x), KY(kn.y)); ctx.lineTo(KX(e.hx), KY(e.hy)); ctx.stroke();
   if (holding) drawStoneAt(KX(e.hx) + lw * 0.3, KY(e.hy) - lw * 0.2, (S.P.ang + PH.HAND) * D2R, 0, 0, 1);
 }

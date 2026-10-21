@@ -1156,10 +1156,19 @@ function drawGhost() {
 }
 const FONT = '"Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
 
+// where the rope leaves the hero, in hero-local units of R (x right, y down)
+function heroGrip(out) {
+  if (hero.dead) { out.x = 0.92; out.y = -0.98; }                       // flung-out right paw
+  else if (rope.state === 'attached') { out.x = 0; out.y = -1.24; }     // both paws overhead
+  else { out.x = 0.58; out.y = -1.14; }                                 // throwing arm raised forward
+  return out;
+}
+const GRIP = { x: 0, y: 0 };
 function handPos(out) {
   const R = CFG.R, c = Math.cos(hero.rot), s = Math.sin(hero.rot);
-  // local (0, -1.3R) rotated
-  out.x = hero.x + 1.3 * R * s; out.y = hero.y - 1.3 * R * c;
+  heroGrip(GRIP);
+  const lx = GRIP.x * R, ly = GRIP.y * R;
+  out.x = hero.x + lx * c - ly * s; out.y = hero.y + lx * s + ly * c;
   return out;
 }
 const HP = { x: 0, y: 0 };
@@ -1227,13 +1236,28 @@ function drawHero() {
 
   // legs
   const legSw = hanging ? Math.sin(S.t * 8) * R * 0.12 : 0;
-  ctx.strokeStyle = C.heroDark; ctx.lineWidth = R * 0.34;
-  ctx.beginPath();
-  if (sitting) { ctx.moveTo(-R * 0.25, R * 0.75); ctx.lineTo(-R * 0.35, R * 0.95); ctx.moveTo(R * 0.25, R * 0.75); ctx.lineTo(R * 0.45, R * 0.95); }
-  else if (hanging) { ctx.moveTo(-R * 0.22, R * 0.75); ctx.lineTo(-R * 0.25 + legSw, R * 1.15); ctx.moveTo(R * 0.22, R * 0.75); ctx.lineTo(R * 0.3 - legSw, R * 1.12); }
-  else { ctx.moveTo(-R * 0.22, R * 0.75); ctx.lineTo(-R * 0.55, R * 1.05); ctx.moveTo(R * 0.22, R * 0.75); ctx.lineTo(R * 0.5, R * 1.1); }
-  ctx.stroke();
+  const legPath = () => {
+    ctx.beginPath();
+    if (sitting) { ctx.moveTo(-R * 0.25, R * 0.75); ctx.lineTo(-R * 0.35, R * 0.98); ctx.moveTo(R * 0.25, R * 0.75); ctx.lineTo(R * 0.4, R * 0.98); }
+    else if (hanging) { ctx.moveTo(-R * 0.22, R * 0.75); ctx.lineTo(-R * 0.25 + legSw, R * 1.15); ctx.moveTo(R * 0.22, R * 0.75); ctx.lineTo(R * 0.3 - legSw, R * 1.12); }
+    else { ctx.moveTo(-R * 0.22, R * 0.75); ctx.lineTo(-R * 0.5, R * 1.08); ctx.moveTo(R * 0.22, R * 0.75); ctx.lineTo(R * 0.46, R * 1.12); }
+  };
+  ctx.strokeStyle = C.ink; ctx.lineWidth = R * 0.34 + 3; legPath(); ctx.stroke();
+  ctx.strokeStyle = C.heroDark; ctx.lineWidth = R * 0.34; legPath(); ctx.stroke();
 
+  // scarf tail (trailing ribbon, tucked behind the body)
+  const sx0 = -R * 0.2, sy0 = R * 0.0;
+  const fl = Math.sin(S.t * 18) * R * 0.18;
+  const sex = sx0 - (sitting ? R * 0.9 : (lvx * 1.6 * trail + 0.4) * R), sey = sy0 + (sitting ? R * 0.5 : (-lvy * 1.6 * trail) * R) + fl;
+  // a soft ribbon that ripples along its length instead of a stiff bar
+  const sdx = sex - sx0, sdy = sey - sy0, sl = Math.hypot(sdx, sdy) || 1, snx = -sdy / sl, sny = sdx / sl;
+  const wv = R * 0.16 * Math.sin(S.t * 16);
+  const scarfPath = () => {
+    ctx.beginPath(); ctx.moveTo(sx0, sy0);
+    ctx.bezierCurveTo(sx0 + sdx * 0.33 + snx * wv, sy0 + sdy * 0.33 + sny * wv, sx0 + sdx * 0.66 - snx * wv, sy0 + sdy * 0.66 - sny * wv, sex, sey);
+  };
+  ctx.strokeStyle = C.ink; ctx.lineWidth = R * 0.28 + 3; scarfPath(); ctx.stroke();
+  ctx.strokeStyle = C.scarf; ctx.lineWidth = R * 0.28; scarfPath(); ctx.stroke();
   // body
   ctx.fillStyle = C.ink;
   ctx.beginPath(); ctx.ellipse(0, R * 0.38, R * 0.66, R * 0.62, 0, 0, TAU); ctx.fill();
@@ -1244,23 +1268,30 @@ function drawHero() {
 
   // arms
   ctx.strokeStyle = C.ink; ctx.lineWidth = R * 0.36 + 3;
+  // paws that must sit on the rope are drawn again over the head (see below)
+  const ropeOut = !hero.dead && (rope.state === 'flying' || rope.state === 'retract');
+  heroGrip(GRIP);
+  const gx = GRIP.x * R, gy = GRIP.y * R;
   const armPath = () => {
     ctx.beginPath();
-    if (hanging) { ctx.moveTo(-R * 0.42, R * 0.15); ctx.lineTo(-R * 0.1, -R * 1.25); ctx.moveTo(R * 0.42, R * 0.15); ctx.lineTo(R * 0.1, -R * 1.32); }
+    if (hanging) {
+      // arms raised behind the head; the forearms show above it and the paws close on the rope
+      ctx.moveTo(-R * 0.42, R * 0.12); ctx.lineTo(-R * 0.4, -R * 1.0); ctx.lineTo(gx - R * 0.04, gy - R * 0.3);
+      ctx.moveTo(R * 0.42, R * 0.12); ctx.lineTo(R * 0.4, -R * 1.0); ctx.lineTo(gx + R * 0.04, gy);
+    }
     else if (sitting) { ctx.moveTo(-R * 0.45, R * 0.2); ctx.lineTo(-R * 0.6, R * 0.6); ctx.moveTo(R * 0.45, R * 0.2); ctx.lineTo(R * 0.62, R * 0.55); }
-    else if (hero.dead) { ctx.moveTo(-R * 0.45, R * 0.1); ctx.lineTo(-R * 0.9, -R * 1.0); ctx.moveTo(R * 0.45, R * 0.1); ctx.lineTo(R * 0.9, -R * 1.0); }
-    else { const f = Math.sin(S.t * 14) * R * 0.12; ctx.moveTo(-R * 0.45, R * 0.15); ctx.lineTo(-R * 1.05, -R * 0.45 + f); ctx.moveTo(R * 0.45, R * 0.15); ctx.lineTo(R * 1.05, -R * 0.5 - f); }
+    else if (hero.dead) { ctx.moveTo(-R * 0.45, R * 0.1); ctx.lineTo(-R * 0.9, -R * 1.0); ctx.moveTo(R * 0.45, R * 0.1); ctx.lineTo(gx, gy); }
+    else {
+      const f = Math.sin(S.t * 14) * R * 0.12;
+      ctx.moveTo(-R * 0.45, R * 0.15); ctx.lineTo(-R * 1.05, -R * 0.45 + f);
+      ctx.moveTo(R * 0.45, R * 0.15);
+      if (ropeOut) ctx.quadraticCurveTo(R * 0.85, -R * 0.4, gx, gy); else ctx.lineTo(R * 1.05, -R * 0.5 - f);
+    }
   };
   armPath(); ctx.stroke();
   ctx.strokeStyle = C.heroDark; ctx.lineWidth = R * 0.36; armPath(); ctx.stroke();
 
-  // scarf (trailing ribbon)
-  const sx0 = -R * 0.2, sy0 = R * 0.0;
-  const fl = Math.sin(S.t * 18) * R * 0.18;
-  const sex = sx0 - (sitting ? R * 0.9 : (lvx * 1.6 * trail + 0.4) * R), sey = sy0 + (sitting ? R * 0.5 : (-lvy * 1.6 * trail) * R) + fl;
-  ctx.strokeStyle = C.ink; ctx.lineWidth = R * 0.3 + 3;
-  ctx.beginPath(); ctx.moveTo(sx0, sy0); ctx.quadraticCurveTo((sx0 + sex) / 2 - fl, (sy0 + sey) / 2 + fl, sex, sey); ctx.stroke();
-  ctx.strokeStyle = C.scarf; ctx.lineWidth = R * 0.3; ctx.stroke();
+  // scarf knot
   ctx.fillStyle = C.scarf; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.ellipse(0, -R * 0.02, R * 0.56, R * 0.17, 0, 0, TAU); ctx.fill(); ctx.stroke();
 
@@ -1301,9 +1332,24 @@ function drawHero() {
   ctx.beginPath(); ctx.ellipse(R * 0.04, hy + R * 0.13, R * 0.09, R * 0.06, 0, 0, TAU); ctx.fill();
   ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
   ctx.beginPath();
-  if (hanging || sitting || S.mode === 'title') { ctx.moveTo(-R * 0.06, hy + R * 0.25); ctx.quadraticCurveTo(R * 0.04, hy + R * 0.34, R * 0.14, hy + R * 0.25); }
-  else { ctx.ellipse(R * 0.04, hy + R * 0.3, R * 0.07, R * 0.08, 0, 0, TAU); }
-  ctx.stroke();
+  if (hanging || sitting || S.mode === 'title') { ctx.moveTo(R * 0.04, hy + R * 0.19); ctx.lineTo(R * 0.04, hy + R * 0.25); ctx.moveTo(-R * 0.08, hy + R * 0.25); ctx.quadraticCurveTo(-R * 0.02, hy + R * 0.33, R * 0.04, hy + R * 0.25); ctx.quadraticCurveTo(R * 0.1, hy + R * 0.33, R * 0.16, hy + R * 0.25); ctx.stroke(); }
+  else {
+    // surprised little "o", clear of the nose
+    ctx.stroke();
+    ctx.fillStyle = '#5a1f14'; ctx.beginPath(); ctx.ellipse(R * 0.04, hy + R * 0.33, R * 0.065, R * 0.08, 0, 0, TAU); ctx.fill(); ctx.stroke();
+  }
+  // paws holding the rope sit in front of the head
+  if (hanging || ropeOut || hero.dead) {
+    ctx.fillStyle = C.heroDark; ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5;
+    // a fist wrapped around the rope: wider across the rope than along it
+    const paw = (px, py) => {
+      ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(px, py, R * 0.21, R * 0.15, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.beginPath(); // knuckle creases
+      ctx.moveTo(px - R * 0.07, py - R * 0.13); ctx.lineTo(px - R * 0.07, py - R * 0.04); ctx.moveTo(px + R * 0.07, py - R * 0.13); ctx.lineTo(px + R * 0.07, py - R * 0.04); ctx.stroke();
+    };
+    if (hanging) paw(gx, gy - R * 0.3);
+    paw(gx, gy);
+  }
   ctx.restore();
 }
 const TAIL_DASH = [5, 7];

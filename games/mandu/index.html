@@ -1246,6 +1246,47 @@ function bossBaseFace(b) {
   if (b.game && G.run) { const m = G.run.mood; return m >= 72 ? 'content' : m >= 35 ? 'idle' : 'grumpy'; }
   return 'idle';
 }
+// boss arm parts: jacket sleeve (shoulder to elbow), bare forearm, and hands
+function bossSleeve(g, sx, sy, ex, ey) {
+  capsule(g, sx, sy, ex, ey, 19, '#f4f1ea');
+  // cuff ring at the elbow end
+  const a = Math.atan2(ey - sy, ex - sx), nx = -Math.sin(a) * 9.5, ny = Math.cos(a) * 9.5, bx = ex - Math.cos(a) * 4, by = ey - Math.sin(a) * 4;
+  g.lineCap = 'round'; g.lineWidth = 1.6; g.strokeStyle = 'rgba(59,36,20,0.45)';
+  g.beginPath(); g.moveTo(bx + nx * 0.85, by + ny * 0.85); g.lineTo(bx - nx * 0.85, by - ny * 0.85); g.stroke();
+}
+function bossForearm(g, ex, ey, hx, hy) { capsule(g, ex, ey, hx, hy, 14, BOSS_SKIN[0]); }
+// a = direction the forearm points (elbow -> hand); kind: fist | grip | palm; side flips the thumb
+function bossHand(g, x, y, a, kind, col, side, k) {
+  side = side || 1; k = (k || 1) * 1.2;
+  g.save(); g.translate(x, y); g.rotate(a); g.scale(k, k * side);
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  if (kind === 'palm') {
+    // open hand: four fingers fanned out past the palm, thumb to the side
+    const F = [[-0.5, 12], [-0.17, 14], [0.17, 13.5], [0.5, 11.5]];
+    const TH = [1.25, 11];
+    for (let pass = 0; pass < 2; pass++) {
+      g.strokeStyle = pass ? col : C.ink; g.lineWidth = pass ? 4.4 : 8;
+      for (const f of F) { g.beginPath(); g.moveTo(2, 0); g.lineTo(2 + Math.cos(f[0]) * f[1], Math.sin(f[0]) * f[1] * 1.15); g.stroke(); }
+      g.beginPath(); g.moveTo(0, 2); g.lineTo(Math.cos(TH[0]) * TH[1], Math.sin(TH[0]) * TH[1] + 2); g.stroke();
+      ell(g, 0, 0, 7.5 + (pass ? 0 : 1.3), 8 + (pass ? 0 : 1.3)); g.fillStyle = pass ? col : C.ink; g.fill();
+    }
+    g.strokeStyle = 'rgba(59,36,20,0.35)'; g.lineWidth = 1.2; g.beginPath(); g.arc(-1, 0, 4.5, -0.9, 0.9); g.stroke();
+  } else {
+    // closed hand seen from the back: rounded block, finger creases along the curl, thumb wrapped on one side
+    rr(g, -7, -8.5, 16, 17, 6.5); fs(g, col, 2.5);
+    g.strokeStyle = C.ink; g.lineWidth = 1.4; g.beginPath();
+    for (const yy of [-3, 1.5]) { g.moveTo(3, yy); g.lineTo(8.5, yy); }
+    if (kind === 'fist') { g.moveTo(3, 5.8); g.lineTo(8, 5.8); }
+    g.stroke();
+    ell(g, -1, kind === 'fist' ? -8 : 7.5, 5, 3.2, 0.25); fs(g, col, 2);
+  }
+  g.restore();
+}
+function bossArm(g, sx, sy, ex, ey, hx, hy, kind, side, k) {
+  bossSleeve(g, sx, sy, ex, ey);
+  bossForearm(g, ex, ey, hx, hy);
+  bossHand(g, hx, hy, Math.atan2(hy - ey, hx - ex), kind, BOSS_SKIN[0], side || 1, k);
+}
 function drawBoss(g, b, time) {
   const jerk = REDUCED ? b.jerk * 0.4 : b.jerk;
   const face = b.face;
@@ -1260,24 +1301,28 @@ function drawBoss(g, b, time) {
   g.beginPath(); g.moveTo(-24, -50); g.lineTo(24, -50); g.lineTo(28, -26); g.quadraticCurveTo(50, -22, 52, 34); g.lineTo(-52, 34); g.quadraticCurveTo(-50, -22, -28, -26); g.closePath();
   fs(g, C.navy, 3);
   g.lineWidth = 4; g.strokeStyle = C.navy; g.beginPath(); g.moveTo(-22, -50); g.lineTo(-13, -64); g.moveTo(22, -50); g.lineTo(13, -64); g.stroke();
-  g.font = fH(14); g.fillStyle = '#f4f1ea'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('만복', 0, -37);
+  g.font = fH(14); g.fillStyle = '#f4f1ea'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('만복', 0, -40);
   rr(g, -9, -72, 18, 12, 4); fs(g, BOSS_SKIN[0], 2.5);
   const pose = b.pose;
   const hy = -100 + jerk * 6;
   const skin = BOSS_SKIN[Math.round(clamp(b.red, 0, 1) * 10)];
-  // back arms
-  if (pose === 'cross' || pose === 'fist') {
-    capsule(g, -46, -52, -54, -20, 17, '#f4f1ea');
-    if (pose === 'cross') capsule(g, 46, -52, 54, -20, 17, '#f4f1ea');
-    capsule(g, -52, -20, 24, -8, 15, BOSS_SKIN[0]); circ(g, 26, -8, 8); fs(g, BOSS_SKIN[0], 2.5);
-    if (pose === 'cross') { capsule(g, 52, -22, -22, -14, 15, BOSS_SKIN[0]); circ(g, -24, -14, 8); fs(g, BOSS_SKIN[0], 2.5); }
+  // back arms (upper arm in the white jacket sleeve, bare forearm from the elbow, a hand at the end)
+  const SK = BOSS_SKIN[0];
+  if (pose === 'cross') {
+    // folded arms, two separate forearms stacked: the back one rises to a hand gripping the right sleeve,
+    // the front one sits lower and ends in a hand on the left elbow
+    bossSleeve(g, 46, -52, 56, -10);
+    bossArm(g, -46, -52, -56, -16, 40, -31, 'grip', 0);
+    bossForearm(g, 56, -10, -38, -2);
+    bossHand(g, -40, -1.5, Math.atan2(8, -94), 'grip', SK);
+  } else if (pose === 'fist') {
+    bossArm(g, -46, -52, -56, -18, 22, -24, 'grip', 0);
   } else if (pose === 'cough' || pose === 'taste') {
-    capsule(g, -46, -52, -54, -20, 17, '#f4f1ea');
-    capsule(g, -52, -20, 18, -10, 15, BOSS_SKIN[0]); circ(g, 20, -10, 8); fs(g, BOSS_SKIN[0], 2.5);
+    bossArm(g, -46, -52, -56, -18, 20, -12, 'grip', 0);
   } else if (pose === 'up') {
     const wv = Math.sin(time * 12) * 4;
-    capsule(g, -44, -54, -64, -84, 17, '#f4f1ea'); capsule(g, -64, -84, -58, -120 + wv, 15, BOSS_SKIN[0]); circ(g, -58, -122 + wv, 9); fs(g, BOSS_SKIN[0], 2.5);
-    capsule(g, 44, -54, 64, -84, 17, '#f4f1ea'); capsule(g, 64, -84, 58, -120 - wv, 15, BOSS_SKIN[0]); circ(g, 58, -122 - wv, 9); fs(g, BOSS_SKIN[0], 2.5);
+    bossArm(g, -44, -54, -72, -72, -64 + wv * 0.3, -108 + wv, 'palm', -1);
+    bossArm(g, 44, -54, 72, -72, 64 - wv * 0.3, -108 - wv, 'palm', 1);
   }
   // head
   g.save(); g.translate(0, hy);
@@ -1286,20 +1331,18 @@ function drawBoss(g, b, time) {
   g.restore();
   // front arm
   if (pose === 'cough') {
-    capsule(g, 46, -52, 54, -24, 17, '#f4f1ea');
-    capsule(g, 54, -24, 16, hy + 26, 15, BOSS_SKIN[0]);
-    circ(g, 12, hy + 28, 10); fs(g, BOSS_SKIN[0], 2.5);
-    g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(6, hy + 25); g.lineTo(16, hy + 24); g.moveTo(6, hy + 30); g.lineTo(16, hy + 29); g.stroke();
+    // fist held up to the mouth
+    bossArm(g, 46, -52, 58, -22, 14, hy + 30, 'fist', 0);
   } else if (pose === 'taste') {
-    capsule(g, 46, -52, 54, -24, 17, '#f4f1ea');
-    capsule(g, 54, -24, 26, hy + 38, 15, BOSS_SKIN[0]);
+    bossSleeve(g, 46, -52, 58, -22);
+    bossForearm(g, 58, -22, 30, hy + 40);
     g.strokeStyle = '#a8743f'; g.lineWidth = 3; g.beginPath(); g.moveTo(30, hy + 36); g.lineTo(6, hy + 30); g.moveTo(30, hy + 40); g.lineTo(6, hy + 34); g.stroke();
     if (!b.bite) { g.beginPath(); g.moveTo(-6, hy + 34); g.arc(4, hy + 34, 10, Math.PI, 0); g.closePath(); fs(g, C.dough, 2.5); }
-    circ(g, 28, hy + 38, 9); fs(g, BOSS_SKIN[0], 2.5);
+    bossHand(g, 28, hy + 38, Math.atan2(hy + 40 + 22, 30 - 58), 'fist', SK);
   } else if (pose === 'fist') {
+    // raised, shaking fist: elbow out to the side, forearm up
     const sh = Math.sin(time * 26) * 4;
-    capsule(g, 46, -52, 62, -30, 17, '#f4f1ea');
-    capsule(g, 62, -30, 60 + sh, -86, 15, BOSS_SKIN[0]); circ(g, 60 + sh, -90, 11); fs(g, BOSS_SKIN[0], 2.5);
+    bossArm(g, 46, -52, 74, -58, 68 + sh, -98, 'fist', 0, 1.15);
   }
   // cough puffs near mouth
   if (jerk > 0.05 && pose === 'cough') {
@@ -1322,7 +1365,7 @@ function drawBossHead(g, b, face, skin, time) {
   circ(g, 0, 0, 35); fs(g, skin, 3);
   ell(g, -12, -22, 9, 5, -0.4); fs(g, 'rgba(255,255,255,0.45)');
   g.strokeStyle = '#5b5550'; g.lineWidth = 1.6; g.beginPath();
-  g.moveTo(-24, -22); g.quadraticCurveTo(-4, -40, 22, -27); g.moveTo(-22, -18); g.quadraticCurveTo(0, -36, 25, -22); g.moveTo(-18, -26); g.quadraticCurveTo(2, -42, 18, -32); g.stroke();
+  g.moveTo(-24, -20); g.quadraticCurveTo(-4, -36, 22, -24); g.moveTo(-22, -16); g.quadraticCurveTo(0, -32, 25, -19); g.moveTo(-17, -24); g.quadraticCurveTo(2, -37, 18, -29); g.stroke();
   // towel headband
   g.beginPath(); g.moveTo(-35, -14); g.quadraticCurveTo(0, -22, 35, -14); g.lineTo(35, -6); g.quadraticCurveTo(0, -14, -35, -6); g.closePath();
   fs(g, '#fbfbf7', 2.5);
@@ -1366,19 +1409,19 @@ function drawBossHead(g, b, face, skin, time) {
     }
   }
   // cheeks
-  const puff = face === 'chew' ? 1.6 + Math.abs(Math.sin(time * 14)) * 1.2 : 1;
-  ell(g, -23, 17, 6 * puff, 4 * puff); fs(g, 'rgba(232,110,90,0.45)');
-  ell(g, 23, 17, 6 * puff, 4 * puff); fs(g, 'rgba(232,110,90,0.45)');
+  const puff = face === 'chew' ? 1.2 + Math.abs(Math.sin(time * 14)) * 0.22 : 1;
+  ell(g, -22, 16, 6 * puff, 4 * puff); fs(g, 'rgba(232,110,90,0.45)');
+  ell(g, 22, 16, 6 * puff, 4 * puff); fs(g, 'rgba(232,110,90,0.45)');
   // mouth (under mustache)
   const talking = b.talkT > 0 && face !== 'cough' && face !== 'chew';
   g.fillStyle = '#7a2a20';
-  if (face === 'cough') { ell(g, 0, 31, 8, 6.5); fs(g, '#7a2a20', 2.5); }
-  else if (face === 'chew') { ell(g, 0, 30, 5, 1.5 + Math.abs(Math.sin(time * 14)) * 2.2); fs(g, '#7a2a20', 2); }
-  else if (face === 'happy') { g.beginPath(); g.moveTo(-10, 27); g.quadraticCurveTo(0, 42, 10, 27); g.closePath(); fs(g, '#7a2a20', 2.5); ell(g, 0, 34, 4, 2.5); fs(g, '#e8705e'); }
-  else if (face === 'angry') { rr(g, -9, 26, 18, 8, 2); fs(g, '#fff', 2.2); g.beginPath(); g.moveTo(-9, 30); g.lineTo(9, 30); g.moveTo(-3, 26); g.lineTo(-3, 34); g.moveTo(3, 26); g.lineTo(3, 34); g.lineWidth = 1.2; g.stroke(); }
-  else if (face === 'shock') { ell(g, 0, 31, 5, 6); fs(g, '#7a2a20', 2.2); }
-  else if (talking) { ell(g, 0, 30, 6, 1.5 + Math.abs(Math.sin(time * 17)) * 4); fs(g, '#7a2a20', 2.2); }
-  else { g.beginPath(); g.moveTo(-6, 31); g.quadraticCurveTo(0, face === 'content' ? 34 : 28, 6, 31); g.lineWidth = 2.4; g.strokeStyle = C.ink; g.stroke(); }
+  if (face === 'cough') { ell(g, 0, 28.5, 7.5, 5.2); fs(g, '#7a2a20', 2.5); }
+  else if (face === 'chew') { ell(g, 0, 29, 5, 1.5 + Math.abs(Math.sin(time * 14)) * 2); fs(g, '#7a2a20', 2); }
+  else if (face === 'happy') { g.beginPath(); g.moveTo(-10, 25); g.quadraticCurveTo(0, 40, 10, 25); g.closePath(); fs(g, '#7a2a20', 2.5); ell(g, 0, 30.5, 4, 2.2); fs(g, '#e8705e'); }
+  else if (face === 'angry') { rr(g, -9, 25, 18, 8, 2); fs(g, '#fff', 2.2); g.beginPath(); g.moveTo(-9, 29); g.lineTo(9, 29); g.moveTo(-3, 25); g.lineTo(-3, 33); g.moveTo(3, 25); g.lineTo(3, 33); g.lineWidth = 1.2; g.stroke(); }
+  else if (face === 'shock') { ell(g, 0, 28.5, 4.5, 5); fs(g, '#7a2a20', 2.2); }
+  else if (talking) { ell(g, 0, 28.5, 6, 1.5 + Math.abs(Math.sin(time * 17)) * 3.5); fs(g, '#7a2a20', 2.2); }
+  else { g.beginPath(); g.moveTo(-6, 30); g.quadraticCurveTo(0, face === 'content' ? 33 : 27, 6, 30); g.lineWidth = 2.4; g.strokeStyle = C.ink; g.stroke(); }
   // nose
   circ(g, 0, 15, 9); fs(g, '#e58e72', 2.5); circ(g, -3, 12, 2.5); fs(g, 'rgba(255,255,255,0.6)');
   // mustache
@@ -1520,15 +1563,17 @@ function drawCustomer(g, c, time) {
   } else if (ty.hair === 'perm') {
     for (const p of PERM_F) { circ(g, p[0], hy + p[1], 9.5); g.fillStyle = C.ink; g.fill(); }
     for (const p of PERM_F) { circ(g, p[0], hy + p[1], 7.5); g.fillStyle = hc; g.fill(); }
-    g.beginPath(); g.moveTo(-34, hy - 12); g.quadraticCurveTo(0, hy - 2, 34, hy - 12); g.quadraticCurveTo(38, hy - 4, 30, hy - 2); g.quadraticCurveTo(0, hy + 6, -30, hy - 2); g.quadraticCurveTo(-38, hy - 4, -34, hy - 12); g.closePath();
+    g.beginPath(); g.moveTo(-33, hy - 17); g.quadraticCurveTo(0, hy - 8, 33, hy - 17); g.quadraticCurveTo(37, hy - 10, 30, hy - 8); g.quadraticCurveTo(0, hy, -30, hy - 8); g.quadraticCurveTo(-37, hy - 10, -33, hy - 17); g.closePath();
     fs(g, '#5fc3a6', 2.5);
   } else if (ty.hair === 'bun') {
     g.beginPath(); g.moveTo(-29, hy + 2); g.arc(0, hy, 30, Math.PI, 0); g.lineTo(29, hy + 2); g.quadraticCurveTo(14, hy - 14, 0, hy - 12); g.quadraticCurveTo(-14, hy - 14, -29, hy + 2); g.closePath(); fs(g, hc, 3);
   } else if (ty.hair === 'cap') {
-    g.beginPath(); g.moveTo(-30, hy - 4); g.arc(0, hy - 4, 30, Math.PI, 0); g.closePath(); fs(g, ty.capC, 3);
-    if (ty.id === 'kid') { rr(g, -34, hy - 8, 16, 6, 3); fs(g, ty.capC, 2.5); }
-    else { ell(g, 6, hy - 4, 30, 6); fs(g, ty.capC, 3); }
-    circ(g, 0, hy - 33, 3); fs(g, ty.capC, 2);
+    // crown sits on the head; its band (and the courier's visor) stays above the brows
+    const cy = ty.id === 'kid' ? hy - 4 : hy - 10;
+    if (ty.id === 'kid') { ell(g, -30, cy - 2, 10, 4, -0.2); fs(g, ty.capC, 2.5); } // cap turned sideways: visor sticks out over the ear
+    g.beginPath(); g.moveTo(-30, cy); g.arc(0, cy, 30, Math.PI, 0); g.closePath(); fs(g, ty.capC, 3);
+    if (ty.id !== 'kid') { g.beginPath(); g.moveTo(-28, cy); g.quadraticCurveTo(4, cy + 8.5, 34, cy + 1); g.quadraticCurveTo(6, cy - 3, -28, cy); g.closePath(); fs(g, ty.capC, 3); }
+    circ(g, 0, cy - 29, 3); fs(g, ty.capC, 2);
   }
   // face
   const ey = hy + 2;
@@ -1540,7 +1585,7 @@ function drawCustomer(g, c, time) {
     else if (face === 'shock') { circ(g, ex, ey, 5); fs(g, '#fff', 2); circ(g, ex, ey, 1.8); g.fillStyle = C.ink; g.fill(); }
     else { circ(g, ex, ey, 2.4); g.fillStyle = C.ink; g.fill(); }
     if (face === 'annoyed' || face === 'angry') {
-      g.beginPath(); g.moveTo(ex - side * 6, ey - (face === 'angry' ? 10 : 7)); g.lineTo(ex + side * 5, ey - (face === 'angry' ? 5 : 7)); g.stroke();
+      g.beginPath(); g.moveTo(ex - side * 6, ey - (face === 'angry' ? 8.5 : 6.5)); g.lineTo(ex + side * 5, ey - (face === 'angry' ? 4.5 : 6.5)); g.stroke();
     }
     if (ty.id === 'worker') { g.beginPath(); g.arc(ex, ey + 5, 4, 0.2, Math.PI - 0.2); g.lineWidth = 1.2; g.strokeStyle = 'rgba(90,70,110,0.6)'; g.stroke(); g.lineWidth = 2.4; g.strokeStyle = C.ink; }
   }

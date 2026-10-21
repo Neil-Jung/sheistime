@@ -1242,6 +1242,21 @@ function prerenderBg() {
 }
 
 // ================= RENDER =================
+// umbrella geometry in the chick's body frame: canopy centre, grip point (front wing) and the tilt between them
+const UMB_CX = 12.5, UMB_CY = -26, UMB_HX = 18.5, UMB_HY = 2;
+const UMB_TILT = Math.atan2(UMB_HX - UMB_CX, UMB_HY - UMB_CY), UMB_LEN = Math.hypot(UMB_HX - UMB_CX, UMB_HY - UMB_CY);
+// back wing: rooted on the body's back side, the rounded tip pointing back-and-down
+function chickWing(g, dir, rot) {
+  g.save(); g.translate(dir * 12, 9.5); g.scale(dir, 1); g.rotate(rot);
+  g.fillStyle = C.chickDark; g.strokeStyle = C.ink; g.lineWidth = 2; g.lineJoin = 'round';
+  g.beginPath();
+  g.moveTo(-3, -5); g.quadraticCurveTo(7, -6, 10, 2);
+  g.quadraticCurveTo(10.5, 5.5, 7, 6); g.quadraticCurveTo(1, 7, -3, 4);
+  g.quadraticCurveTo(-5, 0, -3, -5); g.closePath(); g.fill(); g.stroke();
+  // two little feather notches
+  g.lineWidth = 1.3; g.beginPath(); g.moveTo(4, 6.4); g.lineTo(5, 3.6); g.moveTo(8.6, 5.4); g.lineTo(8.4, 2.6); g.stroke();
+  g.restore();
+}
 function drawChick(g, x, y, o) {
   // o: { face, lean, run, sp, squash, blink, worried, happy, dead, hat, shield, shieldBlink, t }
   g.save();
@@ -1259,27 +1274,41 @@ function drawChick(g, x, y, o) {
   g.translate(0, -18 - bob);
   g.rotate(o.lean);
   g.scale(1 + sq, 1 - sq);
-  // umbrella pole behind the body
+  // umbrella: held slightly tilted, so the pole runs straight from the canopy centre (on the canopy's axis)
+  // down past the front of the body to the wing that grips it
   if (o.shield) {
     g.save();
     g.globalAlpha = o.shieldBlink ? 0.45 : 1;
-    g.strokeStyle = C.ink; g.lineWidth = 2.6;
-    g.beginPath(); g.moveTo(o.face * 10, 4); g.lineTo(o.face * 2, -26); g.stroke();
-    g.beginPath(); g.arc(o.face * 10 + o.face * 3, 4, 3, Math.PI, o.face > 0 ? 0 : TAU); g.stroke();
+    g.translate(UMB_CX * o.face, UMB_CY); g.rotate(-o.face * UMB_TILT);
+    g.strokeStyle = C.ink; g.lineWidth = 2.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(0, UMB_LEN + 4);
+    // J-hook handle just below the grip
+    g.quadraticCurveTo(0, UMB_LEN + 9, -o.face * 3.5, UMB_LEN + 8.5); g.stroke();
     g.restore();
   }
+  // tail tuft (behind the body so only the feather tips poke out)
+  g.lineWidth = 2; g.strokeStyle = C.ink; g.lineJoin = 'round';
+  g.fillStyle = C.chick; g.beginPath();
+  g.moveTo(-o.face * 13, -4); g.lineTo(-o.face * 22, -7); g.lineTo(-o.face * 18.5, -1.5);
+  g.lineTo(-o.face * 22.5, 2.5); g.lineTo(-o.face * 13, 5); g.closePath(); g.fill(); g.stroke();
   // body
   g.lineWidth = 2.4; g.strokeStyle = C.ink;
   const bg = g.createRadialGradient(-5, -6, 2, 0, 0, 19);
   bg.addColorStop(0, '#fff2a0'); bg.addColorStop(0.6, C.chick); bg.addColorStop(1, C.chickDark);
   g.fillStyle = bg; g.beginPath(); g.ellipse(0, 0, 17, 16, 0, 0, TAU); g.fill(); g.stroke();
   ell(g, o.face * 2, 6, 10, 7, C.chickBelly);
-  // tail tuft
-  g.fillStyle = C.chick; g.beginPath(); g.moveTo(-o.face * 15, 2); g.lineTo(-o.face * 21, -2); g.lineTo(-o.face * 16, 6); g.closePath(); g.fill(); g.stroke();
-  // wing flaps faster when running or worried
-  const flap = Math.sin(o.t * (sp > 0.3 || o.worried > 0.5 ? 26 : 4)) * (sp > 0.3 || o.worried > 0.5 ? 0.6 : 0.15);
-  g.save(); g.translate(-o.face * 9, 3); g.rotate(-o.face * (0.4 + flap));
-  g.fillStyle = C.chickDark; g.beginPath(); g.ellipse(0, 0, 4.5, 7.5, 0, 0, TAU); g.fill(); g.stroke(); g.restore();
+  // wing on the back half of the body; flaps faster when running or worried
+  const fast = sp > 0.3 || o.worried > 0.5;
+  const flap = Math.sin(o.t * (fast ? 26 : 4)) * (fast ? 0.35 : 0.08);
+  chickWing(g, -o.face, 0.05 + flap);
+  // front wing only shows when it grips the umbrella handle
+  if (o.shield) {
+    g.save(); g.globalAlpha = o.shieldBlink ? 0.45 : 1;
+    g.save(); g.translate(UMB_HX * o.face, UMB_HY); g.scale(o.face, 1); g.rotate(-1.2);
+    g.fillStyle = C.chickDark; g.strokeStyle = C.ink; g.lineWidth = 2;
+    g.beginPath(); g.ellipse(0, 0, 5.2, 3.8, 0, 0, TAU); g.fill(); g.stroke();
+    g.restore(); g.restore();
+  }
   // sprout on the head (the chick's signature)
   if (!o.dead || o.hat < 0) {
     g.strokeStyle = C.sproutDark; g.lineWidth = 2;
@@ -1294,8 +1323,8 @@ function drawChick(g, x, y, o) {
   // face
   const fx = o.face * 3.5;
   g.fillStyle = '#ff9db5'; g.globalAlpha = 0.55;
-  g.beginPath(); g.ellipse(fx - 10, 3, 3.2, 2.2, 0, 0, TAU); g.fill();
-  g.beginPath(); g.ellipse(fx + 10, 3, 3.2, 2.2, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(fx - 9.5, 1.8, 3, 2.1, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(fx + 9.5, 1.8, 3, 2.1, 0, 0, TAU); g.fill();
   g.globalAlpha = 1;
   g.strokeStyle = C.ink; g.lineWidth = 2;
   if (o.dead) {
@@ -1321,7 +1350,9 @@ function drawChick(g, x, y, o) {
   // sweat drop
   if (o.worried > 0.3 && !o.dead) {
     g.globalAlpha = o.worried;
-    g.fillStyle = '#9fdcff'; g.beginPath(); g.moveTo(-fx * 2 - 12, -14); g.quadraticCurveTo(-fx * 2 - 7, -6, -fx * 2 - 12, -5); g.quadraticCurveTo(-fx * 2 - 17, -6, -fx * 2 - 12, -14); g.fill();
+    const sx = -o.face * 10;
+    g.fillStyle = '#9fdcff'; g.strokeStyle = 'rgba(43,29,74,0.35)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(sx, -15); g.quadraticCurveTo(sx + 4, -8.5, sx, -7.5); g.quadraticCurveTo(sx - 4, -8.5, sx, -15); g.fill(); g.stroke();
     g.globalAlpha = 1;
   }
   // the poop that got us, sitting on the head
@@ -1333,7 +1364,7 @@ function drawChick(g, x, y, o) {
   if (o.shield) {
     g.save();
     g.globalAlpha = o.shieldBlink ? 0.45 : 1;
-    g.translate(o.face * 2, -26);
+    g.translate(UMB_CX * o.face, UMB_CY); g.rotate(-o.face * UMB_TILT);
     const R = CFG.SHIELD_R;
     g.lineWidth = 2.4; g.strokeStyle = C.ink;
     for (let i = 0; i < 6; i++) {

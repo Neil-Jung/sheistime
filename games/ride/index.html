@@ -1,0 +1,2266 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>태워태워</title>
+<meta name="theme-color" content="#8fd3ff">
+<meta name="description" content="줄 선 동글이들을 같은 색 버스에 태워 주세요. 대기석이 꽉 차기 전에 순서를 짜서 모두 태우는 정류장 퍼즐이에요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* Visual world: a sunny neighbourhood bus stop. Pastel buildings, a grey road with
+   chunky cartoon buses, a wooden waiting bench and a tiled plaza where the 동글이
+   (little bean passengers, six colours each with its own badge shape) queue up.
+   The bus driver is a brown bear called 부릉이. */
+:root {
+  --sky: #8fd3ff;
+  --ink: #2a3142;
+  --paper: #fffdf5;
+  --paper-dim: #c3cde0;
+  --panel: rgba(38, 50, 71, 0.94);
+  --panel-2: #3a4a66;
+  --hud-bg: rgba(38, 50, 71, 0.82);
+  --heart: #ff5d6c;
+  --heart-deep: #c93646;
+  --gold: #ffd23f;
+  --warn: #ffb02e;
+  --bad: #ff4a57;
+  --good: #4fdc8c;
+  --good-deep: #2aa766;
+  --font-d: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --font-b: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: var(--sky); color: var(--paper);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--sky); }
+#bg, #cv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+#cv { touch-action: none; }
+#cv.can { cursor: pointer; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+body.paused #col * { animation-play-state: paused !important; }
+
+/* ---------- HUD: a column in virtual px, placed and scaled by layout() ---------- */
+#col { position: absolute; left: 0; top: 0; transform-origin: 0 0; z-index: 5; pointer-events: none; }
+#col[hidden] { display: none; }
+#col > * { position: absolute; }
+#topbar { left: 0; top: 0; right: 0; height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+#bottombar { left: 0; right: 0; bottom: 0; height: 72px; display: flex; align-items: center; gap: 8px; padding: 0 10px 8px; }
+.icon-btn {
+  width: 46px; height: 46px; border-radius: 15px; padding: 0; flex: none;
+  border: 2px solid rgba(255, 253, 245, 0.85); background: var(--hud-bg); color: var(--paper);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(20, 28, 44, 0.45);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(20, 28, 44, 0.45); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+.scorebox {
+  flex: 1; min-width: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--hud-bg); border-radius: 16px; border: 2px solid rgba(255, 253, 245, 0.3);
+}
+.scorebox .stg {
+  font-family: var(--font-d); font-size: 15px; color: var(--ink); background: var(--good); border-radius: 999px;
+  padding: 3px 11px 1px; border: 2px solid var(--ink); white-space: nowrap;
+}
+.scorebox b { font-family: var(--font-d); font-weight: normal; font-size: 28px; line-height: 1; color: var(--paper); font-variant-numeric: tabular-nums; padding-top: 3px; transition: color 0.2s; }
+.scorebox.pop b { animation: pop 0.3s ease-out; }
+.scorebox.gold b { color: var(--gold); }
+@keyframes pop { 0% { transform: scale(1.35); } 100% { transform: none; } }
+.hearts { display: flex; gap: 3px; flex: none; padding: 0 2px; }
+.hearts svg { width: 28px; height: 28px; display: block; overflow: visible; }
+.hearts .hp { fill: var(--heart); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; transition: fill 0.2s; }
+.hearts .gone .hp { fill: rgba(42, 49, 66, 0.55); stroke: rgba(255, 253, 245, 0.45); stroke-dasharray: 3 3; }
+.hearts .lose { animation: heartBreak 0.7s ease-out; }
+@keyframes heartBreak { 0% { transform: scale(1.5) rotate(0); } 25% { transform: scale(1.2) rotate(-14deg); } 45% { transform: scale(1.35) rotate(12deg); } 100% { transform: scale(1) rotate(0); } }
+.pill-btn {
+  flex: none; min-height: 48px; min-width: 112px; padding: 2px 14px 0; border-radius: 16px; pointer-events: auto; touch-action: manipulation;
+  border: 2px solid var(--ink); background: var(--gold); color: var(--ink); box-shadow: 0 4px 0 #b88f12;
+  font-family: var(--font-d); font-size: 18px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.pill-btn b { font-weight: normal; font-size: 20px; }
+.pill-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b88f12; }
+.pill-btn:disabled { background: #b9c1cf; box-shadow: 0 4px 0 #8791a3; color: #5b6579; cursor: default; }
+.pill-btn.small { min-width: 84px; background: var(--hud-bg); color: var(--paper); border-color: rgba(255, 253, 245, 0.7); box-shadow: 0 3px 0 rgba(20, 28, 44, 0.45); font-size: 16px; }
+.pill-btn.small:disabled { background: rgba(38, 50, 71, 0.5); color: rgba(255, 253, 245, 0.4); }
+#status {
+  flex: 1; min-width: 0; text-align: center; font-size: 13.5px; line-height: 1.25; color: var(--ink); font-weight: 700;
+  background: rgba(255, 253, 245, 0.88); border-radius: 12px; padding: 6px 8px 5px; border: 2px solid rgba(42, 49, 66, 0.25);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all;
+}
+#status.warn { background: #ffe3a8; border-color: var(--warn); }
+#status.bad { background: #ffd0d4; border-color: var(--bad); }
+.coach {
+  left: 24px; right: 24px; text-align: center; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+}
+.coach span {
+  display: inline-block; background: var(--paper); color: var(--ink); font-size: 16px; font-weight: 700; line-height: 1.35;
+  padding: 9px 16px 8px; border-radius: 16px; border: 2.5px solid var(--ink); box-shadow: 0 4px 0 rgba(20, 28, 44, 0.35); max-width: 100%;
+}
+.coach.off { opacity: 0; transform: translateY(8px); }
+#toast {
+  left: 20px; right: 20px; text-align: center; pointer-events: none; opacity: 0; transform: translateY(-6px); transition: opacity 0.2s, transform 0.2s;
+}
+#toast span {
+  display: inline-block; padding: 9px 16px 8px; border-radius: 14px; background: var(--panel); border: 2px solid var(--gold);
+  font-family: var(--font-d); font-size: 18px; line-height: 1.3; color: var(--paper);
+}
+#toast.show { opacity: 1; transform: none; }
+#stamp {
+  left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0;
+  font-family: var(--font-d); font-size: 56px; line-height: 1; color: var(--bad); letter-spacing: 2px;
+  text-shadow: 0 4px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink);
+}
+#stamp.show { animation: stampIn 2s ease-out forwards; }
+@keyframes stampIn { 0% { opacity: 0; transform: scale(2.4) rotate(-14deg); } 14% { opacity: 1; transform: scale(0.94) rotate(-8deg); } 22% { opacity: 1; transform: scale(1) rotate(-8deg); } 70% { opacity: 1; transform: scale(1) rotate(-8deg); } 100% { opacity: 0; transform: scale(1) rotate(-8deg); } }
+#banner { left: 0; right: 0; display: flex; justify-content: center; pointer-events: auto; touch-action: manipulation; }
+#banner[hidden] { display: none; }
+#banner .bcard {
+  width: min(330px, calc(100% - 32px)); padding: 14px 18px 14px; border-radius: 22px; text-align: center; background: var(--panel);
+  border: 2px solid rgba(255, 253, 245, 0.9); box-shadow: 0 6px 0 rgba(14, 20, 34, 0.8);
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+#banner h3 { margin: 0 0 8px; font-family: var(--font-d); font-weight: normal; font-size: 38px; line-height: 1.1; color: var(--good); text-shadow: 0 3px 0 var(--ink); }
+#banner .row { display: flex; justify-content: space-between; gap: 18px; font-size: 16px; padding: 2px 4px; color: var(--paper); opacity: 0; }
+#banner .row.on { opacity: 1; animation: rowIn 0.25s ease-out; }
+#banner .row b { font-family: var(--font-d); font-weight: normal; color: var(--gold); font-size: 18px; }
+#banner .row.total { margin-top: 4px; padding-top: 6px; border-top: 2px dashed rgba(255, 253, 245, 0.3); font-size: 17px; }
+@keyframes rowIn { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+#sheet {
+  left: 10px; right: 10px; bottom: 10px; padding: 12px 14px 14px; border-radius: 22px; text-align: center; background: var(--panel);
+  border: 2px solid rgba(255, 253, 245, 0.9); box-shadow: 0 6px 0 rgba(14, 20, 34, 0.8); pointer-events: auto; touch-action: manipulation;
+  transform: translateY(130%); transition: transform 0.35s cubic-bezier(.2, 1.2, .4, 1); z-index: 4;
+}
+#sheet.show { transform: none; }
+#sheet h3 { margin: 0; font-family: var(--font-d); font-weight: normal; font-size: 26px; color: var(--bad); text-shadow: 0 2px 0 var(--ink); }
+#sheet p { margin: 2px 0 10px; font-size: 14.5px; color: var(--paper-dim); line-height: 1.35; }
+#sheet .btns { display: flex; gap: 10px; }
+#sheet .btns .btn { flex: 1; min-height: 52px; font-size: 18px; padding: 3px 6px 0; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(var(--sat) + 66px) calc(var(--sar) + 16px) calc(var(--sab) + 16px) calc(var(--sal) + 16px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(30, 60, 100, 0.5);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.overlay[hidden] { display: none; }
+#scrPause, #scrConfirm { justify-content: center; background: rgba(20, 34, 58, 0.82); z-index: 30; }
+#scrConfirm { z-index: 40; }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(390px, 100%); margin: auto;
+  background: var(--panel); color: var(--paper);
+  border: 2px solid rgba(255, 253, 245, 0.88); border-radius: 24px;
+  box-shadow: 0 8px 0 rgba(14, 20, 34, 0.85);
+  padding: 20px 18px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 7px;
+  background: repeating-linear-gradient(90deg, #ff5d6c 0 18px, #ffd23f 18px 36px, #4fd98c 36px 54px, #4aa8ff 54px 72px, #a778ff 72px 90px, #ff9442 90px 108px);
+}
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.mascot { display: block; width: 240px; height: 120px; margin: 0 auto 4px; }
+.logo {
+  margin: 4px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 62px; line-height: 1.05; letter-spacing: 2px;
+  text-shadow: 0 5px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
+.logo span { display: inline-block; animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 2.8s ease-in-out infinite; }
+.logo span:nth-child(1) { color: #ff8f9a; }
+.logo span:nth-child(2) { color: #ffd23f; animation-delay: 0.1s, 0.4s; }
+.logo span:nth-child(3) { color: #6fe3a6; animation-delay: 0.2s, 0.8s; }
+.logo span:nth-child(4) { color: #7ec0ff; animation-delay: 0.3s, 1.2s; }
+@keyframes logoIn { from { transform: translateY(-34px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -8px; } 95% { translate: 0 0; } }
+.hook { margin: 10px 0 12px; font-size: 17px; color: var(--paper-dim); line-height: 1.45; }
+.howto {
+  background: rgba(255, 253, 245, 0.07); border: 1px solid rgba(255, 253, 245, 0.22); border-radius: 14px;
+  padding: 6px 12px; text-align: left; font-size: 15px; line-height: 1.4; color: var(--paper);
+}
+.howto p { margin: 7px 0; display: flex; gap: 10px; align-items: center; }
+.howto svg { flex: none; width: 30px; height: 30px; }
+.best-line { margin: 12px 0 12px; font-size: 16px; color: var(--paper-dim); }
+.best-line b { color: var(--gold); font-weight: normal; font-family: var(--font-d); font-size: 21px; }
+.best-line b.none { font-family: var(--font-b); font-weight: 700; font-size: 16px; }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; border-radius: 16px;
+  border: 2px solid var(--ink); background: var(--good); color: var(--ink);
+  font-family: var(--font-d); font-size: 26px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 var(--good-deep); touch-action: manipulation; pointer-events: auto;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--good-deep); }
+.btn.warn { background: var(--gold); box-shadow: 0 5px 0 #b88f12; }
+.btn.warn:active { box-shadow: 0 2px 0 #b88f12; }
+.btn.warn:disabled { background: #b9c1cf; box-shadow: 0 5px 0 #8791a3; color: #5b6579; cursor: default; }
+.btn.sub {
+  background: transparent; color: var(--paper); border: 2px solid rgba(255, 253, 245, 0.55);
+  box-shadow: none; font-family: var(--font-b); font-weight: 700; font-size: 18px; min-height: 50px; margin-top: 12px; padding-top: 0;
+}
+.btn.bad { background: #ff8a94; box-shadow: 0 5px 0 var(--heart-deep); }
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, .pill-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.keyhint { margin: 9px 0 0; font-size: 13px; color: var(--paper-dim); }
+.keyhint.desk { display: none; }
+@media (hover: hover) and (pointer: fine) { .keyhint.desk { display: block; } }
+.back {
+  position: absolute; left: calc(var(--sal) + 10px); top: calc(var(--sat) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--paper); border: 2px solid rgba(255, 253, 245, 0.8); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.res-title { margin: 4px 0 0; font-size: 28px; font-weight: normal; font-family: var(--font-d); color: var(--paper); letter-spacing: 1px; }
+.pause-line { margin: 10px 0 16px; font-size: 17px; color: var(--paper-dim); line-height: 1.45; }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 64px; line-height: 1.1; color: var(--gold); text-shadow: 0 4px 0 var(--ink); }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 22px; color: var(--paper); margin-left: 4px; text-shadow: none; }
+.badge {
+  display: inline-block; margin-top: 6px; padding: 4px 16px 5px; border-radius: 12px;
+  background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 19px; border: 2px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge[hidden] { display: none; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.stats { margin: 14px 0 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stats div { background: rgba(255, 253, 245, 0.07); border: 1px solid rgba(255, 253, 245, 0.22); border-radius: 12px; padding: 7px 2px 6px; font-size: 13px; color: var(--paper-dim); }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 22px; color: var(--paper); margin-top: 3px; }
+.confirm-line { margin: 8px 0 16px; font-size: 16px; color: var(--paper-dim); line-height: 1.45; }
+.row2 { display: flex; gap: 10px; }
+.row2 .btn { flex: 1; font-size: 20px; min-height: 52px; }
+
+@media (min-width: 600px) and (min-height: 700px) {
+  .overlay { padding-top: calc(var(--sat) + 14px); }
+}
+@media (max-height: 760px) {
+  .mascot { display: none; }
+  .logo { font-size: 52px; }
+  .res-big { font-size: 54px; }
+  .card { padding-top: 18px; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding-top: calc(var(--sat) + 10px); }
+  .card { padding: 12px 16px 10px; width: min(560px, 100%); }
+  .logo { font-size: 38px; margin-top: 0; }
+  .hook { margin: 4px 0 8px; font-size: 14.5px; }
+  .howto { font-size: 13px; padding: 2px 10px; }
+  .howto p { margin: 4px 0; }
+  .best-line { margin: 6px 0 8px; }
+  .btn { min-height: 46px; font-size: 21px; }
+  .keyhint { display: none !important; }
+  .res-big { font-size: 40px; margin-top: 2px; }
+  .stats { margin: 8px 0 4px; grid-template-columns: repeat(4, 1fr); }
+  .btn.sub { min-height: 44px; margin-top: 8px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card, #banner .bcard, #banner .row.on, .scorebox.pop b, .hearts .lose { animation: none; }
+  #stamp.show { animation: none; opacity: 1; transform: rotate(-8deg); }
+  #sheet, #toast, .coach { transition: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <canvas id="cv" aria-label="태워태워 정류장"></canvas>
+  <div id="probe"></div>
+
+  <div id="col" hidden>
+    <div id="topbar">
+      <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+      </button>
+      <div class="scorebox" id="scoreBox"><span class="stg" id="hStage">1단계</span><b id="hScore">0</b></div>
+      <div class="hearts" id="hearts" role="img" aria-label="하트 3개"></div>
+    </div>
+    <div id="coach" class="coach off"><span id="coachTxt"></span></div>
+    <div id="toast" role="status"><span id="toastTxt"></span></div>
+    <div id="stamp" aria-hidden="true">막혔다!</div>
+    <div id="banner" hidden>
+      <div class="bcard"><h3 id="bnTitle">1단계 통과!</h3><div id="bnRows"></div></div>
+    </div>
+    <div id="sheet" role="dialog" aria-label="막혔어요">
+      <h3>꽉 막혔어요!</h3>
+      <p id="sheetTxt">대기석이 가득 차서 아무도 탈 수 없어요.</p>
+      <div class="btns">
+        <button class="btn warn" id="btnSheetUndo" type="button">되돌리기 (3걸음)</button>
+        <button class="btn bad" id="btnSheetRetry" type="button">처음부터 다시</button>
+      </div>
+    </div>
+    <div id="bottombar">
+      <button class="pill-btn" id="btnUndo" type="button">되돌리기 <b id="undoN">×1</b></button>
+      <div id="status">맨 앞 동글이를 눌러 봐요</div>
+      <button class="pill-btn small" id="btnRestart" type="button">처음부터</button>
+    </div>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot" id="mascot" width="480" height="240" aria-hidden="true"></canvas>
+      <h1 class="logo" aria-label="태워태워"><span>태</span><span>워</span><span>태</span><span>워</span></h1>
+      <p class="hook">같은 색 버스에 태워 주세요!</p>
+      <div class="howto">
+        <p>
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M13 5.5a2.6 2.6 0 0 1 5.2 0V15l3.6-.9c1.6-.4 3 .9 2.7 2.5l-1.2 6.4a5 5 0 0 1-4.9 4H14a5 5 0 0 1-4-2l-3.3-4.6a2.1 2.1 0 0 1 3.3-2.5l2 1.9z" fill="#fffdf5" stroke="#2a3142" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span>줄 맨 앞 동글이를 눌러요.</span>
+        </p>
+        <p>
+          <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="12" width="26" height="6" rx="2" fill="#d9a066" stroke="#2a3142" stroke-width="2"/><path d="M7 18v8M25 18v8" stroke="#2a3142" stroke-width="3" stroke-linecap="round"/><circle cx="11" cy="7.5" r="4" fill="#4aa8ff" stroke="#2a3142" stroke-width="2"/><circle cx="21" cy="7.5" r="4" fill="#ffd23f" stroke="#2a3142" stroke-width="2"/></svg>
+          <span>버스 색과 같으면 바로 타고, 다르면 대기석에서 기다려요.</span>
+        </p>
+        <p>
+          <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27C6 20 3 14.5 3 10.5 3 7 5.6 4.6 9 4.6c2.6 0 5 1.6 7 4.4 2-2.8 4.4-4.4 7-4.4 3.4 0 6 2.4 6 5.9 0 4-3 9.500-13 16.500z" fill="#ff5d6c" stroke="#2a3142" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span>대기석이 꽉 차서 아무도 못 타면 막혀요. 하트는 3개예요.</span>
+        </p>
+      </div>
+      <p class="best-line" id="tBestLine">내 최고 기록 <b id="tBest" class="none">아직 기록이 없어요</b></p>
+      <button class="btn" id="btnStart" type="button">출발!</button>
+      <button class="btn sub" id="btnMuteT" type="button">소리 끄기</button>
+      <p class="keyhint desk">1~6 줄 선택 · Z 되돌리기 · P 멈춤</p>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card">
+      <h2 class="res-title">잠깐 멈췄어요</h2>
+      <p class="pause-line">정류장은 그대로 있어요. 시계도 멈춰 있어요.</p>
+      <button class="btn" id="btnResume" type="button">계속하기</button>
+      <button class="btn sub" id="btnPauseRetry" type="button">처음부터 (하트 -1)</button>
+      <button class="btn sub" id="btnMuteP" type="button">소리 끄기</button>
+      <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+      <p class="keyhint desk">P · Esc · Space 계속하기 · R 처음부터</p>
+    </div>
+  </section>
+
+  <!-- confirm restart -->
+  <section class="overlay" id="scrConfirm" hidden>
+    <div class="card">
+      <h2 class="res-title" id="cfTitle">처음부터 할까요?</h2>
+      <p class="confirm-line" id="cfTxt">하트가 1개 줄고, 이 단계를 같은 배치로 다시 해요.</p>
+      <div class="row2">
+        <button class="btn sub" id="btnCfNo" type="button" style="margin-top:0">아니요</button>
+        <button class="btn bad" id="btnCfYes" type="button">네, 다시 해요</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- game over -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot" id="mascot2" width="480" height="240" aria-hidden="true"></canvas>
+      <h2 class="res-title">오늘 운행 끝!</h2>
+      <div class="res-big"><span id="rScore">0</span><small>점</small></div>
+      <div class="badge" id="rBadge" hidden>새 기록이에요!</div>
+      <div class="stats">
+        <div>도착한 단계<b id="rStage">1단계</b></div>
+        <div>태운 동글이<b id="rPass">0명</b></div>
+        <div>출발한 버스<b id="rBus">0대</b></div>
+        <div>최고 콤보<b id="rCombo">×1</b></div>
+      </div>
+      <p class="best-line" id="rPrev">이전 최고 <b>-</b></p>
+      <button class="btn" id="btnAgain" type="button">한 판 더</button>
+      <a class="btn sub" href="../../index.html">게임 목록</a>
+      <p class="keyhint desk">Space · Enter 로도 다시 할 수 있어요</p>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+(() => {
+// =====================================================================
+// LOGIC (pure, no DOM): stage ladder, generator, solver, boarding rules.
+// A passenger is identified by pid = lane * 8 + index. Colours are palette ids 0..5.
+// The same step() drives the game (with an event list `ev`) and the solver.
+// =====================================================================
+//#LOGIC-START
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const SEATS = 3, BAYS = 2;
+// which palette colours appear with K colours (the new ones show up at stage 3, 5 and 8)
+const SETS = { 3: [0, 2, 3], 4: [0, 1, 2, 3], 5: [0, 1, 2, 3, 4], 6: [0, 1, 2, 3, 4, 5] };
+// [lanes L, colours K, buses B, bench slots, random-play win band lo..hi]  (design section 5)
+const LAD = [
+  [3, 3, 3, 5, 0.92, 1], [4, 3, 4, 5, 0.80, 1], [4, 4, 5, 5, 0.55, 0.92], [5, 4, 6, 5, 0.35, 0.80],
+  [5, 5, 7, 5, 0.18, 0.55], [5, 5, 8, 5, 0.08, 0.40], [5, 5, 8, 4, 0.04, 0.22], [5, 6, 9, 4, 0.015, 0.12],
+  [6, 6, 10, 4, 0.006, 0.07], [6, 6, 10, 3, 0.002, 0.04], [6, 6, 11, 3, 0.001, 0.03], [6, 6, 12, 3, 0.0005, 0.02],
+];
+function stageParams(n) {
+  const r = LAD[Math.min(n, LAD.length) - 1];
+  return { L: r[0], K: r[1], B: r[2], strip: r[3], lo: r[4], hi: r[5] };
+}
+function makeBoard(R, P) {
+  const set = SETS[P.K], seq = [];
+  for (let i = 0; i < P.B; i++) seq.push(set[i % P.K]);
+  for (let i = seq.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [seq[i], seq[j]] = [seq[j], seq[i]]; }
+  const pass = [];
+  for (const c of seq) for (let i = 0; i < SEATS; i++) pass.push(c);
+  for (let i = pass.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [pass[i], pass[j]] = [pass[j], pass[i]]; }
+  const lanes = Array.from({ length: P.L }, () => []);
+  pass.forEach((c, i) => lanes[i % P.L].push(c));
+  return { lanes, buses: seq, seats: SEATS, strip: P.strip, bays: BAYS };
+}
+// stage 1 is built so that the first two taps can never miss: the six riders at the front of the lines are all
+// for the two buses that are waiting, and the third colour waits at the back of every line
+function makeBoard1(R, P) {
+  const set = SETS[P.K].slice();
+  for (let i = set.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [set[i], set[j]] = [set[j], set[i]]; }
+  const front = [];
+  for (let i = 0; i < SEATS; i++) front.push(set[0], set[1]);
+  for (let i = front.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [front[i], front[j]] = [front[j], front[i]]; }
+  const lanes = [];
+  for (let i = 0; i < P.L; i++) lanes.push([front[i * 2], front[i * 2 + 1], set[2]]);
+  return { lanes, buses: set.slice(), seats: SEATS, strip: P.strip, bays: BAYS };
+}
+function initState(st, live) {
+  const s = { p: st.lanes.map(() => 0), strip: new Array(st.strip).fill(-1), bay: st.buses.slice(0, st.bays).map((c, k) => ({ c, n: 0, id: k, slot: k })), bi: st.bays, done: 0 };
+  if (live) { s.sid = new Array(st.strip).fill(-1); for (const b of s.bay) b.ids = [-1, -1, -1]; }
+  return s;
+}
+function cloneState(s) {
+  const o = { p: s.p.slice(), strip: s.strip.slice(), bay: s.bay.map((b) => { const n = { c: b.c, n: b.n, id: b.id, slot: b.slot }; if (b.ids) n.ids = b.ids.slice(); return n; }), bi: s.bi, done: s.done };
+  if (s.sid) o.sid = s.sid.slice();
+  return o;
+}
+function busFor(st, s, c) { for (const b of s.bay) if (b.c === c && b.n < st.seats) return b; return null; }
+function settle(st, s, ev) {
+  let ch = true;
+  while (ch) {
+    ch = false;
+    for (let j = 0; j < s.bay.length; j++) {
+      if (s.bay[j].n >= st.seats) {
+        const b = s.bay.splice(j, 1)[0]; s.done++;
+        if (ev) ev.push({ t: 'depart', bus: b.id, slot: b.slot });
+        if (s.bi < st.buses.length) {
+          const nb = { c: st.buses[s.bi], n: 0, id: s.bi, slot: b.slot };
+          if (s.sid) nb.ids = [-1, -1, -1];
+          s.bi++; s.bay.push(nb);
+          if (ev) ev.push({ t: 'enter', bus: nb.id, slot: nb.slot, c: nb.c });
+        }
+        ch = true; break;
+      }
+    }
+    for (let j = 0; j < s.strip.length; j++) {
+      if (s.strip[j] < 0) continue;
+      const b = busFor(st, s, s.strip[j]);
+      if (b) {
+        const seat = b.n++; const pid = s.sid ? s.sid[j] : -1;
+        s.strip[j] = -1; if (s.sid) { s.sid[j] = -1; b.ids[seat] = pid; }
+        if (ev) ev.push({ t: 'auto', pid, slot: j, bus: b.id, seat });
+        ch = true; break;
+      }
+    }
+  }
+}
+function movesOf(st, s) {
+  const m = [], free = s.strip.indexOf(-1) >= 0;
+  for (let i = 0; i < st.lanes.length; i++) {
+    if (s.p[i] < st.lanes[i].length && (free || busFor(st, s, st.lanes[i][s.p[i]]))) m.push(i);
+  }
+  return m;
+}
+function stepLane(st, s, i, ev) {
+  const idx = s.p[i], c = st.lanes[i][idx], pid = i * 8 + idx;
+  s.p[i]++;
+  const b = busFor(st, s, c);
+  if (b) {
+    const seat = b.n++;
+    if (s.sid) b.ids[seat] = pid;
+    if (ev) ev.push({ t: 'board', pid, bus: b.id, seat });
+  } else {
+    const slot = s.strip.indexOf(-1);
+    s.strip[slot] = c; if (s.sid) s.sid[slot] = pid;
+    if (ev) ev.push({ t: 'sit', pid, slot });
+  }
+  settle(st, s, ev);
+}
+function stateKey(s) {
+  return s.p.join(',') + '|' + s.strip.filter((x) => x >= 0).sort().join('') + '|' + s.bay.map((b) => b.c + ':' + b.n).join(';') + '|' + s.bi;
+}
+function isWon(st, s) { return s.done === st.buses.length; }
+// iterative DFS over distinct states; returns a winning lane sequence, or null (none / over the node cap)
+function* solveG(st, cap) {
+  cap = cap || 60000;
+  const seen = new Set(), root = initState(st);
+  if (isWon(st, root)) return [];
+  const stack = [{ s: root, m: movesOf(st, root), i: 0 }];
+  seen.add(stateKey(root));
+  let nodes = 0;
+  while (stack.length) {
+    const f = stack[stack.length - 1];
+    if (f.i >= f.m.length) { stack.pop(); continue; }
+    const mv = f.m[f.i++];
+    const n = cloneState(f.s); stepLane(st, n, mv);
+    if (isWon(st, n)) return stack.map((x) => x.m[x.i - 1]);
+    const k = stateKey(n);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (++nodes > cap) return null;
+    if ((nodes & 63) === 0) yield 0;
+    const m = movesOf(st, n);
+    if (m.length) stack.push({ s: n, m, i: 0 });
+  }
+  return null;
+}
+// Monte-Carlo estimate of "tap a random legal lane every time" win rate
+function* mcG(st, N, R) {
+  let w = 0;
+  for (let t = 0; t < N; t++) {
+    const s = initState(st);
+    for (;;) {
+      if (isWon(st, s)) { w++; break; }
+      const m = movesOf(st, s);
+      if (!m.length) break;
+      stepLane(st, s, m[Math.floor(R() * m.length)]);
+    }
+    if (t % 10 === 9) yield 0;
+  }
+  return w / N;
+}
+// stage 1 guarantee: no tap order whatsoever can end in a stuck board
+function unlosable(st) {
+  const seen = new Set(), stack = [initState(st)];
+  while (stack.length) {
+    const s = stack.pop();
+    if (isWon(st, s)) continue;
+    const m = movesOf(st, s);
+    if (!m.length) return false;
+    for (const i of m) {
+      const n = cloneState(s); stepLane(st, n, i);
+      const k = stateKey(n);
+      if (!seen.has(k)) { seen.add(k); stack.push(n); }
+    }
+  }
+  return true;
+}
+function boardsDirect(st, s, i) { return !!busFor(st, s, st.lanes[i][s.p[i]]); }
+// stage 1: whatever two lanes you tap first, both board a bus straight away
+function firstTwoBoard(st) {
+  const L = st.lanes.length;
+  for (let a = 0; a < L; a++) {
+    const s = initState(st);
+    if (!boardsDirect(st, s, a)) return false;
+    stepLane(st, s, a);
+    for (let b = 0; b < L; b++) if (s.p[b] < st.lanes[b].length && !boardsDirect(st, s, b)) return false;
+  }
+  return true;
+}
+// stage 2: at least two lane fronts match the first bus
+function twoFrontsMatch(st) {
+  let n = 0;
+  for (const l of st.lanes) if (l[0] === st.buses[0]) n++;
+  return n >= 2;
+}
+function frontsAllBoard(st) {
+  const s = initState(st);
+  for (let i = 0; i < st.lanes.length; i++) if (!boardsDirect(st, s, i)) return false;
+  return true;
+}
+// Builds one stage in small resumable pieces (yield = a good place to pause), see drive()
+function* genStage(n, R) {
+  const P = stageParams(n);
+  const bands = [[120, P.lo, P.hi], [60, P.lo * 0.5, Math.min(1, P.hi * 2)]];
+  let fallback = null;
+  if (n === 1) {
+    for (let a = 0; a < 200; a++) {
+      const st = makeBoard1(R, P);
+      if (!twoFrontsMatch(st) || !firstTwoBoard(st) || !unlosable(st)) continue;
+      const sol = yield* solveG(st);
+      if (sol) { st.sol = sol; return st; }
+    }
+  }
+  for (const [tries, lo, hi] of bands) {
+    for (let a = 0; a < tries; a++) {
+      const st = makeBoard(R, P);
+      if (n === 1 && !(firstTwoBoard(st) && unlosable(st))) continue;
+      if (n === 2 && !(twoFrontsMatch(st) && frontsAllBoard(st))) continue;
+      const sol = yield* solveG(st);
+      if (!sol) continue;
+      st.sol = sol;
+      if (!fallback) fallback = st;
+      if (n === 1) return st;
+      const p = yield* mcG(st, 300, R);
+      st.pr = p;
+      if (p >= lo && p <= hi) return st;
+      yield 0;
+    }
+  }
+  while (!fallback) {   // any solvable board will do
+    const st = makeBoard(R, P);
+    const sol = yield* solveG(st);
+    if (sol) { st.sol = sol; fallback = st; }
+  }
+  return fallback;
+}
+function driveAll(g) { let r; do { r = g.next(); } while (!r.done); return r.value; }
+//#LOGIC-END
+
+// =====================================================================
+// CONFIG / UTIL / STORE
+// =====================================================================
+const KEY_BEST = 'arcade.ride.best';
+const KEY_STAGE = 'arcade.ride.stage';
+const KEY_MUTE = 'arcade.ride.muted';
+const KEY_SEEN = 'arcade.ride.seen';
+const TAU = Math.PI * 2;
+const FONT_D = '"Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif';
+const INK = '#2a3142', PAPER = '#fffdf5', GOLD = '#ffd23f', GOOD = '#4fdc8c', BAD = '#ff4a57', WARN = '#ffb02e';
+const CFG = {
+  HEARTS: 3, COMBO_WINDOW: 5, COMBO_MAX: 4,
+  FLY: 0.36,            // seconds for a hop to a bus window / bench seat
+  AUTO_GAP: 0.12,       // bench -> bus chain spacing
+  DEPART_WAIT: 0.3,     // pause after the last rider lands before the horn
+  LEAVE: 0.85, ENTER: 0.5,
+  BANNER_AT: 0.7, BANNER_T: 1.9,
+  UNDO_STEPS: 3, SLICE_MS: 8,
+};
+const PAL = [
+  { name: '딸기', c: '#ff5d6c', d: '#c93646', shape: 'heart' },
+  { name: '레몬', c: '#ffd23f', d: '#d6a617', shape: 'circle' },
+  { name: '풀잎', c: '#4fd98c', d: '#2aa766', shape: 'triangle' },
+  { name: '하늘', c: '#4aa8ff', d: '#2a78d0', shape: 'square' },
+  { name: '포도', c: '#a778ff', d: '#7a4bd6', shape: 'star' },
+  { name: '귤', c: '#ff9442', d: '#d0661a', shape: 'diamond' },
+];
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function lerp(a, b, k) { return a + (b - a) * k; }
+function easeOut(k) { return 1 - (1 - k) * (1 - k) * (1 - k); }
+function easeInOut(k) { return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; }
+const rv = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only
+const QS = new URLSearchParams(location.search);
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function fmtNum(n) { try { return Math.floor(n).toLocaleString('ko-KR'); } catch (e) { return String(Math.floor(n)); } }
+function readInt(k) { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function restartAnim(node, cls) { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+function buzz(p) {   // haptics only after a real tap (browsers log an error otherwise)
+  try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ }
+}
+const mixCache = {};
+function mix(a, b, t) {   // hex colour blend, cached
+  const key = a + b + t;
+  if (mixCache[key]) return mixCache[key];
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const r = Math.round(lerp(pa >> 16, pb >> 16, t)), g = Math.round(lerp((pa >> 8) & 255, (pb >> 8) & 255, t)), bl = Math.round(lerp(pa & 255, pb & 255, t));
+  return (mixCache[key] = 'rgb(' + r + ',' + g + ',' + bl + ')');
+}
+const seedParam = QS.get('seed');
+const RUN_SEED = seedParam !== null && seedParam !== '' ? (+seedParam | 0) : null;
+
+// =====================================================================
+// AUDIO (all synthesized)
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.5;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 1);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended' && !S.paused) this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.5, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  suspend() { try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (e) { /* ignore */ } },
+  resume() { try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch (e) { /* ignore */ } },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  // at most 8 voices at once (mobile browsers glitch beyond that); `pri` voices always play
+  tone(type, f0, f1, dur, vol, delay, attack, pri) {
+    if (!this.ok() || (!pri && this.voices >= 8)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.005));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type, pri) {
+    if (!this.ok() || (!pri && this.voices >= 8)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  pop() { this.tone('sine', 520, 760, 0.06, 0.12); },
+  board(seat, extra) {   // C5 E5 G5 by seat, a semitone higher for every chained rider
+    const f = [523, 659, 784][seat] * Math.pow(2, (extra || 0) / 12);
+    this.tone('triangle', f, f, 0.12, 0.15, 0, 0.005, true);
+  },
+  sit() { this.tone('sine', 330, 260, 0.08, 0.16); },
+  reject() { this.tone('square', 140, 120, 0.12, 0.08); },
+  horn(combo) {
+    const o = Math.pow(2, Math.min(2, combo - 1));
+    this.tone('sawtooth', 392, 392, 0.25, 0.07, 0, 0.01, true);
+    this.tone('sawtooth', 494, 494, 0.25, 0.07, 0, 0.01, true);
+    [523, 659, 784].forEach((f, i) => this.tone('triangle', f * o, f * o, 0.1, 0.1, 0.28 + i * 0.07, 0.005, true));
+    this.noise(0.25, 300, 0.6, 0.05, 0.1, 'lowpass');
+  },
+  stuck() { this.tone('square', 440, 180, 0.35, 0.1, 0, 0.01, true); },
+  heart() { this.tone('sine', 120, 60, 0.3, 0.2, 0, 0.005, true); this.noise(0.08, 500, 0.7, 0.12, 0, 'lowpass', true); },
+  undo() { this.tone('sine', 700, 300, 0.2, 0.12, 0, 0.005, true); },
+  clear() {
+    [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone('triangle', f, f, 0.2, 0.13, i * 0.08, 0.005, true));
+    this.noise(0.5, 5000, 0.7, 0.04, 0.4, 'highpass');
+  },
+  record() { [1047, 1319, 1568, 2093].forEach((f, i) => this.tone('triangle', f, f, 0.18, 0.1, i * 0.09, 0.005, true)); },
+  over() { [392, 330, 262, 196].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.12, i * 0.14, 0.01, true)); },
+  tick() { this.tone('sine', 880, 1100, 0.05, 0.07, 0, 0.005, true); },
+  count() { this.tone('sine', 660, 660, 0.04, 0.05); },
+};
+
+// =====================================================================
+// ART: badge shapes, 동글이, buses, the bear 부릉이, the town backdrop
+// =====================================================================
+function rr(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r);
+  c.lineTo(x + w, y + h - r); c.arcTo(x + w, y + h, x + w - r, y + h, r);
+  c.lineTo(x + r, y + h); c.arcTo(x, y + h, x, y + h - r, r);
+  c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r); c.closePath();
+}
+// builds a path for the colour's badge shape; r is the half-size
+function shapePath(c, kind, x, y, r) {
+  c.beginPath();
+  switch (kind) {
+    case 'heart':
+      c.moveTo(x, y + r * 0.95);
+      c.bezierCurveTo(x - r * 1.35, y + r * 0.1, x - r * 0.95, y - r * 1.0, x, y - r * 0.4);
+      c.bezierCurveTo(x + r * 0.95, y - r * 1.0, x + r * 1.35, y + r * 0.1, x, y + r * 0.95);
+      break;
+    case 'circle': c.arc(x, y, r * 0.92, 0, TAU); break;
+    case 'triangle':
+      c.moveTo(x, y - r * 1.0); c.lineTo(x + r * 1.0, y + r * 0.8); c.lineTo(x - r * 1.0, y + r * 0.8); break;
+    case 'square': rr(c, x - r * 0.82, y - r * 0.82, r * 1.64, r * 1.64, r * 0.25); break;
+    case 'star':
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * 0.46 : r * 1.12;
+        if (i) c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad); else c.moveTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+      }
+      break;
+    case 'diamond':
+      c.moveTo(x, y - r * 1.15); c.lineTo(x + r * 0.88, y); c.lineTo(x, y + r * 1.15); c.lineTo(x - r * 0.88, y); break;
+    default: c.arc(x, y, r, 0, TAU);
+  }
+  c.closePath();
+}
+
+// ---------- 동글이: a little bean passenger. (x, y) = bottom centre of the feet, u = full height ----------
+// o: expr 'smile' | 'wow' | 'flat' | 'worry', blink, arm 0..1 (arms raised), dim 0..1, sit, sx, sy, win (no feet/arms)
+function drawDongle(c, x, y, u, col, o) {
+  o = o || {};
+  const P = PAL[col], dim = o.dim || 0;
+  const main = dim ? mix(P.c, INK, dim) : P.c, shade = dim ? mix(P.d, INK, dim) : P.d;
+  const foot = mix(P.d, INK, 0.3 + dim * 0.4);
+  c.save();
+  c.translate(x, y); c.scale(u * (o.sx || 1), u * (o.sy || 1));
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  const lw = Math.max(1.7, u * 0.042) / u;
+  c.lineWidth = lw; c.strokeStyle = INK;
+  if (!o.win) {
+    const arm = o.arm || 0;
+    for (const sg of [-1, 1]) {   // arms sit behind the body, only the round tips show
+      c.save();
+      c.translate(sg * 0.36, -0.42 - arm * 0.1);
+      c.rotate(-sg * (0.32 + arm * 2.4));
+      c.beginPath(); c.ellipse(0, 0.1, 0.066, 0.125, 0, 0, TAU);
+      c.fillStyle = main; c.fill(); c.stroke();
+      c.restore();
+    }
+    if (!o.sit) {
+      for (const sg of [-1, 1]) { c.beginPath(); c.ellipse(sg * 0.15, -0.04, 0.1, 0.05, 0, 0, TAU); c.fillStyle = foot; c.fill(); c.stroke(); }
+    }
+  }
+  // body: an egg, a bit narrower on top (width 0.8 : height 1.0)
+  const bodyPath = () => {
+    c.beginPath();
+    c.moveTo(-0.31, -0.52);
+    c.bezierCurveTo(-0.31, -0.85, -0.18, -0.97, 0, -0.97);
+    c.bezierCurveTo(0.18, -0.97, 0.31, -0.85, 0.31, -0.52);
+    c.bezierCurveTo(0.45, -0.38, 0.43, -0.07, 0.2, -0.07);
+    c.lineTo(-0.2, -0.07);
+    c.bezierCurveTo(-0.43, -0.07, -0.45, -0.38, -0.31, -0.52);
+    c.closePath();
+  };
+  bodyPath(); c.fillStyle = main; c.fill();
+  c.save(); c.clip();
+  c.fillStyle = shade; c.beginPath(); c.ellipse(0, 0.02, 0.6, 0.25, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.38)'; c.beginPath(); c.ellipse(-0.14, -0.83, 0.085, 0.04, -0.5, 0, TAU); c.fill();
+  c.restore();
+  bodyPath(); c.stroke();
+  if (o.sit && !o.win) {   // legs folded forward
+    for (const sg of [-1, 1]) { c.beginPath(); c.ellipse(sg * 0.16, -0.035, 0.105, 0.055, 0, 0, TAU); c.fillStyle = foot; c.fill(); c.stroke(); }
+  }
+  // chest badge
+  c.beginPath(); c.arc(0, -0.3, 0.115, 0, TAU); c.fillStyle = 'rgba(255,253,245,0.95)'; c.fill();
+  c.lineWidth = lw * 0.75; c.stroke();
+  shapePath(c, P.shape, 0, -0.3, 0.072); c.fillStyle = shade; c.fill();
+  c.lineWidth = lw;
+  // face: eyes at ~30% from the top of the body, spaced 40% of the body width; mouth just below
+  const ex = 0.17, ey = -0.69, ex2 = o.look || 0;
+  if (!dim) {
+    c.fillStyle = 'rgba(255,100,125,0.42)';
+    for (const sg of [-1, 1]) { c.beginPath(); c.ellipse(sg * 0.275, -0.6, 0.055, 0.034, 0, 0, TAU); c.fill(); }
+  }
+  c.fillStyle = INK; c.strokeStyle = INK;
+  const expr = o.expr || 'smile';
+  for (const sg of [-1, 1]) {
+    const cx = sg * ex + ex2 * 0.02;
+    if (o.blink) { c.lineWidth = lw * 1.1; c.beginPath(); c.moveTo(cx - 0.042, ey + 0.005); c.lineTo(cx + 0.042, ey + 0.005); c.stroke(); }
+    else if (expr === 'wow') { c.lineWidth = lw * 1.15; c.beginPath(); c.arc(cx, ey + 0.025, 0.047, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); }
+    else {
+      c.beginPath(); c.arc(cx, ey, 0.05, 0, TAU); c.fill();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(cx - 0.016, ey - 0.018, 0.017, 0, TAU); c.fill(); c.fillStyle = INK;
+    }
+  }
+  c.lineWidth = lw * 1.05;
+  if (expr === 'wow') {
+    c.beginPath(); c.ellipse(0, -0.575, 0.062, 0.07, 0, 0, TAU); c.fillStyle = '#6e1c2c'; c.fill(); c.lineWidth = lw * 0.8; c.stroke();
+    c.save(); c.clip(); c.fillStyle = '#ff8fa0'; c.beginPath(); c.ellipse(0, -0.535, 0.04, 0.026, 0, 0, TAU); c.fill(); c.restore();
+  } else if (expr === 'flat') {
+    c.beginPath(); c.moveTo(-0.048, -0.57); c.lineTo(0.048, -0.57); c.stroke();
+  } else if (expr === 'worry') {
+    c.beginPath(); c.moveTo(-0.06, -0.555); c.quadraticCurveTo(-0.03, -0.6, 0, -0.568); c.quadraticCurveTo(0.03, -0.536, 0.06, -0.58); c.stroke();
+  } else {
+    c.beginPath(); c.moveTo(-0.07, -0.6); c.quadraticCurveTo(0, -0.52, 0.07, -0.6); c.stroke();
+  }
+  c.restore();
+}
+
+// ---------- bus (side view, facing right). Local box is 168 x 96. ----------
+const BUS_W = 168, BUS_H = 96;
+const BUS_WIN = [{ x: 10, y: 24, w: 36, h: 30 }, { x: 52, y: 24, w: 36, h: 30 }, { x: 94, y: 24, w: 36, h: 30 }];
+function busBodyPath(c) {
+  c.beginPath();
+  c.moveTo(16, 16); c.lineTo(136, 16);
+  c.quadraticCurveTo(160, 16, 164, 42);
+  c.lineTo(166, 68); c.arcTo(166, 80, 154, 80, 11);
+  c.lineTo(14, 80); c.arcTo(2, 80, 2, 68, 12);
+  c.lineTo(2, 30); c.arcTo(2, 16, 16, 16, 14);
+  c.closePath();
+}
+function glass(c) {
+  const g = c.createLinearGradient(0, 24, 0, 54);
+  g.addColorStop(0, '#e6f6ff'); g.addColorStop(1, '#9bd3f2');
+  return g;
+}
+// faces(seat) -> null | { col, age (s since landing) }; wheel = rotation in radians
+function drawBus(c, x, y, scale, col, faces, wheel, flash) {
+  const P = PAL[col];
+  c.save();
+  c.translate(x, y); c.scale(scale, scale);
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  // roof sign with the colour badge
+  c.fillStyle = INK; c.fillRect(70, 11, 4, 6); c.fillRect(94, 11, 4, 6);
+  rr(c, 60, 1, 48, 14, 6); c.fillStyle = PAPER; c.fill(); c.lineWidth = 2.5; c.strokeStyle = INK; c.stroke();
+  shapePath(c, P.shape, 84, 8.2, 4.8); c.fillStyle = P.c; c.fill(); c.lineWidth = 1.6; c.stroke();
+  // wheel wells + body
+  busBodyPath(c);
+  c.fillStyle = P.c; c.fill();
+  c.save(); c.clip();
+  c.fillStyle = P.d; c.fillRect(0, 62, 170, 20);
+  c.fillStyle = 'rgba(255,255,255,0.3)'; c.fillRect(0, 16, 170, 5);
+  c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(0, 60, 170, 2.5);
+  c.fillStyle = '#1f2533';
+  for (const wx of [38, 130]) { c.beginPath(); c.arc(wx, 81.5, 16.5, 0, TAU); c.fill(); }
+  if (flash > 0) { c.fillStyle = 'rgba(255,255,255,' + (0.55 * flash).toFixed(3) + ')'; c.fillRect(0, 0, 170, 90); }
+  c.restore();
+  busBodyPath(c); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+  // passenger windows
+  for (let k = 0; k < 3; k++) {
+    const w = BUS_WIN[k];
+    rr(c, w.x, w.y, w.w, w.h, 8); c.fillStyle = glass(c); c.fill();
+    const f = faces ? faces(k) : null;
+    if (f) {
+      c.save(); rr(c, w.x, w.y, w.w, w.h, 8); c.clip();
+      const pop = f.age < 0.28 ? 1 + 0.22 * Math.sin(clamp(f.age / 0.28, 0, 1) * Math.PI) : 1;
+      drawDongle(c, w.x + w.w / 2, w.y + 4 + 0.97 * 46 * pop, 46 * pop, f.col, { win: true, expr: f.age < 0.6 ? 'wow' : 'smile', blink: f.blink });
+      c.restore();
+    } else {
+      c.save(); rr(c, w.x, w.y, w.w, w.h, 8); c.clip();
+      c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 3; c.beginPath(); c.moveTo(w.x + 6, w.y + w.h + 2); c.lineTo(w.x + 20, w.y - 2); c.stroke();
+      c.restore();
+    }
+    rr(c, w.x, w.y, w.w, w.h, 8); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+  }
+  // windshield
+  c.beginPath(); c.moveTo(138, 24); c.lineTo(147, 24); c.quadraticCurveTo(156, 24, 158, 40); c.lineTo(158, 54); c.lineTo(138, 54); c.closePath();
+  c.fillStyle = glass(c); c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(142, 52); c.lineTo(149, 28); c.stroke();
+  // headlight + bumper + tail light
+  c.beginPath(); c.arc(160, 66, 4.6, 0, TAU); c.fillStyle = '#ffe98a'; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+  rr(c, 150, 73, 17, 7, 3); c.fillStyle = '#d5dce8'; c.fill(); c.lineWidth = 2; c.stroke();
+  rr(c, 1, 62, 5, 9, 2); c.fillStyle = '#ff6a6a'; c.fill(); c.lineWidth = 1.8; c.stroke();
+  // wheels
+  for (const wx of [38, 130]) {
+    c.save(); c.translate(wx, 81.5); c.rotate(wheel);
+    c.beginPath(); c.arc(0, 0, 12.5, 0, TAU); c.fillStyle = '#2f3648'; c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+    c.beginPath(); c.arc(0, 0, 6, 0, TAU); c.fillStyle = '#d5dce8'; c.fill(); c.lineWidth = 1.8; c.stroke();
+    c.lineWidth = 1.8; c.beginPath(); c.moveTo(-4, 0); c.lineTo(4, 0); c.moveTo(0, -4); c.lineTo(0, 4); c.stroke();
+    c.restore();
+  }
+  c.restore();
+}
+
+// ---------- 부릉이: brown bear driver ----------
+// (cx, cy) = face centre, r = face radius. o: blink, hat (true = cap on), mood 'calm' | 'happy'
+function drawBear(c, cx, cy, r, o) {
+  o = o || {};
+  c.save();
+  c.translate(cx, cy); c.scale(r, r);
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  const lw = Math.max(1.8, r * 0.07) / r;
+  c.lineWidth = lw; c.strokeStyle = INK;
+  const BR = '#b07a4f', BRD = '#8c5c38', EAR = '#ecc29b', MUZ = '#f2d6b3';
+  // ears
+  for (const sg of [-1, 1]) {
+    c.beginPath(); c.arc(sg * 0.78, -0.74, 0.34, 0, TAU); c.fillStyle = BRD; c.fill(); c.stroke();
+    c.beginPath(); c.arc(sg * 0.78, -0.74, 0.19, 0, TAU); c.fillStyle = EAR; c.fill();
+  }
+  // face
+  c.beginPath(); c.arc(0, 0, 1, 0, TAU); c.fillStyle = BR; c.fill();
+  c.save(); c.clip(); c.fillStyle = 'rgba(0,0,0,0.1)'; c.beginPath(); c.ellipse(0, 1.15, 1.3, 0.5, 0, 0, TAU); c.fill(); c.restore();
+  c.beginPath(); c.arc(0, 0, 1, 0, TAU); c.stroke();
+  // muzzle, nose, mouth
+  c.beginPath(); c.ellipse(0, 0.32, 0.48, 0.38, 0, 0, TAU); c.fillStyle = MUZ; c.fill(); c.stroke();
+  c.beginPath(); c.ellipse(0, 0.13, 0.17, 0.115, 0, 0, TAU); c.fillStyle = INK; c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.ellipse(-0.05, 0.1, 0.05, 0.027, -0.3, 0, TAU); c.fill();
+  c.strokeStyle = INK; c.lineWidth = lw * 0.9;
+  if (o.mood === 'happy') {
+    c.beginPath(); c.moveTo(0, 0.24); c.lineTo(0, 0.3); c.stroke();
+    c.beginPath(); c.moveTo(-0.2, 0.34); c.quadraticCurveTo(0, 0.66, 0.2, 0.34); c.closePath(); c.fillStyle = '#7a2030'; c.fill(); c.stroke();
+  } else {
+    c.beginPath(); c.moveTo(0, 0.24); c.lineTo(0, 0.33); c.moveTo(-0.17, 0.4); c.quadraticCurveTo(-0.08, 0.5, 0, 0.33); c.quadraticCurveTo(0.08, 0.5, 0.17, 0.4); c.stroke();
+  }
+  // eyes (above the muzzle, spaced like a face, not like a mask)
+  c.fillStyle = INK; c.lineWidth = lw;
+  for (const sg of [-1, 1]) {
+    const ex = sg * 0.4, ey = -0.12;
+    if (o.blink) { c.beginPath(); c.moveTo(ex - 0.09, ey + 0.01); c.lineTo(ex + 0.09, ey + 0.01); c.stroke(); }
+    else if (o.mood === 'happy') { c.beginPath(); c.arc(ex, ey + 0.05, 0.1, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); }
+    else {
+      c.beginPath(); c.arc(ex, ey, 0.092, 0, TAU); c.fill();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(ex - 0.03, ey - 0.035, 0.03, 0, TAU); c.fill(); c.fillStyle = INK;
+    }
+  }
+  c.fillStyle = 'rgba(255,110,130,0.4)';
+  for (const sg of [-1, 1]) { c.beginPath(); c.ellipse(sg * 0.66, 0.17, 0.12, 0.075, 0, 0, TAU); c.fill(); }
+  if (o.hat) drawCap(c, 0, 0, lw);
+  c.restore();
+}
+// driver's cap in bear-face units; ox/oy move it (used when the cap is held in a paw)
+function drawCap(c, ox, oy, lw) {
+  c.save();
+  c.translate(ox, oy);
+  c.strokeStyle = INK; c.lineWidth = lw;
+  c.beginPath(); c.moveTo(-0.78, -0.5); c.bezierCurveTo(-0.9, -1.2, 0.9, -1.2, 0.78, -0.5); c.closePath();
+  c.fillStyle = '#ffd23f'; c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(-0.8, -0.5); c.lineTo(0.8, -0.5); c.lineTo(0.76, -0.38); c.lineTo(-0.76, -0.38); c.closePath();
+  c.fillStyle = '#2f6fd0'; c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(-0.48, -0.38); c.quadraticCurveTo(0, -0.18, 0.48, -0.38); c.closePath();
+  c.fillStyle = '#d6a617'; c.fill(); c.stroke();
+  shapePath(c, 'star', 0, -0.76, 0.12); c.fillStyle = '#fffdf5'; c.fill(); c.lineWidth = lw * 0.7; c.stroke();
+  c.restore();
+}
+function drawWheel(c, cx, cy, rx, ry, w) {
+  c.save(); c.lineJoin = 'round'; c.lineCap = 'round';
+  c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, TAU); c.lineWidth = w + 4; c.strokeStyle = INK; c.stroke();
+  c.lineWidth = w; c.strokeStyle = '#4b5a78'; c.stroke();
+  c.lineWidth = w * 0.7; c.strokeStyle = INK; c.beginPath(); c.moveTo(cx - rx * 0.9, cy); c.lineTo(cx + rx * 0.9, cy); c.moveTo(cx, cy); c.lineTo(cx, cy + ry * 0.9); c.stroke();
+  c.beginPath(); c.ellipse(cx, cy, rx * 0.2, ry * 0.2, 0, 0, TAU); c.fillStyle = '#d5dce8'; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+  c.restore();
+}
+function paw(c, x, y, r) {
+  c.beginPath(); c.arc(x, y, r, 0, TAU); c.fillStyle = '#b07a4f'; c.fill(); c.lineWidth = 2.4; c.strokeStyle = INK; c.stroke();
+}
+// title card picture: the bear at the wheel of a bus cab, blinking. canvas is 480x240 (drawn at 2x of 240x120)
+function mascotTitle(canvas, t) {
+  const c = canvas.getContext('2d');
+  c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 240, 120);
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  // sunshine + cab
+  c.fillStyle = 'rgba(255,253,245,0.1)'; c.beginPath(); c.arc(120, 62, 56, 0, TAU); c.fill();
+  rr(c, 36, 8, 168, 108, 20); c.fillStyle = '#4fd98c'; c.fill(); c.lineWidth = 3.5; c.strokeStyle = INK; c.stroke();
+  rr(c, 50, 18, 140, 64, 14); c.fillStyle = glassFill(c, 18, 82); c.fill(); c.lineWidth = 3; c.stroke();
+  c.save(); rr(c, 50, 18, 140, 64, 14); c.clip();
+  c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.moveTo(60, 82); c.lineTo(80, 18); c.lineTo(92, 18); c.lineTo(72, 82); c.fill();
+  const blink = (t % 3.4) > 3.25;
+  const bob = Math.sin(t * 2.4) * 1.2;
+  c.fillStyle = '#3aa6a0'; c.beginPath(); c.ellipse(120, 92, 34, 24, 0, 0, TAU); c.fill(); c.lineWidth = 3; c.stroke();
+  drawBear(c, 120, 50 + bob, 28, { blink, hat: true });
+  c.restore();
+  rr(c, 50, 18, 140, 64, 14); c.lineWidth = 3; c.stroke();
+  // dashboard + wheel + paws
+  rr(c, 40, 84, 160, 26, 10); c.fillStyle = '#2f6fd0'; c.fill(); c.lineWidth = 3; c.stroke();
+  drawWheel(c, 120, 92 + bob * 0.3, 30, 13, 5);
+  paw(c, 92, 90 + bob * 0.3, 6); paw(c, 148, 90 + bob * 0.3, 6);
+  // lamps
+  for (const lx of [50, 190]) { c.beginPath(); c.arc(lx, 104, 5, 0, TAU); c.fillStyle = '#ffe98a'; c.fill(); c.lineWidth = 2; c.stroke(); }
+}
+function glassFill(c, y0, y1) { const g = c.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, '#e6f6ff'); g.addColorStop(1, '#9bd3f2'); return g; }
+// game over picture: the bear with the cap in a raised paw, waving goodbye
+function mascotOver(canvas, t) {
+  const c = canvas.getContext('2d');
+  c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 240, 120);
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  c.fillStyle = 'rgba(255,253,245,0.1)'; c.beginPath(); c.arc(120, 66, 54, 0, TAU); c.fill();
+  const bob = Math.sin(t * 3) * 1.5, wave = Math.sin(t * 6) * 0.25;
+  // body
+  c.fillStyle = '#3aa6a0'; c.beginPath(); c.ellipse(120, 116, 40, 30, 0, 0, TAU); c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+  c.fillStyle = PAPER; c.beginPath(); c.moveTo(104, 90); c.lineTo(120, 104); c.lineTo(136, 90); c.closePath(); c.fill(); c.stroke();
+  paw(c, 84, 100, 7);
+  drawBear(c, 120, 58 + bob, 30, { mood: 'happy', hat: false, blink: false });
+  // waving arm holding the cap up (drawn after the face so nothing hides it)
+  c.save(); c.translate(160, 102); c.rotate(0.75 + wave);
+  c.beginPath(); c.ellipse(0, -16, 9, 21, 0, 0, TAU); c.fillStyle = '#3aa6a0'; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+  c.save(); c.translate(0, -52); c.rotate(-0.75 - wave); c.scale(17, 17); drawCap(c, 0, 0.65, 0.12); c.restore();
+  paw(c, 0, -38, 8);
+  c.restore();
+}
+
+// ---------- town backdrop (cached in two layers so a frame is just two drawImage + clouds) ----------
+function makeLayer(w, h) { const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(w)); cv.height = Math.max(1, Math.round(h)); return cv; }
+function buildTown(W, H, dpr, roadTop, roadBot) {
+  const sky = makeLayer(W * dpr, H * dpr), town = makeLayer(W * dpr, H * dpr);
+  let c = sky.getContext('2d'); c.scale(dpr, dpr);
+  const g = c.createLinearGradient(0, 0, 0, roadTop);
+  g.addColorStop(0, '#8fd3ff'); g.addColorStop(1, '#eaf7ff');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c = town.getContext('2d'); c.scale(dpr, dpr);
+  const rnd = mulberry32(7), pastel = ['#ffd9c2', '#d4e8ff', '#e6d9ff', '#fff1b8', '#d6f2dd'];
+  let x = -20;
+  while (x < W + 20) {
+    const bw = 54 + rnd() * 56, bh = 44 + rnd() * Math.min(110, roadTop * 0.55);
+    const col = pastel[Math.floor(rnd() * pastel.length)];
+    c.fillStyle = col; c.fillRect(x, roadTop - bh, bw, bh);
+    c.fillStyle = 'rgba(255,255,255,0.45)'; c.fillRect(x, roadTop - bh, bw, 5);
+    c.fillStyle = 'rgba(42,49,66,0.12)'; c.fillRect(x + bw - 6, roadTop - bh, 6, bh);
+    c.fillStyle = 'rgba(143,211,255,0.8)';
+    for (let wy = roadTop - bh + 12; wy < roadTop - 18; wy += 20) for (let wx = x + 9; wx < x + bw - 16; wx += 18) c.fillRect(wx, wy, 9, 11);
+    x += bw + 4 + rnd() * 10;
+    if (rnd() < 0.5) {   // a round tree between houses
+      const tx = x + 6, tr = 11 + rnd() * 6;
+      c.fillStyle = '#7a5a3a'; c.fillRect(tx - 2, roadTop - tr - 8, 4, tr + 8);
+      c.fillStyle = '#6fcf8a'; c.beginPath(); c.arc(tx, roadTop - tr - 12, tr, 0, TAU); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.25)'; c.beginPath(); c.arc(tx - tr * 0.3, roadTop - tr - 15, tr * 0.4, 0, TAU); c.fill();
+      x += 18;
+    }
+  }
+  // kerb, road, pavement
+  c.fillStyle = '#f4e8cf'; c.fillRect(0, roadTop - 6, W, 8);
+  c.fillStyle = '#58657a'; c.fillRect(0, roadTop + 2, W, roadBot - roadTop - 2);
+  c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(0, roadTop + 2, W, 4);
+  c.fillStyle = '#f5f0d8';
+  for (let lx = 0; lx < W; lx += 46) c.fillRect(lx, roadBot - (roadBot - roadTop) * 0.5, 26, 4);
+  c.fillStyle = '#ead9b6'; c.fillRect(0, roadBot, W, H - roadBot);
+  c.strokeStyle = 'rgba(160,130,80,0.18)'; c.lineWidth = 1; c.beginPath();
+  for (let ty = roadBot + 24; ty < H; ty += 48) { c.moveTo(0, ty + 0.5); c.lineTo(W, ty + 0.5); }
+  for (let tx = 0; tx < W; tx += 48) { c.moveTo(tx + 0.5, roadBot); c.lineTo(tx + 0.5, H); }
+  c.stroke();
+  return { sky, town };
+}
+
+// =====================================================================
+// STATE
+// =====================================================================
+const $ = (id) => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d'), bgCv = $('bg'), bgx = bgCv.getContext('2d');
+const S = {
+  phase: 'title',      // title | play | clear | stuck | over
+  paused: false, T: 0, clock: 0,
+  runSeed: 1, runCount: 0, runToken: 0,
+  stage: 1, hearts: CFG.HEARTS, score: 0, base: 0, shown: 0,
+  best: readInt(KEY_BEST), bestStage: readInt(KEY_STAGE), bestAtStart: 0,
+  st: null, s: null, hist: [], undoLeft: 1, combo: 0, comboT: 0, passPts: 0, busPts: 0, taps: 0, stageTime: 0, perfect: true,
+  stats: { pass: 0, bus: 0, combo: 0 },
+  seen: store.get(KEY_SEEN, '0') !== '0', sitTold: store.get(KEY_SEEN, '0') === '2', firstDepartTold: false, coach: 0, tip3: false,
+  kbd: false, cursor: 0, hover: -1,
+  timers: [], sprites: [], spMap: {}, vbs: [], vbMap: {}, parts: [], texts: [],
+  shake: 0, shakeT: -9, flash: 0, flashT: -9, msg: '', msgUntil: 0, msgKind: '',
+  stuckAt: 0, sheetAt: 0, clr: null, cache: new Map(), jobs: new Map(), buildLog: [],
+  overShown: false, introAt: 0, chipX: {}, nextChip: 0, scoreGoldUntil: 0, recordNow: false, finalScore: 0,
+};
+const LAY = { W: 0, H: 0, dpr: 1, k: 1, VW: 390, VH: 844, colX: 0, sat: 0, sab: 0, topH: 56, botH: 72, bayY: 56, bayH: 150, ttH: 34, benchH: 76, ttY: 206, benchY: 240, laneY: 316, laneH: 456, roadTop: 113, roadBot: 206 };
+const G = { L: 3, N: 5, depth: 3, cw: 60, cellH: 60, u: 56, usb: 52, bw: 168, bs: 1, bh: 96, busY: 100, farOff: 16, slotX: [0, 0], seatY: 300, stripX: [], sw: 56, laneXs: [] };
+let scene = null, bgLayers = null, fine = false;
+try { fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) { fine = false; }
+const el = {
+  col: $('col'), btnPause: $('btnPause'), scoreBox: $('scoreBox'), hStage: $('hStage'), hScore: $('hScore'), hearts: $('hearts'),
+  btnUndo: $('btnUndo'), undoN: $('undoN'), status: $('status'), btnRestart: $('btnRestart'),
+  coach: $('coach'), coachTxt: $('coachTxt'), toast: $('toast'), toastTxt: $('toastTxt'), stamp: $('stamp'),
+  banner: $('banner'), bnTitle: $('bnTitle'), bnRows: $('bnRows'), sheet: $('sheet'), sheetTxt: $('sheetTxt'),
+  btnSheetUndo: $('btnSheetUndo'), btnSheetRetry: $('btnSheetRetry'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrConfirm: $('scrConfirm'), scrOver: $('scrOver'),
+  tBest: $('tBest'), btnMuteT: $('btnMuteT'), btnMuteP: $('btnMuteP'), btnPauseRetry: $('btnPauseRetry'),
+  rScore: $('rScore'), rBadge: $('rBadge'), rStage: $('rStage'), rPass: $('rPass'), rBus: $('rBus'), rCombo: $('rCombo'), rPrev: $('rPrev'),
+  cfTitle: $('cfTitle'), cfTxt: $('cfTxt'), mascot: $('mascot'), mascot2: $('mascot2'),
+};
+function later(delay, fn) { S.timers.push({ at: S.T + delay, fn }); }
+
+// =====================================================================
+// STAGE BUILDING in 8 ms slices (so the UI never janks while the next board is prepared)
+// =====================================================================
+function stageSeed(n) { return (S.runSeed + n * 7919) | 0; }
+function startBuild(n) {
+  if (S.cache.has(n) || S.jobs.has(n)) return;
+  const job = { n, g: genStage(n, mulberry32(stageSeed(n))), slices: 0, ms: 0, token: S.runToken };
+  S.jobs.set(n, job);
+  const tick = () => {
+    if (job.token !== S.runToken || !S.jobs.has(n)) return;
+    const t0 = performance.now();
+    let r;
+    do { r = job.g.next(); } while (!r.done && performance.now() - t0 < CFG.SLICE_MS);
+    job.slices++; job.ms += performance.now() - t0;
+    if (r.done) { S.cache.set(n, r.value); S.jobs.delete(n); S.buildLog.push({ n, slices: job.slices, ms: Math.round(job.ms) }); }
+    else setTimeout(tick, 0);
+  };
+  setTimeout(tick, 0);
+}
+function getStage(n) {   // finishes synchronously if the background job has not been done yet
+  if (S.cache.has(n)) return S.cache.get(n);
+  const job = S.jobs.get(n);
+  const g = job ? job.g : genStage(n, mulberry32(stageSeed(n)));
+  const st = driveAll(g);
+  S.jobs.delete(n); S.cache.set(n, st);
+  return st;
+}
+
+// =====================================================================
+// LAYOUT: everything is laid out in a virtual column (VW x VH) that is scaled down only when the screen is short
+// =====================================================================
+function layout() {
+  const cs = getComputedStyle($('probe'));
+  const sat = parseFloat(cs.paddingTop) || 0, sab = parseFloat(cs.paddingBottom) || 0, sal = parseFloat(cs.paddingLeft) || 0, sar = parseFloat(cs.paddingRight) || 0;
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const availW = Math.max(1, W - sal - sar), totalH = Math.max(1, H - sat - sab);
+  const k = Math.min(1, totalH / 620);
+  const VW = Math.floor(Math.min(460, availW / k)), VH = Math.floor(totalH / k);
+  const colX = sal + (availW - VW * k) / 2;
+  Object.assign(LAY, { W, H, dpr, k, VW, VH, colX, sat, sab });
+  for (const c of [cv, bgCv]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  const st = el.col.style;
+  st.left = colX + 'px'; st.top = sat + 'px'; st.width = VW + 'px'; st.height = VH + 'px'; st.transform = k < 1 ? 'scale(' + k + ')' : 'none';
+  LAY.bayY = LAY.topH;
+  LAY.bayH = clamp(Math.round(VH * 0.18), 126, 150);
+  LAY.ttY = LAY.bayY + LAY.bayH; LAY.ttH = VH < 640 ? 30 : 34;
+  LAY.benchY = LAY.ttY + LAY.ttH; LAY.benchH = VH < 640 ? 70 : 76;
+  LAY.laneY = LAY.benchY + LAY.benchH;
+  LAY.laneH = VH - LAY.botH - LAY.laneY;
+  LAY.roadTop = LAY.bayY + Math.round(LAY.bayH * 0.38); LAY.roadBot = LAY.bayY + LAY.bayH;
+  computeGeom();
+  buildScene();
+  const rt = sat + LAY.roadTop * k, rb = sat + LAY.roadBot * k;
+  bgLayers = buildTown(W, H, dpr, rt, rb);
+  for (const sp of S.sprites) { const tg = locPos(sp); if (tg && !sp.fly) { sp.x = tg.x; sp.y = tg.y; sp.u = tg.u; } }
+  for (const vb of S.vbs) vb.x = null;
+  bgDraw(true);
+}
+function computeGeom() {
+  const st = S.st;
+  const L = st ? st.lanes.length : 4, N = st ? st.strip : 5;
+  let depth = 3;
+  if (st) { depth = 0; for (const l of st.lanes) depth = Math.max(depth, l.length); }
+  const cw = Math.min(Math.floor((LAY.VW - 32) / L), L <= 3 ? 96 : L === 4 ? 84 : 72);
+  const cellH = Math.min(cw * 1.1, (LAY.laneH - 14) / (depth + 0.4));
+  const u = Math.min(cellH * 0.95, cw * 1.04, 84);
+  const sw = Math.min(58, (LAY.VW - 44) / N);
+  const bw = Math.min(BUS_W, Math.floor((LAY.VW - 30) / 2) - 6), bs = bw / BUS_W;
+  Object.assign(G, { L, N, depth, cw, cellH, u, sw, bw, bs, bh: BUS_H * bs, farOff: 16 * bs });
+  G.usb = Math.min(u, 54, LAY.benchH * 0.7);
+  G.seatY = LAY.benchY + LAY.benchH * 0.7;
+  G.busY = LAY.bayY + LAY.bayH - 10 * bs - G.bh;
+  G.slotX = [LAY.VW / 2 - 6 - bw, LAY.VW / 2 + 6];
+  G.laneXs = []; for (let i = 0; i < L; i++) G.laneXs.push(LAY.VW / 2 + (i - (L - 1) / 2) * cw);
+  G.stripX = []; for (let j = 0; j < N; j++) G.stripX.push(LAY.VW / 2 + (j - (N - 1) / 2) * sw);
+}
+function footY(q) { return LAY.laneY + 10 + (q + 1) * G.cellH - (G.cellH - G.u) * 0.4; }
+
+// cached static scene: road, pavement, plaza tiles and the lane strips
+function buildScene() {
+  const { VW, VH, dpr, k } = LAY;
+  scene = makeLayer(VW * dpr * k, VH * dpr * k);
+  const c = scene.getContext('2d'); c.scale(dpr * k, dpr * k);
+  c.fillStyle = '#58657a'; c.fillRect(0, LAY.roadTop, VW, LAY.roadBot - LAY.roadTop);
+  c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(0, LAY.roadTop, VW, 4);
+  c.fillStyle = '#f4e8cf'; c.fillRect(0, LAY.roadTop - 6, VW, 8);
+  c.fillStyle = '#f5f0d8';
+  for (let lx = 8; lx < VW; lx += 46) c.fillRect(lx, LAY.roadBot - (LAY.roadBot - LAY.roadTop) * 0.5, 26, 4);
+  // pavement + bench strip + plaza
+  c.fillStyle = '#f4e8cf'; c.fillRect(0, LAY.roadBot, VW, VH - LAY.roadBot);
+  c.fillStyle = 'rgba(42,49,66,0.28)'; c.fillRect(0, LAY.roadBot, VW, 4);
+  c.fillStyle = '#e9d9b6'; c.fillRect(0, LAY.ttY, VW, 2);
+  c.fillStyle = '#efe0bf'; c.fillRect(0, LAY.benchY, VW, LAY.benchH);
+  c.fillStyle = 'rgba(160,130,80,0.25)'; c.fillRect(0, LAY.laneY - 2, VW, 3);
+  c.strokeStyle = '#e6d6b4'; c.lineWidth = 1.5; c.beginPath();
+  for (let ty = LAY.laneY + 20; ty < VH; ty += 40) { c.moveTo(0, ty); c.lineTo(VW, ty); }
+  for (let tx = (VW % 40) / 2; tx < VW; tx += 40) { c.moveTo(tx, LAY.laneY); c.lineTo(tx, VH); }
+  c.stroke();
+  if (S.st) {
+    for (let i = 0; i < G.L; i++) {
+      const x = G.laneXs[i] - G.cw / 2 + 2, w = G.cw - 4, h = G.cellH * G.depth + 18;
+      rr(c, x, LAY.laneY + 4, w, h, 14); c.fillStyle = 'rgba(255,255,255,0.5)'; c.fill();
+      c.lineWidth = 2; c.strokeStyle = 'rgba(160,130,80,0.35)'; c.stroke();
+      rr(c, x + 3, LAY.laneY + 7, w - 6, G.cellH * 0.96, 11); c.fillStyle = 'rgba(79,220,140,0.2)'; c.fill();   // the "front of the line" spot
+    }
+  }
+  if (LAY.colX > 4) {   // desktop: soft edges so the column reads as a stage
+    for (const [x0, dir] of [[0, 1], [VW, -1]]) {
+      const g = c.createLinearGradient(x0, 0, x0 + dir * 14, 0); g.addColorStop(0, 'rgba(42,49,66,0.22)'); g.addColorStop(1, 'rgba(42,49,66,0)');
+      c.fillStyle = g; c.fillRect(dir > 0 ? 0 : VW - 14, LAY.roadTop - 6, 14, VH);
+    }
+  }
+}
+
+// =====================================================================
+// SPRITES (one per passenger) and VISUAL BUSES. Logic is instant; these only animate it.
+// =====================================================================
+function makeSprite(pid, c) {
+  return { pid, c, x: 0, y: 0, u: 40, loc: null, fly: null, blinkAt: rv(1, 5), blink: false, rejectAt: -9, landAt: -9, spawn: null, phase: Math.random() };
+}
+function seatPos(vb, seat, bs) {
+  const w = BUS_WIN[seat];
+  return { x: vb.x + (w.x + w.w / 2) * bs, y: vb.y + (w.y + 4 + 0.97 * 46) * bs, u: 46 * bs };
+}
+function locPos(sp) {
+  const loc = sp.loc;
+  if (!loc || !S.s) return null;
+  if (loc.k === 'lane') {
+    const q = Math.max(0, loc.idx - S.s.p[loc.lane]);
+    return { x: G.laneXs[loc.lane], y: footY(q), u: G.u * Math.max(0.8, 1 - 0.04 * q), q };
+  }
+  if (loc.k === 'strip') return { x: G.stripX[loc.slot], y: G.seatY + 4, u: G.usb };
+  const vb = S.vbMap[loc.bus];
+  if (!vb || vb.x === null) return null;
+  return seatPos(vb, loc.seat, G.bs);
+}
+function locOf(pid) {   // where the logic says this passenger is right now
+  const s = S.s, lane = pid >> 3, idx = pid & 7;
+  if (idx >= s.p[lane]) return { k: 'lane', lane, idx };
+  const j = s.sid.indexOf(pid);
+  if (j >= 0) return { k: 'strip', slot: j };
+  for (const b of s.bay) { const q = b.ids.indexOf(pid); if (q >= 0) return { k: 'bus', bus: b.id, seat: q }; }
+  return null;   // already left on a bus that departed
+}
+function hop(sp, delay, dur, arc, onLand) {
+  sp.fly = { x0: sp.x, y0: sp.y, u0: sp.u, t0: S.T + delay, dur: reduceMotion ? dur * 0.6 : dur, arc: reduceMotion ? 0 : arc, onLand: onLand || null };
+}
+function makeVBus(b, enterStart, enterDur) {
+  const vb = { id: b.id, c: b.c, slot: b.slot, state: 'in', enterStart, enterDur, readyAt: enterStart + enterDur, departAt: Infinity, flashAt: Infinity, leaveDur: CFG.LEAVE,
+    seat: [-1, -1, -1], lastLand: 0, x: null, y: G.busY, wheel: 0, hornAt: -9, flash: 0, gone: false, bump: -9 };
+  return vb;
+}
+function vbPos(vb) {   // current x / y of the whole bus
+  const home = G.slotX[vb.slot], T = S.T;
+  let x = home, y = G.busY, sc = 1;
+  if (T < vb.enterStart) { x = -G.bw - 30; y = G.busY - G.farOff; }
+  else if (T < vb.enterStart + vb.enterDur) {
+    const k = (T - vb.enterStart) / vb.enterDur;
+    x = lerp(-G.bw - 30, home, easeOut(k));
+    y = G.busY - G.farOff * (1 - easeOut(clamp((k - 0.55) / 0.45, 0, 1)));
+  }
+  if (T >= vb.departAt) {
+    const k = clamp((T - vb.departAt) / vb.leaveDur, 0, 1);
+    x = home + (LAY.VW + G.bw + 40 - home) * k * k * (1.4 - 0.4 * k);
+    y = G.busY - G.farOff * easeOut(clamp(k / 0.25, 0, 1));
+  }
+  return { x, y, sc };
+}
+
+// =====================================================================
+// PARTICLES / FLOATING TEXT
+// =====================================================================
+function burst(x, y, color, n, kind) {
+  const cnt = reduceMotion ? Math.ceil(n / 4) : n;
+  for (let i = 0; i < cnt; i++) {
+    if (S.parts.length >= 150) S.parts.shift();
+    const a = rv(0, TAU), v = kind === 'puff' ? rv(10, 40) : rv(60, 230);
+    S.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (kind === 'puff' ? 30 : 120), g: kind === 'puff' ? -20 : 420, life: 0, max: kind === 'puff' ? rv(0.5, 0.9) : rv(0.7, 1.3),
+      kind: kind || (Math.random() < 0.4 ? 'star' : 'conf'), color, size: kind === 'puff' ? rv(5, 10) : rv(3, 6.5), rot: rv(0, TAU), vr: rv(-9, 9) });
+  }
+}
+function rain() {   // stage clear: stars falling from the top
+  const cols = [PAL[0].c, PAL[1].c, PAL[2].c, PAL[3].c, PAL[4].c, PAL[5].c];
+  const cnt = reduceMotion ? 8 : 34;
+  for (let i = 0; i < cnt; i++) {
+    if (S.parts.length >= 150) S.parts.shift();
+    S.parts.push({ x: rv(0, LAY.VW), y: rv(-120, -10), vx: rv(-20, 20), vy: rv(80, 200), g: 120, life: 0, max: rv(1.6, 2.6), kind: i % 3 ? 'conf' : 'star', color: cols[i % 6], size: rv(4, 8), rot: rv(0, TAU), vr: rv(-6, 6) });
+  }
+}
+function floatText(x, y, str, color, size) {
+  if (S.texts.length > 20) S.texts.shift();
+  S.texts.push({ x, y, str, color: color || GOLD, size: size || 18, life: 0, max: 0.95 });
+}
+
+// =====================================================================
+// HUD
+// =====================================================================
+const HEART_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><path class="hp" d="M16 27C6 20 3 14.5 3 10.5 3 7 5.600 4.600 9 4.600c2.600 0 5 1.600 7 4.400 2-2.800 4.400-4.400 7-4.400 3.400 0 6 2.400 6 5.900 0 4-3 9.500-13 16.500z"/></svg>';
+function drawHearts(lostIdx) {
+  let h = '';
+  for (let i = 0; i < CFG.HEARTS; i++) h += '<span class="' + (i < S.hearts ? '' : 'gone') + (i === lostIdx ? ' lose' : '') + '" style="display:block">' + HEART_SVG + '</span>';
+  el.hearts.innerHTML = h;
+  el.hearts.setAttribute('aria-label', '하트 ' + S.hearts + '개');
+  if (lostIdx >= 0) { const sp = el.hearts.children[lostIdx]; if (sp) sp.firstChild.classList.add('lose'); }
+}
+let hudCache = {};
+function setText(node, key, v) { if (hudCache[key] !== v) { hudCache[key] = v; node.textContent = v; } }
+function updateHud() {
+  setText(el.hStage, 'stage', S.stage + '단계');
+  const shown = Math.round(S.shown);
+  setText(el.hScore, 'score', fmtNum(shown));
+  setText(el.undoN, 'undo', '×' + S.undoLeft);
+  const canUndo = S.undoLeft > 0 && S.hist.length > 0 && (S.phase === 'play' || S.phase === 'stuck');
+  if (hudCache.canUndo !== canUndo) { hudCache.canUndo = canUndo; el.btnUndo.disabled = !canUndo; }
+  const canRetry = S.phase === 'play' || S.phase === 'stuck';
+  if (hudCache.canRetry !== canRetry) { hudCache.canRetry = canRetry; el.btnRestart.disabled = !canRetry; }
+  // status line
+  let txt = '', kind = '';
+  if (S.msgUntil > S.T) { txt = S.msg; kind = S.msgKind; }
+  else if (S.phase === 'stuck') { txt = '꽉 막혔어요'; kind = 'bad'; }
+  else if (S.phase === 'clear') { txt = '잘했어요!'; }
+  else if (S.s) {
+    const free = S.s.strip.filter((x) => x < 0).length;
+    if (free === 0) { txt = '대기석이 꽉 찼어요!'; kind = 'bad'; }
+    else if (free === 1 && S.stage >= 3) { txt = '대기석이 거의 찼어요!'; kind = 'warn'; }
+    else if (S.stage === 1) txt = '같은 색 동글이를 눌러요';
+    else txt = '맨 앞 동글이를 눌러 봐요';
+  }
+  setText(el.status, 'status', txt);
+  if (hudCache.skind !== kind) { hudCache.skind = kind; el.status.className = kind; }
+  const gold = S.scoreGoldUntil > S.T;
+  if (hudCache.gold !== gold) { hudCache.gold = gold; el.scoreBox.classList.toggle('gold', gold); }
+}
+function say(msg, kind, dur) { S.msg = msg; S.msgKind = kind || ''; S.msgUntil = S.T + (dur || 1.6); }
+function toast(msg, dur) {
+  el.toastTxt.textContent = msg; el.toast.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.toast.classList.remove('show'), (dur || 2.4) * 1000);
+}
+function showCoach(txt) {
+  if (!txt) { el.coach.classList.add('off'); return; }
+  el.coachTxt.textContent = txt; el.coach.classList.remove('off');
+}
+function placeHud() {
+  el.coach.style.top = Math.round(LAY.VH - LAY.botH - 58) + 'px';
+  el.toast.style.top = Math.round(LAY.VH - LAY.botH - 116) + 'px';
+  el.stamp.style.top = Math.round(LAY.laneY + (LAY.laneH - 64) * 0.35) + 'px';
+  el.banner.style.top = Math.round(Math.max(LAY.benchY + 6, LAY.laneY + LAY.laneH * 0.08)) + 'px';
+}
+
+// =====================================================================
+// FLOW: runs, stages, taps
+// =====================================================================
+function addVBus(b, enterStart, enterDur) {
+  const vb = makeVBus(b, enterStart, enterDur);
+  S.vbs.push(vb); S.vbMap[vb.id] = vb;
+  const p = vbPos(vb); vb.x = p.x; vb.y = p.y;
+  return vb;
+}
+function startRun() {
+  Sound.ensure();
+  S.runCount++;
+  S.runToken++;
+  S.runSeed = RUN_SEED !== null ? (RUN_SEED + S.runCount * 104729) | 0 : (Date.now() ^ Math.floor(Math.random() * 4294967296)) | 0;
+  S.cache.clear(); S.jobs.clear();
+  S.hearts = CFG.HEARTS; S.score = 0; S.base = 0; S.shown = 0; S.overShown = false;
+  S.stats = { pass: 0, bus: 0, combo: 0 };
+  S.bestAtStart = readInt(KEY_BEST); S.best = Math.max(S.best, S.bestAtStart);
+  S.recordNow = false; S.tip3 = false; S.firstDepartTold = false;
+  S.timers = []; S.paused = false; document.body.classList.remove('paused');
+  for (const e of [el.scrTitle, el.scrPause, el.scrOver, el.scrConfirm]) e.hidden = true;
+  el.col.hidden = false;
+  drawHearts(-1);
+  beginStage(1, {});
+}
+function beginStage(n, opt) {
+  opt = opt || {};
+  const st = getStage(n);
+  S.stage = n; S.st = st; S.s = initState(st, true);
+  if (n > S.bestStage) { S.bestStage = n; store.set(KEY_STAGE, n); }
+  S.hist = []; S.undoLeft = 1; S.combo = 0; S.comboT = 0; S.passPts = 0; S.busPts = 0; S.taps = 0; S.stageTime = 0;
+  if (!opt.restart) S.perfect = true;
+  S.score = S.base; if (!opt.restart) S.shown = S.base;
+  S.timers = []; S.clr = null; S.msgUntil = 0; S.parts.length = 0; S.texts.length = 0;
+  S.phase = 'play'; S.settleAt = S.T + 1.3; S.benchFlash = -9;
+  el.banner.hidden = true; el.sheet.classList.remove('show'); el.stamp.classList.remove('show');
+  hudCache = {};
+  computeGeom(); buildScene();
+  // passengers drop in lane by lane, buses roll in from the left
+  S.sprites = []; S.spMap = {}; S.vbs = []; S.vbMap = {};
+  const prev = n > 1 ? SETS[stageParams(n - 1).K] : [];
+  const fresh = [];
+  st.lanes.forEach((lane, i) => lane.forEach((c, j) => {
+    const sp = makeSprite(i * 8 + j, c);
+    sp.loc = { k: 'lane', lane: i, idx: j };
+    const tg = locPos(sp); sp.x = tg.x; sp.y = tg.y; sp.u = tg.u;
+    sp.spawn = { t0: S.T + (opt.restart ? 0.02 : 0.08) + (i * 0.05 + j * 0.06) * (opt.restart ? 0.5 : 1), dur: 0.45 };
+    S.sprites.push(sp); S.spMap[sp.pid] = sp;
+    if (n > 1 && !opt.restart && prev.indexOf(c) < 0 && fresh.indexOf(c) < 0) fresh.push(c);
+  }));
+  S.s.bay.forEach((b, k) => addVBus(b, S.T + 0.1 + k * 0.18, CFG.ENTER));
+  S.nextChip = S.s.bi;
+  S.chipX = {};
+  for (const c of fresh) {   // a colour shows up for the first time: a little sparkle on its first passenger
+    const sp = S.sprites.find((q) => q.c === c);
+    if (sp) later(0.9, () => { burst(sp.x, sp.y - G.u * 0.5, PAL[c].c, 12, 'star'); });
+  }
+  S.coach = (n === 1 && !S.seen) ? 1 : 0;
+  showCoach(S.coach === 1 ? '같은 색 버스에 타요! 눌러 봐요' : '');
+  if (n === 3 && !S.tip3 && !opt.restart) { S.tip3 = true; later(1.4, () => toast('대기석이 꽉 차면 막혀요. 같은 색을 모아 두면 좋아요!', 3.6)); }
+  startBuild(n + 1);
+  placeHud(); updateHud();
+}
+function snapshot() {
+  return { s: cloneState(S.s), passPts: S.passPts, busPts: S.busPts, combo: S.combo, comboT: S.comboT, taps: S.taps };
+}
+function laneCanMove(i) {
+  const s = S.s, st = S.st;
+  if (s.p[i] >= st.lanes[i].length) return false;
+  return s.strip.indexOf(-1) >= 0 || !!busFor(st, s, st.lanes[i][s.p[i]]);
+}
+function tap(i, src) {
+  if (S.phase !== 'play' || S.paused || i < 0 || i >= G.L) return false;
+  const st = S.st, s = S.s;
+  if (s.p[i] >= st.lanes[i].length) return false;
+  const sp = S.spMap[i * 8 + s.p[i]];
+  if (!laneCanMove(i)) {   // bench full and no bus wants this one: a head shake, nothing else happens
+    sp.rejectAt = S.T; S.benchFlash = S.T; Sound.reject(); buzz(30);
+    say('탈 버스가 없어요', 'bad', 1.4);
+    return false;
+  }
+  S.hist.push(snapshot());
+  if (S.hist.length > 60) S.hist.shift();
+  S.taps++;
+  Sound.pop();
+  const ev = [];
+  stepLane(st, s, i, ev);
+  applyEvents(ev, sp);
+  S.score = S.base + S.passPts + S.busPts;
+  if (isWon(st, s)) stageClear();
+  else if (!movesOf(st, s).length) stuck();
+  else afterTap();
+  return true;
+}
+function afterTap() {
+  if (S.coach === 1) { S.coach = 0; showCoach(''); }
+  updateHud();
+}
+function applyEvents(ev, tapped) {
+  const st = S.st;
+  let landT = S.T + CFG.FLY, lastAuto = -9, chain = 0, lastDepartAt = S.T, lastDepartVb = null;
+  for (const e of ev) {
+    if (e.t === 'board' || e.t === 'auto') {
+      const sp = S.spMap[e.pid], vb = S.vbMap[e.bus];
+      sp.loc = { k: 'bus', bus: e.bus, seat: e.seat }; vb.seat[e.seat] = e.pid;
+      let start = S.T;
+      if (e.t === 'auto') { start = Math.max(landT, lastAuto + CFG.AUTO_GAP); lastAuto = start; }
+      start = Math.max(start, vb.readyAt - 0.25);
+      const ci = e.t === 'auto' ? ++chain : 0;
+      hop(sp, start - S.T, CFG.FLY, e.t === 'auto' ? 30 : 24, () => landBoard(sp, vb, e.seat, ci));
+      vb.lastLand = Math.max(vb.lastLand, start + CFG.FLY);
+      if (e.t === 'board') landT = start + CFG.FLY;
+      S.passPts += 10;
+      if (e.t === 'auto') sp.chainFrom = true;
+    } else if (e.t === 'sit') {
+      const sp = S.spMap[e.pid];
+      sp.loc = { k: 'strip', slot: e.slot };
+      hop(sp, 0, CFG.FLY, 26, () => {
+        sp.landAt = S.T; Sound.sit(); burst(sp.x, sp.y, '#e9d9b6', 4, 'puff');
+        if (!S.sitTold) {   // the first time anyone sits on the bench: explain it once
+          S.sitTold = true; if (store.get(KEY_SEEN, '0') !== '2') store.set(KEY_SEEN, '2');
+          showCoach('색이 다르면 대기석에서 기다려요. 버스가 오면 알아서 타요'); later(4, () => showCoach(''));
+        }
+      });
+      landT = S.T + CFG.FLY;
+    } else if (e.t === 'depart') {
+      const vb = S.vbMap[e.bus];
+      const at = Math.max(vb.lastLand, S.T) + CFG.DEPART_WAIT;
+      vb.departAt = at; vb.flashAt = at - CFG.DEPART_WAIT * 0.8;
+      if (S.comboT > 0) S.combo = Math.min(CFG.COMBO_MAX, S.combo + 1); else S.combo = 1;
+      S.comboT = CFG.COMBO_WINDOW;
+      S.stats.combo = Math.max(S.stats.combo, S.combo);
+      const combo = S.combo, pts = 30 * combo;
+      S.busPts += pts;
+      lastDepartAt = at; lastDepartVb = vb;
+      later(at - S.T, () => {
+        Sound.horn(combo); buzz(25);
+        vb.hornAt = S.T;
+        const bs = G.bs;
+        burst(vb.x + G.bw * 0.5, vb.y + 20 * bs, PAL[vb.c].c, 14 + combo * 3);
+        burst(vb.x + 6 * bs, vb.y + 80 * bs, '#d5dce8', 4, 'puff');
+        floatText(vb.x + G.bw * 0.5, vb.y + 6 * bs, '+' + pts + (combo > 1 ? ' ×' + combo : ''), combo > 1 ? '#fff0a0' : GOLD, combo > 1 ? 24 : 20);
+        if (combo > 1) { S.scoreGoldUntil = S.T + 1.2; restartAnim(el.scoreBox, 'pop'); }
+      });
+      if (S.stage === 1 && !S.seen && !S.firstDepartTold) {
+        S.firstDepartTold = true;
+        later(at - S.T + 0.1, () => showCoach('잘했어요! 버스 하나 출발!')); later(at - S.T + 2.6, () => showCoach(''));
+      }
+    } else if (e.t === 'enter') {
+      const start = lastDepartAt + 0.12;
+      addVBus({ id: e.bus, c: e.c, slot: e.slot }, start, CFG.ENTER);
+    }
+  }
+}
+function landBoard(sp, vb, seat, chain) {
+  sp.landAt = S.T; vb.bump = S.T;
+  Sound.board(seat, chain);
+  const p = seatPos(vb, seat, G.bs);
+  floatText(p.x, p.y - p.u * 0.9, '+10', '#fff6c0', 15);
+  burst(p.x, p.y - p.u * 0.5, PAL[sp.c].c, 3, 'star');
+}
+
+function undo(src) {
+  if (S.paused || (S.phase !== 'play' && S.phase !== 'stuck')) return false;
+  if (S.undoLeft < 1 || !S.hist.length) return false;
+  const k = Math.min(CFG.UNDO_STEPS, S.hist.length);
+  const snap = S.hist[S.hist.length - k];
+  S.hist.length -= k;
+  S.undoLeft--; S.perfect = false;
+  S.s = cloneState(snap.s); S.passPts = snap.passPts; S.busPts = snap.busPts; S.combo = snap.combo; S.comboT = snap.comboT; S.taps = snap.taps;
+  S.score = S.base + S.passPts + S.busPts;
+  S.timers = []; S.texts.length = 0;
+  if (S.phase === 'stuck') { S.phase = 'play'; el.sheet.classList.remove('show'); el.stamp.classList.remove('show'); }
+  resyncVisuals();
+  Sound.undo();
+  say(k + '걸음 되돌렸어요', '', 1.6);
+  updateHud();
+  return true;
+}
+// after a restore: every passenger flies back to where the logic now says it is
+function resyncVisuals() {
+  const s = S.s;
+  let order = 0;
+  for (const sp of S.sprites) {
+    const nl = locOf(sp.pid);
+    const old = sp.loc;
+    sp.fly = null;
+    if (!nl) { sp.loc = old; continue; }
+    const same = old && old.k === nl.k && ((nl.k === 'lane' && old.lane === nl.lane && old.idx === nl.idx) || (nl.k === 'strip' && old.slot === nl.slot) || (nl.k === 'bus' && old.bus === nl.bus && old.seat === nl.seat));
+    sp.loc = nl;
+    if (same) continue;
+    if (nl.k === 'bus' && old && old.k === 'bus') { sp.landAt = S.T - 1; continue; }
+    if (sp.x > LAY.VW + 10 || sp.x < -10) { sp.x = LAY.VW / 2; sp.y = G.busY; sp.u = 46 * G.bs; }
+    hop(sp, order++ * 0.025, 0.34, 30, null);
+    if (nl.k === 'bus') sp.fly.onLand = () => { sp.landAt = S.T; };
+  }
+  // buses: keep the ones still in the bay, drop the ones that were only waiting to leave, bring back the ones restored
+  const keep = [];
+  for (const vb of S.vbs) {
+    const inBay = s.bay.some((b) => b.id === vb.id);
+    const leaving = S.T >= vb.departAt && !inBay;
+    if (inBay) { vb.departAt = Infinity; vb.seat = [-1, -1, -1]; keep.push(vb); }
+    else if (leaving) keep.push(vb);
+    else delete S.vbMap[vb.id];
+  }
+  S.vbs = keep;
+  for (const b of s.bay) {
+    let vb = S.vbs.find((q) => q.id === b.id && q.departAt === Infinity);
+    if (!vb) { vb = addVBus(b, S.T, 0.45); }
+    S.vbMap[b.id] = vb;
+    vb.slot = b.slot; vb.seat = b.ids.slice(); vb.c = b.c;
+  }
+  S.nextChip = s.bi;
+}
+
+function stageClear() {
+  S.phase = 'clear';
+  const n = S.stage, st = S.st;
+  const pass = st.lanes.reduce((a, l) => a + l.length, 0);
+  const speed = Math.min(150, Math.max(0, Math.round((pass * 1.6 - S.stageTime) * 5)));
+  const perf = S.perfect ? 50 : 0, clearB = 100 * n;
+  const total = S.passPts + S.busPts + clearB + speed + perf;
+  const rows = [['승객', S.passPts], ['버스', S.busPts], ['통과', clearB]];
+  if (speed > 0) rows.push(['빠르기', speed]);
+  if (perf) rows.push(['완벽', perf]);
+  S.base += total; S.score = S.base;
+  S.stats.pass += pass; S.stats.bus += st.buses.length;
+  if (S.score > S.best) { S.best = S.score; store.set(KEY_BEST, S.best); }
+  if (n === 1 && !S.seen) { S.seen = true; if (store.get(KEY_SEEN, '0') === '0') store.set(KEY_SEEN, '1'); }
+  showCoach('');
+  let lastLeave = S.T;
+  for (const vb of S.vbs) if (vb.departAt !== Infinity) lastLeave = Math.max(lastLeave, vb.departAt + 0.5);
+  const bannerIn = lastLeave - S.T + 0.15;
+  S.clr = { at: S.T + bannerIn, end: S.T + bannerIn + CFG.BANNER_T, shown: false, rows, total, n, waited: 0 };
+  later(lastLeave - S.T, () => { Sound.clear(); rain(); });
+}
+function showBanner() {
+  const c = S.clr; c.shown = true;
+  el.bnTitle.textContent = c.n + '단계 통과!';
+  el.bnRows.innerHTML = c.rows.map((r) => '<div class="row"><span>' + r[0] + '</span><b>+' + fmtNum(r[1]) + '</b></div>').join('') + '<div class="row total"><span>합계</span><b>+' + fmtNum(c.total) + '</b></div>';
+  el.banner.hidden = false;
+  const rows = el.bnRows.children;
+  for (let i = 0; i < rows.length; i++) {
+    setTimeout(() => { if (rows[i] && rows[i].parentNode) { rows[i].classList.add('on'); Sound.count(); } }, reduceMotion ? 0 : 100 + i * 130);
+  }
+}
+function skipBanner() {
+  if (S.phase === 'clear' && S.clr && S.clr.shown) S.clr.end = Math.min(S.clr.end, S.T);
+}
+function proceed() {
+  const c = S.clr, next = c.n + 1;
+  if (!S.cache.has(next)) {   // still building (rare): wait a little, then finish it in one go
+    c.waited += 1 / 60; say('다음 판을 준비하고 있어요', '', 0.5);
+    if (c.waited < 2) return;
+  }
+  beginStage(next, {});
+}
+function stuck() {
+  S.phase = 'stuck';
+  S.stuckAt = S.T + 0.5; S.sheetAt = S.T + 1.1; S.perfect = false;
+  S.stuckFx = false; S.sheetShown = false;
+  showCoach('');
+}
+function stuckFx() {
+  S.stuckFx = true;
+  Sound.stuck(); buzz([40, 40, 80]);
+  if (reduceMotion) { S.flashT = S.T; } else { S.shakeT = S.T; }
+  restartAnim(el.stamp, 'show');
+}
+function showSheet() {
+  const last = S.hearts <= 1;
+  el.btnSheetUndo.disabled = !(S.undoLeft > 0 && S.hist.length > 0);
+  el.btnSheetRetry.textContent = last ? '마지막 하트를 써요' : '처음부터 다시';
+  el.sheetTxt.textContent = S.undoLeft > 0 ? '되돌리면 하트를 안 써요. 세 걸음 전으로 돌아가 볼까요?' : '더 둘 곳이 없어요. 하트를 써서 다시 해 봐요.';
+  el.sheet.classList.add('show');
+}
+function retryStage() {
+  if (S.phase !== 'play' && S.phase !== 'stuck') return;
+  el.sheet.classList.remove('show'); el.stamp.classList.remove('show');
+  S.hearts--; S.perfect = false;
+  drawHearts(S.hearts);
+  Sound.heart();
+  if (S.hearts <= 0) { S.score = S.base; S.shown = S.base; gameOver(); return; }
+  S.score = S.base;
+  toast('하트를 하나 썼어요. 같은 배치로 다시 해 봐요!', 2.2);
+  beginStage(S.stage, { restart: true });
+}
+function gameOver() {
+  S.phase = 'over'; S.paused = false;
+  el.sheet.classList.remove('show'); el.stamp.classList.remove('show'); showCoach('');
+  const st = S.st, s = S.s;
+  let pass = S.stats.pass, bus = S.stats.bus;
+  S.finalScore = S.base;
+  if (S.finalScore > S.best) { S.best = S.finalScore; store.set(KEY_BEST, S.best); }
+  S.recordNow = S.finalScore > S.bestAtStart && S.finalScore > 0;
+  S.overStats = { stage: S.stage, pass, bus, combo: Math.max(1, S.stats.combo) };
+  S.timers = [];
+  later(0.9, () => {
+    S.overShown = true;
+    el.rScore.textContent = fmtNum(S.finalScore);
+    el.rBadge.hidden = !S.recordNow;
+    el.rStage.textContent = S.overStats.stage + '단계';
+    el.rPass.textContent = fmtNum(S.overStats.pass) + '명';
+    el.rBus.textContent = fmtNum(S.overStats.bus) + '대';
+    el.rCombo.textContent = '×' + S.overStats.combo;
+    el.rPrev.innerHTML = S.bestAtStart > 0 ? '이전 최고 <b>' + fmtNum(S.bestAtStart) + '점</b>' : '첫 기록이에요!';
+    el.scrOver.hidden = false; el.col.hidden = false;
+    if (S.recordNow) { Sound.record(); rain(); } else Sound.over();
+  });
+}
+function toTitle() {
+  S.phase = 'title'; S.paused = false; S.runToken++; S.timers = [];
+  document.body.classList.remove('paused');
+  el.col.hidden = true;
+  for (const e of [el.scrPause, el.scrOver, el.scrConfirm]) e.hidden = true;
+  el.scrTitle.hidden = false;
+  S.sprites = []; S.vbs = []; S.vbMap = {}; S.parts.length = 0; S.texts.length = 0;
+  uiBest();
+}
+function uiBest() {
+  const b = readInt(KEY_BEST); S.best = Math.max(S.best, b);
+  if (S.best > 0) { el.tBest.className = ''; el.tBest.textContent = fmtNum(S.best) + '점' + (S.bestStage > 0 ? ' · ' + S.bestStage + '단계' : ''); }
+  else { el.tBest.className = 'none'; el.tBest.textContent = '아직 기록이 없어요'; }
+}
+function uiMute() {
+  const t = Sound.muted ? '소리 켜기' : '소리 끄기';
+  el.btnMuteT.textContent = t; el.btnMuteP.textContent = t;
+}
+
+// pause / confirm
+function pauseGame() {
+  if (S.paused || (S.phase !== 'play' && S.phase !== 'clear' && S.phase !== 'stuck')) return;
+  S.paused = true; document.body.classList.add('paused');
+  el.scrPause.hidden = false; Sound.suspend();
+  el.btnPauseRetry.disabled = S.phase === 'clear';
+  el.btnPauseRetry.textContent = S.hearts <= 1 ? '처음부터 (마지막 하트를 써요)' : '처음부터 (하트 -1)';
+}
+function resumeGame() {
+  if (!S.paused) return;
+  S.paused = false; document.body.classList.remove('paused');
+  el.scrPause.hidden = true; el.scrConfirm.hidden = true; Sound.resume();
+}
+function askRetry() {
+  if (S.phase !== 'play' && S.phase !== 'stuck') return;
+  const last = S.hearts <= 1;
+  el.cfTitle.textContent = last ? '마지막 하트예요!' : '처음부터 할까요?';
+  el.cfTxt.textContent = last ? '지금 하트를 쓰면 오늘 운행이 끝나요. 정말 그만할까요?' : '하트가 1개 줄고, 이 단계를 같은 배치로 다시 해요.';
+  el.scrConfirm.hidden = false;
+}
+function confirmRetry() {
+  el.scrConfirm.hidden = true; S.confirmFromHud = false;
+  if (S.paused) resumeGame();
+  retryStage();
+}
+
+// =====================================================================
+// UPDATE
+// =====================================================================
+function update(dt) {
+  const T = S.T;
+  if (S.timers.length) {
+    const due = S.timers.filter((t) => t.at <= T);
+    if (due.length) { S.timers = S.timers.filter((t) => t.at > T); due.sort((a, b) => a.at - b.at); for (const t of due) t.fn(); }
+  }
+  if (S.phase === 'play') {
+    if (T > S.settleAt) S.stageTime += dt;
+    if (S.comboT > 0) S.comboT -= dt;
+  } else if (S.phase === 'stuck') {
+    if (!S.stuckFx && T >= S.stuckAt) stuckFx();
+    if (!S.sheetShown && T >= S.sheetAt) { S.sheetShown = true; showSheet(); }
+  } else if (S.phase === 'clear' && S.clr) {
+    const c = S.clr;
+    if (!c.shown && T >= c.at) showBanner();
+    if (c.shown && T >= c.end) { el.banner.hidden = true; proceed(); }
+  }
+  // sprites
+  const kf = 1 - Math.exp(-dt * 16);
+  for (const sp of S.sprites) {
+    const tg = locPos(sp);
+    if (!tg) continue;
+    if (S.T >= sp.blinkAt) { sp.blink = S.T < sp.blinkAt + 0.12; if (!sp.blink) sp.blinkAt = S.T + rv(3, 6.5); }
+    const f = sp.fly;
+    if (f) {
+      if (T < f.t0) continue;
+      const k = clamp((T - f.t0) / f.dur, 0, 1), e = k * k * (3 - 2 * k);
+      sp.x = lerp(f.x0, tg.x, e); sp.y = lerp(f.y0, tg.y, e) - f.arc * Math.sin(Math.PI * k) * (G.u / 56); sp.u = lerp(f.u0, tg.u, e);
+      if (k >= 1) { sp.fly = null; sp.x = tg.x; sp.y = tg.y; sp.u = tg.u; if (f.onLand) f.onLand(); else sp.landAt = T; }
+    } else {
+      sp.x += (tg.x - sp.x) * kf; sp.y += (tg.y - sp.y) * kf; sp.u += (tg.u - sp.u) * kf;
+    }
+  }
+  // buses
+  for (const vb of S.vbs) {
+    const p = vbPos(vb);
+    if (vb.x !== null && T >= vb.enterStart) vb.wheel += (p.x - vb.x) / (12.5 * G.bs);
+    vb.x = p.x; vb.y = p.y;
+    if (T >= vb.departAt && !vb.gone) {
+      vb.puffAt = (vb.puffAt || 0) - dt;
+      if (vb.puffAt <= 0 && T < vb.departAt + vb.leaveDur * 0.8) { vb.puffAt = 0.07; burst(vb.x + 4 * G.bs, vb.y + 82 * G.bs, '#e8eef7', 1, 'puff'); }
+      if (T > vb.departAt + vb.leaveDur) vb.gone = true;
+    }
+  }
+  if (S.vbs.some((v) => v.gone)) { S.vbs = S.vbs.filter((v) => !v.gone); }
+  while (S.st && S.nextChip < S.st.buses.length) {
+    const nv = S.vbMap[S.nextChip];
+    if (nv && T >= nv.enterStart) S.nextChip++; else break;
+  }
+  for (const q of S.parts) { q.life += dt; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.rot += q.vr * dt; }
+  S.parts = S.parts.filter((q) => q.life < q.max);
+  for (const q of S.texts) { q.life += dt; q.y -= 38 * dt; }
+  S.texts = S.texts.filter((q) => q.life < q.max);
+  S.shown += (S.score - S.shown) * Math.min(1, dt * 7);
+  if (Math.abs(S.score - S.shown) < 0.6) S.shown = S.score;
+}
+
+// =====================================================================
+// RENDER
+// =====================================================================
+function drawHand(c, x, y, s, rot) {
+  c.save(); c.translate(x, y); c.rotate(rot); c.scale(s / 32, s / 32); c.translate(-15.6, -3);
+  const p = new Path2D('M13 5.5a2.6 2.6 0 0 1 5.2 0V15l3.6-.9c1.6-.4 3 .9 2.7 2.5l-1.2 6.4a5 5 0 0 1-4.9 4H14a5 5 0 0 1-4-2l-3.3-4.6a2.1 2.1 0 0 1 3.3-2.5l2 1.9z');
+  c.fillStyle = PAPER; c.fill(p); c.lineWidth = 2.2; c.strokeStyle = INK; c.lineJoin = 'round'; c.stroke(p);
+  c.restore();
+}
+function drawBubble(c, x, y, str) {
+  c.save();
+  c.font = '700 15px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const w = c.measureText(str).width + 20;
+  rr(c, x - w / 2, y - 14, w, 26, 12); c.fillStyle = PAPER; c.fill(); c.lineWidth = 2.5; c.strokeStyle = INK; c.stroke();
+  c.beginPath(); c.moveTo(x - 6, y + 11); c.lineTo(x - 12, y + 19); c.lineTo(x + 2, y + 11); c.fillStyle = PAPER; c.fill(); c.stroke();
+  c.fillStyle = INK; c.fillText(str, x, y + 1);
+  c.restore();
+}
+function drawBay() {
+  const T = S.T, bs = G.bs;
+  const order = S.vbs.slice().sort((a, b) => (b.y - a.y) * -1 || a.slot - b.slot);   // far-lane (moving) buses first
+  for (const vb of order) {
+    if (vb.x === null || T < vb.enterStart) continue;
+    const moving = T < vb.enterStart + vb.enterDur * 0.75 || T >= vb.departAt;
+    // ground shadow
+    ctx.fillStyle = 'rgba(30,36,52,' + (moving ? 0.18 : 0.28) + ')';
+    ctx.beginPath(); ctx.ellipse(vb.x + G.bw * 0.5, vb.y + G.bh - 2 * bs + (moving ? G.farOff * 0.0 : 0), G.bw * 0.48, 6 * bs, 0, 0, TAU); ctx.fill();
+    let by = vb.y;
+    if (!moving && !reduceMotion) by += Math.sin(T * 3 + vb.slot * 2) * 0.7 - 2.5 * bs * Math.exp(-(T - vb.bump) * 9) * (T - vb.bump < 0.4 ? 1 : 0);
+    let bx = vb.x;
+    if (T - vb.hornAt < 0.35 && !reduceMotion) bx += Math.sin((T - vb.hornAt) * 90) * 1.2;
+    const flash = T >= vb.flashAt && T < vb.flashAt + 0.3 ? 1 - (T - vb.flashAt) / 0.3 : 0;
+    drawBus(ctx, bx, by, bs, vb.c, (k) => {
+      const pid = vb.seat[k];
+      if (pid < 0) return null;
+      const sp = S.spMap[pid];
+      if (!sp || sp.fly || !sp.loc || sp.loc.k !== 'bus' || sp.loc.bus !== vb.id) return null;
+      return { col: sp.c, age: T - sp.landAt, blink: sp.blink };
+    }, vb.wheel, flash);
+    if (T - vb.hornAt < 0.8 && T >= vb.hornAt) {
+      const a = (T - vb.hornAt) / 0.8, sc = a < 0.15 ? a / 0.15 : 1;
+      ctx.save(); ctx.translate(bx + G.bw * 0.82, by - 4 * bs); ctx.scale(sc, sc); ctx.globalAlpha = a > 0.7 ? (1 - a) / 0.3 : 1;
+      drawBubble(ctx, 0, 0, '빵빵!');
+      ctx.restore();
+    }
+  }
+}
+function drawTimetable() {
+  const st = S.st; if (!st) return;
+  const n = st.buses.length - S.nextChip, cy = LAY.ttY + LAY.ttH / 2 + 1;
+  ctx.fillStyle = '#7a6440'; ctx.font = '15px ' + FONT_D; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  if (n <= 0) { if (S.phase !== 'clear') ctx.fillText('마지막 버스예요', 14, cy + 1); return; }
+  ctx.fillText('다음', 14, cy + 1);
+  const sz = n * 27 > LAY.VW - 76 ? 18 : 22, gap = sz + 5;
+  const k = 1 - Math.exp(-(1 / 60) * 14);
+  for (let i = 0; i < n; i++) {
+    const id = S.nextChip + i, tx = 54 + i * gap;
+    if (S.chipX[id] === undefined) S.chipX[id] = tx + (S.phase === 'play' ? 0 : 0);
+    S.chipX[id] += (tx - S.chipX[id]) * k;
+    const x = S.chipX[id], c = st.buses[id], P = PAL[c];
+    rr(ctx, x, cy - sz / 2, sz, sz, 6); ctx.fillStyle = P.c; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; rr(ctx, x + 2, cy - sz / 2 + 2, sz - 4, 3, 1.5); ctx.fill();
+    shapePath(ctx, P.shape, x + sz / 2, cy + sz * 0.06, sz * 0.24); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = INK; ctx.stroke();
+  }
+}
+function drawBench() {
+  const T = S.T, N = G.N, sw = G.sw;
+  const x0 = G.stripX[0] - sw / 2 - 12, x1 = G.stripX[N - 1] + sw / 2 + 12, y = G.seatY;
+  const free = S.s ? S.s.strip.filter((v) => v < 0).length : N;
+  // alert glow: orange one seat before full, red when full
+  if (free <= 1 && S.s && S.phase !== 'clear') {
+    const red = free === 0, a = red ? 0.5 + 0.3 * Math.sin(T * 5) : 0.28 + 0.22 * Math.sin(T * 2.4);
+    rr(ctx, x0 - 8, LAY.benchY + 3, x1 - x0 + 16, LAY.benchH - 8, 18);
+    ctx.fillStyle = red ? 'rgba(255,74,87,' + (a * 0.28) + ')' : 'rgba(255,176,46,' + (a * 0.3) + ')'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = red ? 'rgba(255,74,87,' + a + ')' : 'rgba(255,176,46,' + a + ')'; ctx.stroke();
+  }
+  if (S.benchFlash !== undefined && T - S.benchFlash < 0.4) {
+    rr(ctx, x0 - 8, LAY.benchY + 3, x1 - x0 + 16, LAY.benchH - 8, 18);
+    ctx.fillStyle = 'rgba(255,74,87,' + (0.35 * (1 - (T - S.benchFlash) / 0.4)) + ')'; ctx.fill();
+  }
+  // backrest, seat plank, legs
+  const bh = Math.min(10, G.usb * 0.18);
+  rr(ctx, x0 + 4, y - G.usb * 0.5, x1 - x0 - 8, bh, 4); ctx.fillStyle = '#a56f40'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = INK; ctx.stroke();
+  ctx.fillStyle = '#8a5a33';
+  for (const lx of [x0 + 12, x1 - 20]) { rr(ctx, lx, y - G.usb * 0.5 + 4, 8, G.usb * 0.5 + 6, 3); ctx.fill(); ctx.lineWidth = 2; ctx.stroke(); }
+  for (const lx of [x0 + 12, x1 - 20]) { rr(ctx, lx, y + 8, 8, LAY.benchY + LAY.benchH - y - 8, 3); ctx.fill(); ctx.lineWidth = 2; ctx.stroke(); }
+  const g = ctx.createLinearGradient(0, y - 2, 0, y + 14);
+  g.addColorStop(0, '#d9a066'); g.addColorStop(1, '#b9824f');
+  rr(ctx, x0, y - 2, x1 - x0, 15, 6); ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.fillStyle = '#8a5a33'; ctx.fillRect(x0 + 5, y + 9, x1 - x0 - 10, 2);
+  // empty seats are dashed circles
+  ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,253,245,0.9)';
+  for (let j = 0; j < N; j++) {
+    if (S.s && S.s.strip[j] >= 0) continue;
+    ctx.beginPath(); ctx.ellipse(G.stripX[j], y + 3, Math.min(sw * 0.34, 20), 5, 0, 0, TAU); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.fillStyle = '#7a6440'; ctx.font = '11px ' + FONT_D; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('대기석 ' + (N - free) + '/' + N, (x0 + x1) / 2, LAY.benchY + LAY.benchH - 1);
+}
+function spriteStyle(sp) {
+  const T = S.T, loc = sp.loc, o = { expr: 'smile', blink: sp.blink };
+  let x = sp.x, y = sp.y, u = sp.u, alpha = 1, sy = 1, sx = 1;
+  if (sp.spawn) {
+    const k = clamp((T - sp.spawn.t0) / sp.spawn.dur, 0, 1);
+    if (T < sp.spawn.t0) return null;
+    if (!reduceMotion) y -= (1 - easeOut(k)) * 110;
+    alpha = reduceMotion ? k : Math.min(1, k * 2.5);
+    if (k >= 1) sp.spawn = null;
+  }
+  if (sp.fly && T >= sp.fly.t0) {
+    const k = clamp((T - sp.fly.t0) / sp.fly.dur, 0, 1);
+    o.expr = 'wow'; o.arm = Math.sin(Math.PI * Math.min(1, k * 1.15));
+    if (k < 0.18) sy = 1 - 0.2 * Math.sin(k / 0.18 * Math.PI * 0.5);
+    else sy = 1 + 0.06 * Math.sin(Math.PI * k);
+    o.dim = 0;
+  } else if (loc.k === 'lane') {
+    const tg = locPos(sp), q = tg ? tg.q : 0;
+    o.dim = Math.min(0.2, q * 0.04);
+    if (q === 0) {
+      if (!reduceMotion) { const b = Math.abs(Math.sin(T * Math.PI / 0.9 + sp.phase * 3)); y -= b * u * 0.045; sy = 0.985 + 0.03 * b; }
+      if (S.hover === loc.lane || (S.kbd && S.cursor === loc.lane)) { y -= u * 0.07; o.expr = 'wow'; }
+    }
+    if (T - sp.rejectAt < 0.45) { const k = (T - sp.rejectAt) / 0.45; x += Math.sin(k * TAU * 3) * u * 0.1 * (1 - k); o.expr = 'flat'; }
+  } else if (loc.k === 'strip') {
+    o.sit = true;
+    const a = T - sp.landAt;
+    if (a >= 0 && a < 0.35 && !reduceMotion) { const w = Math.exp(-a * 9) * Math.cos(a * 28); sy = 1 - 0.16 * w; sx = 1 + 0.1 * w; }
+    sy *= 0.95;
+    if (S.s && S.s.strip.indexOf(-1) < 0) o.expr = 'worry';
+    if (T - sp.rejectAt < 0.45) o.expr = 'flat';
+  }
+  if (loc.k === 'bus' && !sp.fly) return null;
+  o.sx = sx; o.sy = sy;
+  return { x, y, u, alpha, o };
+}
+function drawSprites() {
+  const list = [];
+  for (const sp of S.sprites) {
+    if (!sp.loc) continue;
+    const st = spriteStyle(sp);
+    if (!st) continue;
+    let key = 0;
+    if (sp.fly && S.T >= sp.fly.t0) key = 1000;
+    else if (sp.loc.k === 'strip') key = 200;
+    else if (sp.loc.k === 'lane') key = 100 - Math.max(0, sp.loc.idx - S.s.p[sp.loc.lane]);
+    list.push([key, sp, st]);
+  }
+  list.sort((a, b) => a[0] - b[0]);
+  for (const [, sp, st] of list) {
+    ctx.globalAlpha = st.alpha;
+    if (!(sp.fly && S.T >= sp.fly.t0)) {
+      ctx.fillStyle = 'rgba(42,49,66,0.16)';
+      ctx.beginPath(); ctx.ellipse(st.x, sp.y + 1, st.u * 0.3, st.u * 0.06, 0, 0, TAU); ctx.fill();
+    }
+    drawDongle(ctx, st.x, st.y, st.u, sp.c, st.o);
+  }
+  ctx.globalAlpha = 1;
+}
+function drawLanesDyn() {
+  if (!S.st || !S.s) return;
+  const T = S.T;
+  for (let i = 0; i < G.L; i++) {
+    const x = G.laneXs[i] - G.cw / 2 + 2, w = G.cw - 4;
+    const hot = (S.hover === i && S.phase === 'play') || (S.kbd && S.cursor === i && S.phase === 'play');
+    if (hot) {
+      rr(ctx, x + 1, LAY.laneY + 5, w - 2, G.cellH * G.depth + 16, 13); ctx.lineWidth = 3.5; ctx.strokeStyle = hot && S.kbd && S.cursor === i ? GOLD : 'rgba(79,220,140,0.9)'; ctx.stroke();
+    }
+    if (fine) {
+      const cx = G.laneXs[i], cy = LAY.laneY + 1;
+      ctx.beginPath(); ctx.arc(cx, cy, 8.5, 0, TAU); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = '12px ' + FONT_D; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), cx, cy + 1);
+    }
+  }
+}
+function drawCoachHand() {
+  if (!S.st || !S.s) return;
+  const T = S.T;
+  if (S.coach === 1 && S.phase === 'play') {
+    const c0 = S.s.bay[0] ? S.s.bay[0].c : -1;
+    let li = -1;
+    for (let i = 0; i < G.L; i++) if (S.s.p[i] < S.st.lanes[i].length && S.st.lanes[i][S.s.p[i]] === c0) { li = i; break; }
+    if (li < 0) for (let i = 0; i < G.L; i++) if (laneCanMove(i)) { li = i; break; }
+    if (li >= 0 && T > 1.2) {
+      const b = reduceMotion ? 0 : Math.abs(Math.sin(T * 4));
+      drawHand(ctx, G.laneXs[li] + G.u * 0.12, footY(0) - G.u * 0.42 + b * 8, 40, -0.3);
+    }
+  }
+}
+function drawFx() {
+  for (const q of S.parts) {
+    const a = 1 - q.life / q.max;
+    ctx.globalAlpha = q.kind === 'puff' ? a * 0.55 : Math.min(1, a * 1.6);
+    if (q.kind === 'puff') { ctx.fillStyle = q.color; ctx.beginPath(); ctx.arc(q.x, q.y, q.size * (1.1 - a * 0.5) + 2, 0, TAU); ctx.fill(); continue; }
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.rot);
+    ctx.fillStyle = q.color; ctx.strokeStyle = INK; ctx.lineWidth = 1.2;
+    if (q.kind === 'star') { shapePath(ctx, 'star', 0, 0, q.size * 1.1); ctx.fill(); ctx.stroke(); }
+    else { ctx.fillRect(-q.size / 2, -q.size / 3, q.size, q.size * 0.66); }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (const q of S.texts) {
+    const k = q.life / q.max, a = k > 0.7 ? (1 - k) / 0.3 : 1, sc = k < 0.15 ? 0.6 + k / 0.15 * 0.4 : 1;
+    ctx.globalAlpha = a; ctx.font = Math.round(q.size * sc) + 'px ' + FONT_D;
+    ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.strokeText(q.str, q.x, q.y);
+    ctx.fillStyle = q.color; ctx.fillText(q.str, q.x, q.y);
+  }
+  ctx.globalAlpha = 1;
+}
+function render() {
+  const { dpr, k, colX, sat } = LAY;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+  if (S.phase === 'title' || !S.st || !scene) return;
+  ctx.setTransform(dpr * k, 0, 0, dpr * k, colX * dpr, sat * dpr);
+  const T = S.T;
+  if (!reduceMotion && T - S.shakeT < 0.35) { const a = 6 * (1 - (T - S.shakeT) / 0.35); ctx.translate(Math.sin(T * 70) * a, Math.cos(T * 53) * a * 0.4); }
+  ctx.drawImage(scene, 0, 0, LAY.VW, LAY.VH);
+  drawBay();
+  drawTimetable();
+  drawBench();
+  drawLanesDyn();
+  drawSprites();
+  drawCoachHand();
+  drawFx();
+  if (T - S.flashT < 0.25) { ctx.fillStyle = 'rgba(255,255,255,' + (0.6 * (1 - (T - S.flashT) / 0.25)) + ')'; ctx.fillRect(0, 0, LAY.VW, LAY.VH); }
+}
+
+// ---------- backdrop canvas: drifting clouds and a passing car ----------
+let bgAt = 0;
+function cloud(c, x, y, s) {
+  c.fillStyle = 'rgba(255,255,255,0.78)';
+  c.beginPath(); c.ellipse(x, y, 34 * s, 13 * s, 0, 0, TAU); c.ellipse(x - 20 * s, y + 4 * s, 20 * s, 10 * s, 0, 0, TAU);
+  c.ellipse(x + 22 * s, y + 3 * s, 22 * s, 11 * s, 0, 0, TAU); c.ellipse(x + 2 * s, y - 9 * s, 18 * s, 12 * s, 0, 0, TAU); c.fill();
+}
+function bgDraw(force) {
+  if (!bgLayers) return;
+  if (!force && S.clock - bgAt < 1 / 30) return;
+  bgAt = S.clock;
+  const c = bgx, { W, dpr, sat, k } = LAY, rt = sat + LAY.roadTop * k, rb = sat + LAY.roadBot * k;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(bgLayers.sky, 0, 0);
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const t = reduceMotion ? 0 : S.clock;
+  for (let i = 0; i < 5; i++) cloud(c, ((i * 211 + t * (5 + i * 2.5)) % (W + 260)) - 130, sat + 12 + (i * 41) % Math.max(30, rt * 0.55), 0.8 + (i % 3) * 0.25);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(bgLayers.town, 0, 0);
+  if (!reduceMotion) {   // a small car passing on the far side of the road
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cx = ((t * 46) % (W + 320)) - 160, cy = rt + (rb - rt) * 0.3, s = Math.max(0.7, k);
+    c.lineWidth = 2; c.strokeStyle = INK; c.lineJoin = 'round';
+    rr(c, cx, cy - 16 * s, 46 * s, 14 * s, 6 * s); c.fillStyle = '#ffd9c2'; c.fill(); c.stroke();
+    rr(c, cx + 10 * s, cy - 24 * s, 24 * s, 11 * s, 5 * s); c.fillStyle = '#d4e8ff'; c.fill(); c.stroke();
+    for (const wx of [10, 36]) { c.beginPath(); c.arc(cx + wx * s, cy - 2 * s, 5 * s, 0, TAU); c.fillStyle = '#2f3648'; c.fill(); c.stroke(); }
+  }
+}
+
+// =====================================================================
+// INPUT
+// =====================================================================
+function toVirtual(e) { return { x: (e.clientX - LAY.colX) / LAY.k, y: (e.clientY - LAY.sat) / LAY.k }; }
+function laneAt(vx, vy) {
+  if (!S.st || vy < LAY.benchY + LAY.benchH - 6 || vy > LAY.VH - LAY.botH + 4) return -1;
+  const f = (vx - LAY.VW / 2) / G.cw + (G.L - 1) / 2, i = Math.round(f);
+  if (i < 0 || i >= G.L) return Math.abs(f - clamp(i, 0, G.L - 1)) * G.cw < G.cw / 2 + 14 ? clamp(i, 0, G.L - 1) : -1;
+  return i;
+}
+cv.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault();
+  Sound.ensure();
+  if (S.paused) return;
+  if (S.phase === 'clear') { skipBanner(); return; }
+  if (S.phase !== 'play') return;
+  const v = toVirtual(e), i = laneAt(v.x, v.y);
+  S.kbd = false;
+  if (i >= 0) { S.cursor = i; tap(i, 'pointer'); }
+});
+cv.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || S.phase !== 'play') { S.hover = -1; return; }
+  const v = toVirtual(e), i = laneAt(v.x, v.y);
+  S.hover = i >= 0 && S.s && laneCanMove(i) ? i : -1;
+  cv.classList.toggle('can', S.hover >= 0);
+});
+cv.addEventListener('pointerleave', () => { S.hover = -1; cv.classList.remove('can'); });
+
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const code = e.code;
+  Sound.ensure();
+  if (S.phase === 'title') {
+    if (code === 'Space' || code === 'Enter') { if (e.target && e.target.closest && e.target.closest('a,button')) return; e.preventDefault(); startRun(); }
+    else if (code === 'KeyM') { Sound.setMuted(!Sound.muted); uiMute(); }
+    return;
+  }
+  if (S.phase === 'over') {
+    if (!S.overShown) return;
+    if (code === 'Space' || code === 'Enter' || code === 'KeyR') { if (e.target && e.target.closest && e.target.closest('a')) return; e.preventDefault(); startRun(); }
+    else if (code === 'KeyM') { Sound.setMuted(!Sound.muted); uiMute(); }
+    return;
+  }
+  if (code === 'KeyM') { Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (!el.scrConfirm.hidden) {
+    if (code === 'Escape' || code === 'KeyN') { e.preventDefault(); cancelRetry(); }
+    else if (code === 'Enter' || code === 'KeyY') { e.preventDefault(); confirmRetry(); }
+    return;
+  }
+  if (code === 'Escape' || code === 'KeyP') { e.preventDefault(); if (S.paused) resumeGame(); else pauseGame(); return; }
+  if (S.paused) {
+    if (code === 'Space' || code === 'Enter') { if (e.target && e.target.closest && e.target.closest('a,button')) return; e.preventDefault(); resumeGame(); }
+    else if (code === 'KeyR') { e.preventDefault(); askRetry(); }
+    return;
+  }
+  if (S.phase === 'clear') { if (code === 'Space' || code === 'Enter') { e.preventDefault(); skipBanner(); } return; }
+  if (code === 'KeyZ' || code === 'Backspace') { e.preventDefault(); undo('key'); return; }
+  if (code === 'KeyR') { if (S.phase === 'stuck') { e.preventDefault(); retryStage(); } return; }
+  if (S.phase !== 'play') return;
+  const dm = /^(?:Digit|Numpad)([1-6])$/.exec(code);
+  if (dm) { e.preventDefault(); S.kbd = true; S.cursor = Math.min(G.L - 1, +dm[1] - 1); if (+dm[1] <= G.L) tap(+dm[1] - 1, 'key'); return; }
+  if (code === 'ArrowLeft' || code === 'ArrowRight') { e.preventDefault(); S.kbd = true; S.cursor = clamp(S.cursor + (code === 'ArrowLeft' ? -1 : 1), 0, G.L - 1); Sound.count(); return; }
+  if (code === 'Space' || code === 'Enter') { if (e.target && e.target.closest && e.target.closest('button,a')) return; e.preventDefault(); S.kbd = true; tap(S.cursor, 'key'); }
+});
+function cancelRetry() {
+  el.scrConfirm.hidden = true;
+  if (S.confirmFromHud) { S.confirmFromHud = false; resumeGame(); }
+}
+// the HUD "처음부터" button pauses the game behind the confirmation
+function askRetryFromHud() {
+  if (S.phase !== 'play' && S.phase !== 'stuck') return;
+  if (!S.paused) {
+    S.confirmFromHud = true; S.paused = true; document.body.classList.add('paused'); Sound.suspend();
+  }
+  askRetry();
+}
+
+function btn(node, fn) { node.addEventListener('click', () => { Sound.ensure(); fn(); }); node.addEventListener('pointerdown', (e) => e.stopPropagation()); }
+btn($('btnStart'), () => { Sound.tick(); startRun(); });
+btn($('btnAgain'), () => { Sound.tick(); startRun(); });
+btn(el.btnPause, () => { Sound.tick(); pauseGame(); });
+btn($('btnResume'), () => { Sound.tick(); resumeGame(); });
+btn(el.btnUndo, () => undo('button'));
+btn(el.btnSheetUndo, () => undo('sheet'));
+btn(el.btnSheetRetry, () => retryStage());
+btn(el.btnRestart, () => { Sound.tick(); askRetryFromHud(); });
+btn(el.btnPauseRetry, () => { Sound.tick(); askRetry(); });
+btn($('btnCfYes'), () => { confirmRetry(); });
+btn($('btnCfNo'), () => { Sound.tick(); cancelRetry(); });
+for (const b of [el.btnMuteT, el.btnMuteP]) btn(b, () => { Sound.setMuted(!Sound.muted); uiMute(); Sound.tick(); });
+el.banner.addEventListener('pointerdown', (e) => { e.stopPropagation(); skipBanner(); });
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+window.addEventListener('blur', () => pauseGame());
+window.addEventListener('pagehide', () => pauseGame());
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try {
+      if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); }
+    } catch (err) { /* follow the link */ }
+  });
+}
+let lastW = 0, lastH = 0;
+function onResize() {
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  layout(); placeHud();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+
+// =====================================================================
+// LOOP + BOOT
+// =====================================================================
+let lastTs = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  if (dt < 0) dt = 0;
+  if (dt > 0.05) dt = 0.05;
+  S.clock += dt;
+  if (!S.paused) { S.T += dt; update(dt); }
+  render();
+  bgDraw(false);
+  if (!el.scrTitle.hidden) mascotTitle(el.mascot, reduceMotion ? 0.4 : S.clock);
+  if (!el.scrOver.hidden) mascotOver(el.mascot2, reduceMotion ? 0.4 : S.clock);
+  if (S.phase !== 'title') updateHud();
+}
+window.__game = {
+  get state() {
+    const s = S.s, st = S.st;
+    return {
+      phase: S.phase, paused: S.paused, stage: S.stage, score: S.score, base: S.base, hearts: S.hearts, undoLeft: S.undoLeft, combo: S.combo, best: S.best,
+      taps: S.taps, perfect: S.perfect, coach: S.coach, recordNow: S.recordNow, finalScore: S.finalScore, stageTime: S.stageTime,
+      L: st ? st.lanes.length : 0, B: st ? st.buses.length : 0, stripN: st ? st.strip : 0,
+      fronts: st ? st.lanes.map((l, i) => (s.p[i] < l.length ? l[s.p[i]] : -1)) : [],
+      left: st ? st.lanes.map((l, i) => l.length - s.p[i]) : [],
+      strip: s ? s.strip.slice() : [], bay: s ? s.bay.map((b) => ({ c: b.c, n: b.n, id: b.id, slot: b.slot })) : [], done: s ? s.done : 0, bi: s ? s.bi : 0,
+      moves: st && s ? movesOf(st, s) : [], sol: st ? st.sol : null, buildLog: S.buildLog.slice(), vbs: S.vbs.length, sprites: S.sprites.length, parts: S.parts.length,
+    };
+  },
+  get layout() { return Object.assign({}, LAY, { G: Object.assign({}, G) }); },
+  start(n) { startRun(); if (n && n > 1) { S.base = 0; beginStage(n, {}); } },
+  tap(i) { return tap(i, 'api'); },
+  undo() { return undo('api'); },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  retry() { retryStage(); },
+  setBest(v) { S.best = v; store.set(KEY_BEST, v); },
+  // QA: do the drawn passengers / buses agree with the logic state? (call once animations have settled)
+  visualCheck() {
+    const out = [], s = S.s;
+    if (!s) return out;
+    for (const sp of S.sprites) {
+      const nl = locOf(sp.pid);
+      if (!nl) { if (sp.fly) out.push('flying but gone ' + sp.pid); continue; }
+      if (JSON.stringify(nl) !== JSON.stringify(sp.loc)) out.push('loc mismatch ' + sp.pid + ' ' + JSON.stringify(nl) + ' vs ' + JSON.stringify(sp.loc));
+      const tg = locPos(sp);
+      if (sp.fly) out.push('still flying ' + sp.pid);
+      else if (tg && (Math.abs(tg.x - sp.x) > 2 || Math.abs(tg.y - sp.y) > 2)) out.push('off target ' + sp.pid + ' dx ' + (tg.x - sp.x).toFixed(1) + ' dy ' + (tg.y - sp.y).toFixed(1));
+    }
+    for (const b of s.bay) {
+      const vb = S.vbMap[b.id];
+      if (!vb) { out.push('no vbus ' + b.id); continue; }
+      if (vb.slot !== b.slot) out.push('slot mismatch ' + b.id);
+      if (vb.c !== b.c) out.push('colour mismatch ' + b.id);
+      const seated = vb.seat.filter((q) => q >= 0).length;
+      if (seated !== b.n) out.push('bus ' + b.id + ' seats ' + seated + ' vs ' + b.n);
+      if (vb.departAt !== Infinity) out.push('bus ' + b.id + ' scheduled to leave but in bay');
+    }
+    const extra = S.vbs.filter((v) => !s.bay.some((b) => b.id === v.id));
+    if (extra.length) out.push('extra buses ' + extra.map((v) => v.id));
+    return out;
+  },
+  step(sec) { const n = Math.ceil(sec * 60); for (let i = 0; i < n; i++) { S.T += 1 / 60; update(1 / 60); } },
+  raw: { S, G, LAY, PAL, CFG, Sound, store, mulberry32, stageParams, makeBoard, initState, cloneState, movesOf, stepLane, stateKey, isWon, solveG, mcG, unlosable, genStage, driveAll, busFor, getStage, startBuild, SETS, LAD, locPos, drawDongle, drawBus },
+};
+lastW = window.innerWidth; lastH = window.innerHeight;
+uiMute();
+drawHearts(-1);
+layout();
+placeHud();
+uiBest();
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).then(() => { layout(); }).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

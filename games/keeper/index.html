@@ -366,7 +366,7 @@ html, body {
       <h1 class="logo" aria-label="막아막아"><span>막</span><span>아</span><span>막</span><span>아</span></h1>
       <p class="hook">골키퍼 막이가 되어 날아오는 슛을 몸으로 막아요!</p>
       <div class="howto">
-        <p><span class="k">화면 네 칸</span><span>막이 눈높이예요. 떠오르는 공은 위 칸, 깔리는 공은 아래 칸</span></p>
+        <p><span class="k">화면 네 칸</span><span>아래 양옆 칸은 옆으로, 위 양옆 칸은 위 구석으로 날아요</span></p>
         <p><span class="k">← → · A D</span><span>옆으로 날아요. 공이 가까울 때 날면 슈퍼 세이브!</span></p>
         <p><span class="k">↑+← · ↑+→</span><span>위 구석 공은 ↑(W)와 방향을 같이! 순서는 상관없어요</span></p>
         <p><span class="k">가만히</span><span>가운데로 오는 공은 날지 말고 그대로 서서 잡아요</span></p>
@@ -430,33 +430,31 @@ const CFG = {
   BALL_R: 0.2,
   NET_BOT_Z: -1.6, NET_TOP_Z: -1.05, NET_TOP_Y: 2.1,
   STAND_Z: 30,
-  // main view: the keeper's eyes. Eye height, just behind the goal line, looking out at the kicker.
-  // Beyond the goal line depth is compressed (power EYE_P): far things stay larger than a strict
-  // pinhole would draw them, so the kicker and ball stay readable while the goal frame still outlines
-  // the screen, and the ball's sideways drift shows earlier in its flight.
-  EYE_Y: 1.62, EYE_Z: -2.2, EYE_P: 0.45, EYE_STAND_Z: 45,
-  CY: 7.5, CZ: -12,   // replay: broadcast camera behind and above the goal
+  CY: 7.5, CZ: -12,   // camera behind and above the goal
   // dive timeline (seconds since the dive input)
-  LAUNCH: 0.07, AIR_END: 0.72, GROUND_END: 1.05, RECOVER_END: 1.4,
-  PERF_A: 0.15, PERF_B: 0.45,
+  LAUNCH: 0.07, AIR_END: 0.62, GROUND_END: 0.96, RECOVER_END: 1.3,
+  PERF_A: 0.15, PERF_B: 0.42,
   LOW_Y: 0.85,        // a keeper lying on the ground still blocks balls this low
-  LOW_MAX: 1.45,      // a plain (low) side dive reaches balls up to this height
+  LOW_MAX: 1.5,       // a plain (low) side dive reaches balls up to this height
   HIGH_MIN: 1.0,      // an up+side (high) dive flies over balls lower than this
   CHORD_MS: 120,      // up and a side key within this window (either order) = high dive
   SIDE_X: 1.0,        // |x| beyond this at the keeper plane is a side shot
   PRACTICE_N: 3,      // banana-kick practice shots (do not count, cannot end the run)
   FK_START: 10,       // free kicks over a defensive wall from this many real saves
   WALL_DIST: 6.8,     // wall distance from the ball (m, stylised)
-  WALL_CLEAR: 2.7,    // the ball centre clears the (jumping) wall at this height (kept low: the keeper looks from eye level)
-  DIST_K: 0.03,       // flight time grows this much per metre beyond the penalty spot
+  WALL_CLEAR: 2.85,   // the ball centre clears the (jumping) wall at this height
+  DIST_K: 0.012,      // flight time grows this much per metre beyond the penalty spot
   LIVES: 3,           // goals conceded in the real game before it ends (practice goals are free)
   // banana kicks bend from the moment they are kicked: a constant sideways (Magnus) push.
   // BEND = how far the first heading points beside the real target at the goal line (m).
-  BEND_MIN: 1.1, BEND_MAX: 1.8, BEND_RAMP: 0.7,
-  RISE: 2.2,          // high shots climb early (ease-out height), so high vs low reads in the first third
+  BEND_MIN: 1.8, BEND_MAX: 2.6, BEND_RAMP: 0.8,
+  // pace: the first real shots after the banana kick are gentle, then every save shortens the flight
+  SLOW_N: 3,          // real shots (after the practice) that stay slow
+  F_CURVE: 1.25, F_CURVE_MIN: 0.72, F_STRAIGHT: 1.0, F_STRAIGHT_MIN: 0.62, F_STEP: 0.042,
+  RISE: 2.0,          // high shots climb early (ease-out height), so high vs low reads in the first third
   G: 9.8,
 };
-const GW = CFG.GW, GH = CFG.GH, KZ = CFG.KZ, BALL_R = CFG.BALL_R;
+const GW = CFG.GW, GH = CFG.GH, KZ = CFG.KZ, CY = CFG.CY, CZ = CFG.CZ, BALL_R = CFG.BALL_R;
 const TAU = Math.PI * 2;
 const KEY_BEST = 'arcade.keeper.best';
 const KEY_MUTE = 'arcade.keeper.muted';
@@ -534,23 +532,16 @@ const store = {
 };
 
 // =====================================================================
-// PROJECTION
-// main: the keeper's eyes (low, just behind the goal line, looking out at the kicker)
-// replay: a broadcast camera behind and above the goal
+// PROJECTION (pinhole camera behind the goal, looking down the pitch)
 // =====================================================================
 let PX = 0, PY = 0, PS = 1;
-// effective depth: a plain pinhole when dk = 0, otherwise far depths are compressed (d / (1 + d * dk))
-function deOf(v, d) { return d <= v.d0 ? d : v.d0 * Math.pow(d / v.d0, v.pw); }
 function proj(v, x, y, z) {
-  const d = Math.max(v.dMin, z - v.cz);
-  PS = v.f / deOf(v, d); PX = v.cx + x * PS * v.kx; PY = v.hy + (v.cy - y) * PS;
+  const d = Math.max(0.4, z - CZ);
+  PS = v.f / d; PX = v.cx + x * PS; PY = v.hy + (CY - y) * PS;
 }
-// vertical/horizontal squash of a small disc lying on the grass at depth z
-function groundK(v, z) { const d = Math.max(v.dMin, z - v.cz); return v.cy * (d > v.d0 ? v.pw : 1) / d; }
 function makeView(cv, kind) {
   return {
     cv, ctx: cv.getContext('2d'), kind, w: 1, h: 1, dpr: 1, f: 500, hy: 0, cx: 0, safeTop: 0, safeBot: 0,
-    cy: CFG.CY, cz: CFG.CZ, kx: 1, eye: false, d0: 1e9, pw: 1, dMin: 0.4, bk: 1, restZ: 0, standZ: CFG.STAND_Z,
     bg: document.createElement('canvas'), crowdA: document.createElement('canvas'), crowdB: document.createElement('canvas'),
     crowdY0: 0, crowdH: 1, standTop: 0, standBase: 0, board: null, ready: false, farZ: 0,
   };
@@ -558,40 +549,16 @@ function makeView(cv, kind) {
 function layoutView(v) {
   const main = v.kind === 'main';
   const w = v.w, h = v.h, portrait = h > w * 1.1;
-  if (main) {
-    // keeper's-eye view: the goal frame fills the width (posts at the screen edges), the crossbar
-    // sits above eye level and the grass below, so high balls rise up the screen and low balls skim down it
-    v.eye = true; v.cy = CFG.EYE_Y; v.cz = CFG.EYE_Z; v.d0 = -CFG.EYE_Z; v.pw = CFG.EYE_P; v.dMin = 0.06; v.bk = 1.25; v.standZ = CFG.EYE_STAND_Z;
-    const dp = deOf(v, -v.cz);
-    const topPad = v.safeTop + (portrait ? 112 : 72), botMin = v.safeBot + Math.max(96, h * 0.17);
-    const fW = (w / 2 - 3) * dp / (GW + CFG.POST_R * 2);
-    const fH = (h - topPad - botMin) * dp / (GH + CFG.POST_R * 2);
-    v.kx = 1;
-    if (portrait) {
-      // tall screens: the goal mouth gets ~37% of the height, and only world x is squeezed to fit the
-      // width (sprites keep their natural proportions at the squeezed positions). The goal stays the
-      // same width on screen, so sideways drift and bends move just as many pixels as before.
-      v.f = Math.max(40, Math.min(h * 0.37 * dp / GH, fH));
-      v.kx = Math.min(1, fW / v.f);
-    } else v.f = Math.max(40, Math.min(fW, fH));
-    const gh = (GH + CFG.POST_R) * v.f / dp, left = Math.max(0, h - topPad - botMin - gh);
-    const barY = topPad + left * (portrait ? 0.55 : 0.3);
-    v.hy = barY + (GH + CFG.POST_R - v.cy) * v.f / dp;
-    v.cx = w / 2;
-    // the gloves' resting depth: close to the eye on tall screens, a little further out on wide ones
-    v.restZ = v.cz + (portrait ? 1.0 : 1.45);
-    return;
-  }
-  v.kx = 1; v.eye = false; v.cy = CFG.CY; v.cz = CFG.CZ; v.d0 = 1e9; v.pw = 1; v.dMin = 0.4; v.bk = 1; v.standZ = CFG.STAND_Z;
-  const CY = v.cy, CZ = v.cz;
-  const topPad = 6, botPad = 4, sidePad = 8;
+  const topPad = main ? v.safeTop + 66 : 6;
+  const botPad = main ? v.safeBot + (portrait ? 84 : 14) : 4;
+  const sidePad = main ? 10 : 8;
   const fW = (w / 2 - sidePad) * (-CZ) / (GW + 0.7);
-  const tY = 3.4, tZ = (v.farZ || CFG.PLANT_Z) + 0.6, bZ = -0.7;
+  const tY = main ? 4 : 3.4, tZ = main ? CFG.STAND_Z : (v.farZ || CFG.PLANT_Z) + 0.6, bZ = main ? -1.9 : -0.7;
   const topF = (CY - tY) / (tZ - CZ), botF = CY / (bZ - CZ);
   const fH = (h - topPad - botPad) / (botF - topF);
   v.f = Math.max(60, Math.min(fW, fH));
   const span = (botF - topF) * v.f, left = Math.max(0, h - topPad - botPad - span);
-  const top = topPad + left * 0.5;
+  const top = topPad + left * (main ? 0.62 : 0.5);
   v.hy = top - topF * v.f;
   v.cx = w / 2;
 }
@@ -683,7 +650,7 @@ function recFrame() {
 }
 
 // Scene descriptors read by the renderer: live (from S) or replay (from rec frames)
-const TRAIL_MAX = 40;   // samples, 3 physics steps apart: a banana kick shows its whole arc since the kick (~1 s)
+const TRAIL_MAX = 40;   // samples, 3 physics steps apart: a banana kick shows its whole arc since the kick
 const SC_LIVE = { kp: S.kp, gp: S.gp, ball: S.ball, net: netMain, trail: new Float32Array(TRAIL_MAX * 3), trailN: 0, power: 0, idx: 0, live: true, showName: 0, wall: null, wallT: -1, x0: 0, z0: 0, fl: false };
 const SC_REP = {
   kp: { idx: 0, x: 0, z: 0, run: 0, runAmt: 0, lean: 0, look: 0, kick: 0, mode: 0, alpha: 1, bob: 0, power: 0, name: 0 },
@@ -736,9 +703,9 @@ function zonePoint(z, lowOnly) {
     const r = Math.random(), hc = lowOnly ? 0 : r < 0.4 ? 0 : r < 0.75 ? 1 : 2;
     return { x: rand(-0.55, 0.55), y: hc === 0 ? rand(0.3, 0.6) : hc === 1 ? rand(0.9, 1.4) : rand(1.6, 1.95) };
   }
-  if (zoneHigh(z)) return { x: sd * rand(1.6, 2.6), y: rand(1.8, 2.08) };
+  if (zoneHigh(z)) return { x: sd * rand(1.6, 2.6), y: rand(1.86, 2.1) };
   const low = lowOnly || Math.random() < 0.55;
-  return { x: sd * rand(1.5, 2.6), y: low ? rand(0.25, 0.55) : rand(0.85, 1.25) };
+  return { x: sd * rand(1.5, 2.6), y: low ? rand(0.25, 0.55) : rand(0.8, 1.2) };
 }
 // extra loft on top of the straight line: low balls skim the grass, high balls get their height from the early rise
 function arcFor(y) { return y < 0.7 ? rand(0, 0.05) : y < 1.5 ? rand(0.08, 0.26) : rand(0.04, 0.18); }
@@ -772,8 +739,8 @@ function makeWall(sp, count) {
 function fkPoint(z) {
   const sd = zoneSide(z);
   if (z === 'C') return { x: rand(-0.55, 0.55), y: rand(0.95, 1.85) };
-  if (zoneHigh(z)) return { x: sd * rand(1.6, 2.6), y: rand(1.8, 2.08) };
-  return { x: sd * rand(1.5, 2.6), y: rand(1.05, 1.38) };
+  if (zoneHigh(z)) return { x: sd * rand(1.6, 2.6), y: rand(1.86, 2.1) };
+  return { x: sd * rand(1.5, 2.6), y: rand(1.0, 1.28) };
 }
 function makeShot(n, practice) {
   // n = saves so far, so n = 0..4 are shots 1..5 (always straight); then 3 practice banana kicks; banana kicks from shot 6 (n >= 5)
@@ -785,9 +752,13 @@ function makeShot(n, practice) {
   if (fo && fo.fk !== undefined) fk = !!fo.fk;
   let sp = pickSpot(n, fk, practice);
   if (fo && fo.spot) sp = { x: fo.spot.x, z: fo.spot.z, kind: fk ? 'fk' : (fo.spot.kind || 'custom') };
-  // flight time: a gentle ramp. 1.2 s for the first shots, ~1.0 s by shot 12, ~0.85 s by shot 22, floor 0.78 s
-  let F = clamp(1.2 - 0.017 * n, 0.78, 1.2) * rand(0.96, 1.04);
-  if (B.fast && n >= 5) F *= 0.95;
+  // flight time. Shots 1-5: ~1.0 s. The first SLOW_N real shots after the practice stay gentle
+  // (curves 1.25 s), then every save takes F_STEP off the flight until the floor.
+  const m = Math.max(0, n - 5 - (CFG.SLOW_N - 1));
+  const jit = rand(0.97, 1.03), fast = B.fast && n >= 5 ? 0.96 : 1;
+  const Fstraight = (n < 5 ? 1.08 - 0.02 * n : Math.max(CFG.F_STRAIGHT_MIN, CFG.F_STRAIGHT - CFG.F_STEP * m)) * jit * fast;
+  const Fcurve = practice ? rand(1.25, 1.3) : Math.max(CFG.F_CURVE_MIN, CFG.F_CURVE - CFG.F_STEP * m) * jit;
+  let F = Math.max(CFG.F_STRAIGHT_MIN, Fstraight);
   const w = n < 3 ? { L: 0.44, R: 0.44, C: 0.12 }
     : n < 5 ? { L: 0.3, R: 0.3, C: 0.1, TL: 0.15, TR: 0.15 }
     : { L: 0.26, R: 0.26, C: 0.14, TL: 0.17, TR: 0.17 };
@@ -799,7 +770,7 @@ function makeShot(n, practice) {
     const ns = side === 0 ? (Math.random() < 0.5 ? -1 : 1) : -side;
     zone = zoneOf(ns, zoneHigh(zone)); side = ns;
   }
-  let power = false, chip = false, fake = false, curve = false, bx = 0;
+  let power = false, chip = false, fake = false, curve = false, bx = 0, aZone = null;
   const curveP = practice ? 1 : fk ? 0.3 : Math.min(0.5, 0.36 + (n - 5) * 0.01) + (B.curve || 0);
   if ((practice || n >= 5) && Math.random() < curveP) curve = true;
   if (!curve) {
@@ -807,11 +778,10 @@ function makeShot(n, practice) {
     const powerP = n >= 8 && !fk ? 0.12 + (B.power || 0) : 0;
     // body feints: only from shot 7 and never more than ~1 in 3 (the ball itself always tells the truth)
     const fakeP = n >= 6 ? Math.min(0.3, 0.1 + (n - 6) * 0.012) + (B.fake || 0) : 0;
-    if (side !== 0 && Math.random() < chipP) { chip = true; zone = zoneOf(side, true); F = rand(1.1, 1.22); }
-    else if (Math.random() < powerP) { power = true; if (zoneHigh(zone)) zone = zoneOf(side, false); F = Math.max(0.64, F * 0.85); }
+    if (side !== 0 && Math.random() < chipP) { chip = true; zone = zoneOf(side, true); F = rand(0.95, 1.1); }
+    else if (Math.random() < powerP) { power = true; if (zoneHigh(zone)) zone = zoneOf(side, false); F = Math.max(0.56, F * 0.8); }
     if (!power && Math.random() < fakeP) fake = true;
   }
-  let aZone = null;
   if (fo) {
     if (fo.zone !== undefined) zone = fo.zone;
     if (fo.power !== undefined) power = fo.power;
@@ -842,17 +812,16 @@ function makeShot(n, practice) {
     if (aZone) bx = zonePoint(aZone, false).x - pt.x;
     else if (!(fo && fo.bx !== undefined)) {
       const ramp = Math.min(1, Math.max(0, n - 5) / 20) * CFG.BEND_RAMP;
-      const mag = practice ? rand(1.5, 1.8) : side === 0 ? rand(1.0, 1.4) : rand(CFG.BEND_MIN, CFG.BEND_MAX + ramp);
+      const mag = practice ? rand(2.2, 2.6) : side === 0 ? rand(1.4, 2.0) : rand(CFG.BEND_MIN, CFG.BEND_MAX + ramp);
       let sg = Math.random() < 0.5 ? -1 : 1;
-      if (Math.abs(pt.x + sg * mag) > 4.0) sg = -sg;   // never heading absurdly wide
+      if (Math.abs(pt.x + sg * mag) > 4.6) sg = -sg;   // never heading absurdly wide
       bx = sg * mag;
     }
     if (Math.abs(bx) < 0.3) bx = (bx < 0 ? -1 : 1) * 0.3;
-    F = practice ? rand(1.3, 1.4) : Math.max(F * 1.06, 0.84 * dk);
+    F = Fcurve * dk;
     power = false; chip = false; fake = false;
   } else bx = 0;
-  if (fk) F = Math.max(F, 0.9 * dk);
-  if (power) F = Math.max(0.64, F);
+  if (fk) F = Math.max(F, 0.72 * dk);
   if (fo && fo.F !== undefined) F = fo.F;
   ls.push(side); if (ls.length > 4) ls.shift();
   // the kicker's body tells where he aims (the first heading for a banana kick); a feint shows the other side
@@ -872,8 +841,8 @@ function makeShot(n, practice) {
   if (Math.abs(sp.x) > 3) foot = -Math.sign(sp.x);   // wide spots: start the run-up on the inside so it stays on screen
   const runLen = (sp.kind === 'pen' ? 4.7 : 4.0) + (power ? 1.4 : 0) + rand(-0.3, 0.3);
   const off = foot * (sp.kind === 'pen' ? rand(1.1, 2.1) : rand(0.9, 1.7));
-  const runDur = Math.max(0.55, 0.95 - 0.015 * n) * rand(0.9, 1.1) + (power ? 0.3 : 0);
-  const stutter = n >= 8 && !power && !practice && Math.random() < 0.25;
+  const runDur = Math.max(0.42, 0.85 - 0.02 * n) * rand(0.9, 1.1) + (power ? 0.25 : 0);
+  const stutter = n >= 7 && !power && !practice && Math.random() < 0.3;
   const stA = stutter ? runDur * rand(0.45, 0.6) : 0, stD = stutter ? rand(0.22, 0.4) : 0;
   return {
     idx, n, F, side, zone, curve, bx, xt: pt.x, yt: pt.y, arc, rise, x0: sp.x, z0: sp.z, spot: sp.kind,
@@ -883,7 +852,7 @@ function makeShot(n, practice) {
     startX: sp.x + ux * runLen + px * off, startZ: sp.z + uz * runLen + pz * off,
     walkX: px * Math.sign(off) * 4.5 + ux * 2.5, walkZ: pz * Math.sign(off) * 4.5 + uz * 2.5,
     plantX: sp.x + ux * 0.45 + px * foot * 0.32, plantZ: sp.z + uz * 0.45 + pz * foot * 0.32,
-    runDur, stA, stD, runTotal: runDur + stD, setupDur: n < 5 && !practice ? 1.0 : fk ? 1.1 : 0.8, readyDur: n < 5 || practice ? 0.55 : 0.45, runPhase0: Math.random() * TAU,
+    runDur, stA, stD, runTotal: runDur + stD, setupDur: n < 5 && !practice ? 0.8 : practice ? 0.7 : fk ? 0.95 : Math.max(0.42, 0.7 - 0.015 * (n - 5)), readyDur: n < 5 || practice ? 0.45 : Math.max(0.25, 0.4 - 0.01 * (n - 5)), afterDur: practice ? 0.9 : Math.max(0.55, 0.95 - 0.02 * n), runPhase0: Math.random() * TAU,
   };
 }
 const _bp = { x: 0, y: 0, z: 0 };
@@ -928,8 +897,6 @@ function popup(text, x, y, size, col, sub) {
   p.on = true; p.text = text; p.x = x; p.y = y; p.size = size; p.col = col; p.life = 1.25; p.max = 1.25; p.sub = sub || '';
 }
 function popupAtWorld(text, x, y, z, size, col, sub) { proj(VM, x, y, z); popup(text, PX, PY, size, col, sub); }
-// hint popups go below the goal line, out of the ball's way
-function hintY() { proj(VM, 0, 0, 0); return Math.min(VM.h - 90, PY + 46); }
 
 // =====================================================================
 // GAMEPLAY
@@ -964,9 +931,9 @@ function advance() {
   nextShot();
 }
 const BANNERS = {
-  banana: { a: '이제부터 공이 휘어요!', b: '바나나킥!', c: '공이 휘면서 날아와요. 궤적을 보고 날아요! 먼저 연습 3번!', svg: 'bnSvgBanana', dur: 2.4 },
-  live: { a: '연습 끝! 잘했어요', b: '실전 시작!', c: '이제부터 골을 먹으면 목숨이 하나씩 줄어요', svg: '', dur: 1.7 },
-  fk: { a: '수비벽이 섰어요!', b: '프리킥!', c: '벽 뒤의 공은 흐리게 비쳐 보여요. 옆 공은 ↑+방향이면 다 닿아요!', svg: 'bnSvgWall', dur: 2.3 },
+  banana: { a: '이제부터 공이 휘어요!', b: '바나나킥!', c: '공이 휘면서 날아와요. 궤적을 보고 날아요! 먼저 연습 3번!', svg: 'bnSvgBanana', dur: 2.1 },
+  live: { a: '연습 끝! 잘했어요', b: '실전 시작!', c: '이제부터 골을 먹으면 목숨이 하나씩 줄어요', svg: '', dur: 1.4 },
+  fk: { a: '수비벽이 섰어요!', b: '프리킥!', c: '공이 벽 위로 넘어와요. 옆 공은 ↑+방향이면 다 닿아요!', svg: 'bnSvgWall', dur: 2.0 },
 };
 function showBanner(kind) {
   const bn = BANNERS[kind];
@@ -1013,7 +980,7 @@ function kick() {
   Sound.kick(sh.power);
   if (sh.power) { burst(sh.x0, 0.3, sh.z0, 10, ['#ffb347', '#ff7a1a', '#ffe08a'], 3); S.shake = Math.max(S.shake, 0.35); }
   if (sh.chip) popupAtWorld('둥실 슛!', sh.x0, 3.2, sh.z0, 24, PAL.sky, '조금 기다렸다 ↑+방향으로 날아요');
-  else if (!S.seenHigh && !sh.curve && zoneHigh(sh.zone)) { S.seenHigh = true; popup('위 구석 슛!', VM.w / 2, hintY(), 26, PAL.gold, '↑+방향을 같이 · 위쪽 칸'); }
+  else if (!S.seenHigh && !sh.curve && zoneHigh(sh.zone)) { S.seenHigh = true; popup('위 구석 슛!', VM.w / 2, VM.standBase - Math.min(140, VM.h * 0.12), 26, PAL.gold, '↑+방향을 같이 · 위쪽 칸'); }
   if (sh.curve) Sound.spin();
   S.excite = Math.max(S.excite, 0.45);
 }
@@ -1150,7 +1117,8 @@ function updateCycle(dt) {
         setCyc('ready'); recStart(); Sound.whistle(0.22, 0);
         if (sh.power) {
           Sound.charge();
-          popup('파워 슛!', VM.w / 2, hintY(), 30, PAL.accent, '불꽃 슛은 몸짓 그대로 날아와요');
+          proj(VM, 0, 0, sh.z0); const ya = PY; proj(VM, 0, GH, 0); const yb = PY;
+          popup('파워 슛!', VM.w / 2, lerp(ya, yb, 0.5), 30, PAL.accent, '불꽃 슛은 몸짓 그대로 날아와요');
         }
       }
       break;
@@ -1168,15 +1136,15 @@ function updateCycle(dt) {
       break;
     case 'after':
       // after the 5th shot: banana banner, 3 practice shots, "실전 시작!", then the real game
-      if (S.cycT >= 1.15) advance();
+      if (S.cycT >= sh.afterDur) advance();
       break;
     case 'banner':
       if (S.cycT >= S.bannerDur) nextShot();
       break;
     case 'goal':
       // a practice goal costs nothing; a real goal costs a life and the run goes on until the last one
-      if (sh.practice) { if (S.cycT >= 1.6) advance(); }
-      else if (S.lives > 0) { if (S.cycT >= 2.1) advance(); }
+      if (sh.practice) { if (S.cycT >= 1.3) advance(); }
+      else if (S.lives > 0) { if (S.cycT >= 1.7) advance(); }
       else if (S.cycT >= 1.9) endRun();
       break;
   }
@@ -1311,8 +1279,8 @@ function computeKickerPose() {
     kp.lean = sh.tellSide * 0.9 * (1 - fade) + clamp((S.ball.x - sh.x0) / 3, -1, 1) * 0.3 * fade;
     kp.look = sh.tellSide * (1 - fade) + clamp((S.ball.x - sh.x0) / 2.5, -1, 1) * fade;
     kp.power = sh.power ? Math.max(0, 1 - kt * 2) : 0;
-    if (c === 'after' && ct > 0.3) { kp.mode = 2; kp.lean = 0; kp.look = 0; kp.kick = 0; }
-    if (c === 'after') kp.alpha = 1 - smooth(0.85, 1.15, ct);
+    if (c === 'after' && ct > 0.25) { kp.mode = 2; kp.lean = 0; kp.look = 0; kp.kick = 0; }
+    if (c === 'after') kp.alpha = 1 - smooth(sh.afterDur - 0.3, sh.afterDur, ct);
     if (c === 'banner') kp.alpha = 0;
     if (c === 'goal' && ct > 0.2) { kp.mode = 1; kp.kick = 0; kp.lean = 0; kp.look = 0; kp.bob = Math.abs(Math.sin(t * 9)) * 0.28; }
   }
@@ -1412,13 +1380,11 @@ function prerenderBg(v) {
   const c = bg.getContext('2d');
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   const r = mulberry32(20061);
-  const SZ = v.standZ;
+  const SZ = CFG.STAND_Z;
   proj(v, 0, 0, SZ); const baseY = PY;
   proj(v, 0, 1.2, SZ); const wallTop = PY;
   const portrait = H > W * 1.1;
-  // keeper's view on a tall screen: only a few rows of crowd above the crossbar, night sky above them
-  proj(v, 0, GH, 0);
-  const topTarget = main ? (portrait ? Math.max(H * 0.21, PY - H * 0.2) : H * 0.13) : -20;
+  const topTarget = main ? (portrait ? H * 0.21 : H * 0.13) : -20;
   const rows = [];
   for (let i = 0; i < 120; i++) {
     const y0 = 1.2 + i * 0.46, z0 = SZ + 0.5 + i * 0.82;
@@ -1534,7 +1500,8 @@ function prerenderBg(v) {
     c.fillStyle = LED_PATTERN(c); c.fillRect(0, wallTop, W, bh);
   }
   // --- pitch
-  const zNear = v.eye ? v.cz + 0.1 : v.cz + v.cy * v.f / Math.max(1, H - v.hy) - 0.5;
+  const dMin = CY * v.f / Math.max(1, H - v.hy);
+  const zNear = CZ + dMin - 0.5;
   c.fillStyle = PAL.pitch; c.fillRect(0, baseY, W, H - baseY + 1);
   const SW = 2.5;
   for (let z0 = Math.floor(zNear / SW) * SW; z0 < SZ; z0 += SW) {
@@ -1567,15 +1534,14 @@ function prerenderBg(v) {
     gLine(c, v, xA, zA, xB, zB, LW);
   }
   // corner of the pitch side lines (far, landscape)
-  proj(v, 0, 0, CFG.SPOT_Z); c.beginPath(); c.ellipse(PX, PY, 0.16 * PS, Math.max(0.6, 0.16 * PS * groundK(v, CFG.SPOT_Z)), 0, 0, TAU); c.fill();
-  // goal mouth shade (keeper's view: the grass inside the goal, all the way back to the eye)
-  const nbz = v.eye ? v.cz + 0.1 : CFG.NET_BOT_Z;
-  c.fillStyle = v.eye ? 'rgba(6,20,12,0.34)' : 'rgba(6,20,12,0.28)';
+  proj(v, 0, 0, CFG.SPOT_Z); c.beginPath(); c.ellipse(PX, PY, 0.16 * PS, 0.16 * PS * (CY / (CFG.SPOT_Z - CZ)), 0, 0, TAU); c.fill();
+  // goal mouth shade
+  c.fillStyle = 'rgba(6,20,12,0.28)';
   c.beginPath();
   proj(v, -GW, 0, 0); c.moveTo(PX, PY); proj(v, GW, 0, 0); c.lineTo(PX, PY);
-  proj(v, GW, 0, nbz); c.lineTo(PX, PY); proj(v, -GW, 0, nbz); c.lineTo(PX, PY); c.fill();
+  proj(v, GW, 0, CFG.NET_BOT_Z); c.lineTo(PX, PY); proj(v, -GW, 0, CFG.NET_BOT_Z); c.lineTo(PX, PY); c.fill();
   // worn goalmouth patch
-  proj(v, 0, 0, 0.9); c.fillStyle = 'rgba(120,96,50,0.18)'; c.beginPath(); c.ellipse(PX, PY, 2.2 * PS, 0.55 * PS * groundK(v, 0.9) * 1.4, 0, 0, TAU); c.fill();
+  proj(v, 0, 0, 0.9); c.fillStyle = 'rgba(120,96,50,0.18)'; c.beginPath(); c.ellipse(PX, PY, 2.2 * PS, 0.55 * PS * (CY / (0.9 - CZ)) * 1.4, 0, 0, TAU); c.fill();
   // floodlit pool + far darkening + vignette
   c.globalCompositeOperation = 'lighter';
   proj(v, 0, 0, 5);
@@ -1624,7 +1590,7 @@ function prerenderBg(v) {
   c.fillStyle = g; c.fillRect(0, 0, W, H);
   // foreground LED board right behind the goal (visible in tall layouts)
   v.board = null;
-  if (main && -4.4 > v.cz + 0.5) {
+  if (main) {
     proj(v, 0, 0.95, -4.4); const bt = PY; proj(v, 0, 0, -4.4); const bb = PY;
     if (bt < H - 12) v.board = { top: bt, bot: bb, msgW: 0, font: '' };
   }
@@ -1639,7 +1605,7 @@ function mix(a, b, t) {
 function gLine(c, v, x1, z1, x2, z2, w) {
   const dx = x2 - x1, dz = z2 - z1, L = Math.hypot(dx, dz) || 1, nx = -dz / L * w / 2, nz = dx / L * w / 2;
   // clip near the camera
-  const zMin = v.cz + (v.eye ? 0.3 : 2);
+  const zMin = CZ + 2;
   if (z1 < zMin && z2 < zMin) return;
   c.beginPath();
   proj(v, x1 + nx, 0, z1 + nz); c.moveTo(PX, PY);
@@ -1651,21 +1617,12 @@ function gLine(c, v, x1, z1, x2, z2, w) {
 
 // ---- main render ------------------------------------------------------
 function renderView(v, sc, tm) {
-  const c = v.ctx, W = v.w, H = v.h, eye = v.kind === 'main';
+  const c = v.ctx, W = v.w, H = v.h;
   c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   c.save();
   if (sc.live && S.shake > 0.01) {
     const m = reduceMotion ? 0.25 : 1, a = S.shake * S.shake * 9 * m;
     c.translate(Math.sin(tm * 71) * a, Math.cos(tm * 53) * a);
-  }
-  if (eye) {
-    // keeper's view: the head moves with the dive (roll, sway, dip). Corners revealed by the roll
-    // show plain sky / grass colours.
-    fpPose(v);
-    c.fillStyle = '#0b1834'; c.fillRect(-40, -40, W + 80, v.hy + 40);
-    c.fillStyle = '#245f38'; c.fillRect(-40, v.hy, W + 80, H - v.hy + 40);
-    c.save();
-    c.translate(v.cx + FP.sx, v.hy + FP.sy); c.rotate(FP.roll); c.scale(FP.zoom, FP.zoom); c.translate(-v.cx, -v.hy);
   }
   c.drawImage(v.bg, 0, 0, W, H);
   // crowd (two layers bobbing out of phase)
@@ -1686,8 +1643,7 @@ function renderView(v, sc, tm) {
   }
   if (sc.wall && kp.alpha > 0.01) drawSpray(c, v, sc, kp.alpha);
   drawShadows(c, v, sc);
-  // in the keeper's view the held ball is drawn in the gloves
-  const ballOn = B.vis > 0.01 && !(eye && B.mode === 'held');
+  const ballOn = B.vis > 0.01;
   // everything in front of the keeper, painted far to near: kicker, wall players, ball
   let n = 0;
   const pushD = (z, k, i) => { const o = DL[n] || (DL[n] = { z: 0, k: 0, i: 0 }); o.z = z; o.k = k; o.i = i; n++; };
@@ -1699,34 +1655,18 @@ function renderView(v, sc, tm) {
     const o = DL[i];
     if (o.k === 0) drawKicker(c, v, kp);
     else if (o.k === 1) drawWallMan(c, v, sc, o.i, kp.alpha);
-    else drawBall(c, v, sc, false);
-  }
-  if (eye && sc.wall && kp.alpha > 0.01) {
-    // at eye level the wall hides what is behind it: the kicker and the ball show through faintly
-    let wz = 0; for (const m of sc.wall) wz += m.z; wz /= sc.wall.length;
-    if (kp.z > wz + 0.3) drawKicker(c, v, kp, 0.32 * kp.alpha);
-    if (ballOn && B.z > wz) drawBall(c, v, sc, true);
+    else drawBall(c, v, sc);
   }
   if (sc.showName || kp.name) drawNameTag(c, v, kp);
-  if (!eye) drawKeeper(c, v, gp);
-  if (ballOn && B.z <= KZ && B.z >= 0) drawBall(c, v, sc, false);
+  drawKeeper(c, v, gp);
+  if (ballOn && B.z <= KZ && B.z >= 0) drawBall(c, v, sc);
   drawPosts(c, v);
   const overNet = B.over && B.y > GH;
-  if (eye) {
-    if (ballOn && B.z < 0) drawBall(c, v, sc, false);
-    drawNetInside(c, v);
-  } else {
-    if (ballOn && B.z < 0 && !overNet) drawBall(c, v, sc, false);
-    drawNet(c, v, sc.net);
-    if (ballOn && B.z < 0 && overNet) drawBall(c, v, sc, false);
-  }
+  if (ballOn && B.z < 0 && !overNet) drawBall(c, v, sc);
+  drawNet(c, v, sc.net);
+  if (ballOn && B.z < 0 && overNet) drawBall(c, v, sc);
   if (v.board) drawBoard(c, v, tm);
-  if (eye) {
-    if (sc.live) drawParticles(c, v);
-    c.restore();
-    drawFP(c, v);
-    if (sc.live) drawPopups(c, v);
-  } else if (sc.live) { drawParticles(c, v); drawPopups(c, v); }
+  if (sc.live) { drawParticles(c, v); drawPopups(c, v); }
   c.restore();
   if (sc.live && S.flash > 0.01) {
     c.globalAlpha = Math.min(1, S.flash) * (reduceMotion ? 0.3 : 1);
@@ -1734,7 +1674,7 @@ function renderView(v, sc, tm) {
   }
 }
 const DL = [];
-function PS_STAND(v) { return v.f / deOf(v, v.standZ + 8 - v.cz) / 12; }
+function PS_STAND(v) { return v.f / (CFG.STAND_Z + 8 - CZ) / 12; }
 
 function drawFlashes(c, v) {
   if (S.excite > 0.5 && Math.random() < S.excite * 0.35) {
@@ -1752,19 +1692,19 @@ function drawFlashes(c, v) {
 function shadowAt(c, v, x, z, rx, alpha) {
   proj(v, x, 0, z);
   c.globalAlpha = alpha;
-  c.beginPath(); c.ellipse(PX, PY, rx * PS, rx * PS * Math.max(0.1, 0.512 * groundK(v, z)) + 0.5, 0, 0, TAU); c.fill();
+  c.beginPath(); c.ellipse(PX, PY, rx * PS, rx * PS * 0.32 * (CY / (z - CZ)) * 1.6 + 0.5, 0, 0, TAU); c.fill();
 }
 function drawShadows(c, v, sc) {
   c.fillStyle = '#04120a';
   const kp = sc.kp, gp = sc.gp, B = sc.ball;
   if (kp.alpha > 0.01) shadowAt(c, v, kp.x + 0.25, kp.z + 0.2, 0.55, 0.35 * kp.alpha);
-  if (sc.wall && kp.alpha > 0.01) for (const m of sc.wall) shadowAt(c, v, wallX(v, sc, m) + 0.2, m.z + 0.15, 0.42 - wallJump(sc.wallT, m) * 0.4, 0.32 * kp.alpha);
-  if (v.kind !== 'main') shadowAt(c, v, gp.x + Math.sin(gp.rot) * 0.6, KZ + 0.15, 0.6 + Math.abs(Math.sin(gp.rot)) * 0.7, 0.35);
+  if (sc.wall && kp.alpha > 0.01) for (const m of sc.wall) shadowAt(c, v, m.x + 0.2, m.z + 0.15, 0.42 - wallJump(sc.wallT, m) * 0.4, 0.32 * kp.alpha);
+  shadowAt(c, v, gp.x + Math.sin(gp.rot) * 0.6, KZ + 0.15, 0.6 + Math.abs(Math.sin(gp.rot)) * 0.7, 0.35);
   // the ball's shadow stays dark on the grass however high the ball climbs: the gap between
   // the two is the height cue (a low shot skims its shadow, a top-corner shot leaves it behind)
-  if (B.vis > 0.01 && !(v.kind === 'main' && (B.mode === 'held' || B.z - v.cz < 0.5))) {
-    shadowAt(c, v, B.x, B.z, v.bk * BALL_R * 1.15 * clamp(1.25 - B.y * 0.1, 0.85, 1.25), 0.5 * B.vis * clamp(1.1 - B.y * 0.08, 0.7, 1));
-    if (B.y > 0.6) shadowAt(c, v, B.x, B.z, v.bk * BALL_R * 0.6, 0.3 * B.vis);
+  if (B.vis > 0.01) {
+    shadowAt(c, v, B.x, B.z, BALL_R * 1.15 * clamp(1.25 - B.y * 0.1, 0.85, 1.25), 0.5 * B.vis * clamp(1.1 - B.y * 0.08, 0.7, 1));
+    if (B.y > 0.6) shadowAt(c, v, B.x, B.z, BALL_R * 0.6, 0.3 * B.vis);
   }
   c.globalAlpha = 1;
 }
@@ -1776,24 +1716,12 @@ function heightClass(sh) {
   if (!sh) return 0;
   return Math.abs(sh.xt) < CFG.SIDE_X ? 0 : sh.yt > CFG.LOW_MAX ? 2 : 1;
 }
-function drawBall(c, v, sc, ghost) {
+function drawBall(c, v, sc) {
   const B = sc.ball;
-  if (B.z - v.cz < 0.3) return;   // flew past the keeper's eye
+  if (sc.trailN > 1) drawTrail(c, v, sc, sc.fl ? heightClass(sc.live ? S.shot : rec.hs) : 0);
   const hc = sc.fl ? heightClass(sc.live ? S.shot : rec.hs) : 0;
-  if (ghost) {
-    // seen through the defensive wall: a faint ball with a dashed ring
-    proj(v, B.x, B.y, B.z);
-    const r = Math.max(2.4, BALL_R * PS * v.bk);
-    c.globalAlpha = 0.5 * B.vis; c.drawImage(BALL_SPR, PX - r, PY - r, r * 2, r * 2);
-    c.globalAlpha = 0.9 * B.vis; c.strokeStyle = 'rgba(' + H_COL[hc] + ',1)'; c.lineWidth = Math.max(1.5, r * 0.22);
-    c.setLineDash([Math.max(2.5, r * 0.5), Math.max(2, r * 0.4)]);
-    c.beginPath(); c.arc(PX, PY, r * 1.45, 0, TAU); c.stroke(); c.setLineDash([]);
-    c.globalAlpha = 1;
-    return;
-  }
-  if (sc.trailN > 1) drawTrail(c, v, sc, hc);
   proj(v, B.x, B.y, B.z);
-  const r = Math.max(v.bk > 1 ? 2.4 : 1.6, BALL_R * PS * v.bk), x = PX, y = PY;
+  const r = Math.max(1.6, BALL_R * PS), x = PX, y = PY;
   // drop line from the shadow on the grass up to the ball: how high it is, at a glance
   if (sc.fl && B.y > BALL_R + 0.08 && B.z > KZ - 0.05) {
     proj(v, B.x, 0, B.z); const gy = PY;
@@ -1808,6 +1736,14 @@ function drawBall(c, v, sc, ghost) {
       c.setLineDash([]);
       c.beginPath(); c.moveTo(x - Math.max(4, r * 1.1), gy); c.lineTo(x + Math.max(4, r * 1.1), gy); c.stroke();
     }
+  }
+  if (sc.fl && hc > 0) {
+    // soft halo in the height colour: orange = a top-corner shot, blue = a low side shot
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = B.vis * (hc === 2 ? 0.5 : 0.34);
+    c.fillStyle = 'rgb(' + H_COL[hc] + ')';
+    c.beginPath(); c.arc(x, y, r * (hc === 2 ? 1.9 : 1.6), 0, TAU); c.fill();
+    c.globalCompositeOperation = 'source-over';
   }
   c.globalAlpha = B.vis;
   c.drawImage(BALL_SPR, x - r, y - r, r * 2, r * 2);
@@ -1844,7 +1780,7 @@ function drawTrail(c, v, sc, hc) {
   const nn = curve ? n : Math.min(n, 15), col = H_COL[hc || 0];
   for (let k = nn - 1; k >= 1; k--) {
     proj(v, T[k * 3], T[k * 3 + 1], T[k * 3 + 2]);
-    const f = 1 - k / nn, r = BALL_R * PS * v.bk * (power ? 0.5 + 0.8 * f : 0.4 + 0.5 * f);
+    const f = 1 - k / nn, r = BALL_R * PS * (power ? 0.5 + 0.8 * f : 0.4 + 0.5 * f);
     if (power) {
       c.fillStyle = 'rgba(255,' + (90 + (f * 120 | 0)) + ',30,' + (0.18 + 0.4 * f).toFixed(2) + ')';
       c.beginPath(); c.arc(PX, PY, r * 1.25, 0, TAU); c.fill();
@@ -1863,8 +1799,8 @@ function drawPosts(c, v) {
   const pr = CFG.POST_R;
   proj(v, -GW - pr, 0, 0); const lb = PY, s = PS;
   proj(v, -GW - pr, GH + pr, 0); const lt = PY;
-  const w = Math.max(2, pr * 2 * s * Math.sqrt(v.kx));
-  const xl = v.cx - (GW + pr) * s * v.kx, xr = v.cx + (GW + pr) * s * v.kx;
+  const w = Math.max(2, pr * 2 * s);
+  const xl = v.cx - (GW + pr) * s, xr = v.cx + (GW + pr) * s;
   c.fillStyle = 'rgba(0,0,0,0.25)';
   c.fillRect(xl - w / 2 + 2, lt + 2, w, lb - lt);
   c.fillRect(xr - w / 2 + 2, lt + 2, w, lb - lt);
@@ -1932,190 +1868,6 @@ function drawNet(c, v, nt) {
   }
   c.stroke();
 }
-// keeper's view from inside the goal: the roof net overhead and the side netting at the screen edges
-function drawNetInside(c, v) {
-  const z1 = v.cz + 0.16, NY = CFG.NET_TOP_Y, yAt = (z) => lerp(GH, NY, clamp(-z / -z1, 0, 1));
-  proj(v, 0, GH, 0);
-  const lw = clamp(PS * 0.014, 0.7, 1.8);
-  c.lineCap = 'round';
-  c.strokeStyle = 'rgba(236,242,255,0.2)'; c.lineWidth = lw;
-  c.beginPath();
-  for (let i = 0; i <= NET_NX; i++) {
-    const x = -GW + 2 * GW * i / NET_NX;
-    proj(v, x, GH, 0); c.moveTo(PX, PY); proj(v, x, NY, z1); c.lineTo(PX, PY);
-  }
-  for (let z = -0.3; z > z1; z -= 0.3) {
-    proj(v, -GW, yAt(z), z); c.moveTo(PX, PY); proj(v, GW, yAt(z), z); c.lineTo(PX, PY);
-  }
-  for (const sx of [-1, 1]) {
-    for (let j = 1; j < 7; j++) { const y = GH * j / 7; proj(v, sx * GW, y, 0); c.moveTo(PX, PY); proj(v, sx * GW, Math.min(y, NY), z1); c.lineTo(PX, PY); }
-    for (let z = -0.3; z > z1; z -= 0.3) { proj(v, sx * GW, 0, z); c.moveTo(PX, PY); proj(v, sx * GW, yAt(z), z); c.lineTo(PX, PY); }
-  }
-  c.stroke();
-  // frame tubes along the top edges
-  c.strokeStyle = 'rgba(200,208,226,0.55)'; c.lineWidth = lw * 3;
-  c.beginPath();
-  for (const sx of [-1, 1]) { proj(v, sx * GW, GH, 0); c.moveTo(PX, PY); proj(v, sx * GW, NY, z1); c.lineTo(PX, PY); }
-  c.stroke();
-}
-
-// ---- keeper's view: head motion, arms and gloves -------------------------
-const FP = { roll: 0, sx: 0, sy: 0, zoom: 1, env: 0, g: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }], hold: { x: 0, y: 0, z: 0 }, holdOn: false };
-const _fg = { x: 0, y: 0, z: 0 };
-let TX = 0, TY = 0, TS = 1;
-// world -> screen, including the head motion (roll / sway / dip / push-in) applied to the world layer
-function toScreen(v, x, y, z) {
-  proj(v, x, y, z);
-  const dx = (PX - v.cx) * FP.zoom, dy = (PY - v.hy) * FP.zoom, cs = Math.cos(FP.roll), sn = Math.sin(FP.roll);
-  TX = v.cx + FP.sx + dx * cs - dy * sn; TY = v.hy + FP.sy + dx * sn + dy * cs; TS = PS * FP.zoom;
-}
-function diveReach(tt) {
-  if (tt < CFG.LAUNCH) return 0;
-  if (tt < CFG.AIR_END) return easeOut(Math.min(1, (tt - CFG.LAUNCH) / (CFG.AIR_END - CFG.LAUNCH) * 1.8));
-  if (tt < CFG.GROUND_END) return 1;
-  return 1 - smooth(CFG.GROUND_END, CFG.RECOVER_END, tt);
-}
-// world position of glove i (0 = left) when the dive clock reads tt
-function fpGlove(v, i, tt, out) {
-  const K = S.K, B = S.ball, sh = S.shot, cr = K.crouch, sx = i ? 1 : -1, tm = S.time;
-  const bob = Math.sin(tm * (cr > 0.5 ? 9 : 3.5) + i * 0.6) * (cr > 0.5 ? 0.014 : 0.01);
-  // ready stance: gloves low and apart, just in front of the eyes, palms out
-  const x = sx * (0.5 - 0.05 * cr) / Math.sqrt(v.kx), y = 0.34 + 0.16 * cr + bob, z = v.restZ;
-  let tx = x, ty = y, tz = z, a = 0;
-  if (K.diving) {
-    // both gloves fly together to the aim point on the keeper's line, side by side, then sink as he lands
-    const land = smooth(CFG.AIR_END - 0.05, CFG.GROUND_END, tt);
-    tx = K.aimX + sx * 0.17 / v.kx;
-    ty = lerp(K.aimY, Math.min(K.aimY, 0.42), land * 0.6) + sx * K.dir * (K.high ? -0.05 : 0.05);
-    tz = KZ; a = diveReach(tt);
-  } else if (K.mode === 'catch' && sh) {
-    // a caught centre ball is pulled in to the chest, then lifted up to the crowd
-    const q = smooth(0, 0.3, K.modeT), up = smooth(0.5, 0.72, K.modeT);
-    const hx = lerp(sh.xt, 0, q), hy = lerp(sh.yt, 0.62 + 0.75 * up, q), hz = lerp(KZ, v.restZ + 0.55, q);
-    FP.hold.x = hx; FP.hold.y = hy; FP.hold.z = hz; FP.holdOn = true;
-    tx = hx + sx * 0.21 / v.kx; ty = hy - 0.03; tz = hz; a = 1;
-  } else if (K.mode === 'sad') {
-    a = smooth(0, 0.45, K.modeT); tx = sx * 0.42; ty = 0.1; tz = v.restZ - 0.1;
-  } else if (sh && B.mode === 'flight' && Math.abs(sh.xt) < CFG.SIDE_X) {
-    // stand-up save: the gloves come together in front of a central ball late in its flight
-    a = smooth(0.72, 0.97, B.u); tx = B.x + sx * 0.21 / v.kx; ty = B.y; tz = Math.max(KZ, B.z);
-  }
-  out.x = lerp(x, tx, a); out.y = lerp(y, ty, a); out.z = lerp(z, tz, a);
-}
-function fpPose(v) {
-  const K = S.K, m = reduceMotion ? 0.35 : 1;
-  FP.roll = 0; FP.sx = 0; FP.sy = 0; FP.zoom = 1; FP.env = 0; FP.holdOn = false;
-  if (K.diving) {
-    const t = K.t, e = t < CFG.LAUNCH ? 0.25 * t / CFG.LAUNCH : t < CFG.AIR_END ? 0.25 + 0.75 * diveReach(t) : diveReach(t);
-    const air = t > CFG.LAUNCH && t < CFG.AIR_END ? Math.sin(Math.PI * (t - CFG.LAUNCH) / (CFG.AIR_END - CFG.LAUNCH)) : 0;
-    const land = smooth(CFG.AIR_END - 0.05, CFG.GROUND_END, t) * (1 - smooth(CFG.GROUND_END, CFG.RECOVER_END, t));
-    // diving left tilts the head left (the world rolls the other way) and carries the eyes left
-    FP.env = e;
-    FP.roll = -K.dir * 0.085 * e * m;
-    FP.sx = -K.dir * v.w * 0.05 * e * m;
-    FP.sy = ((K.high ? 0.035 : 0.01) * air - 0.03 * land) * v.h * m;
-    FP.zoom = 1 + 0.06 * e * m;
-  } else if (K.mode === 'sad') FP.sy = -0.025 * v.h * smooth(0, 0.45, K.modeT) * m;
-  for (let i = 0; i < 2; i++) fpGlove(v, i, K.t, FP.g[i]);
-}
-// tapered limb segment (filled, round ends)
-function taper(c, x1, y1, x2, y2, w1, w2) {
-  const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
-  c.beginPath();
-  c.moveTo(x1 + nx * w1 / 2, y1 + ny * w1 / 2); c.lineTo(x2 + nx * w2 / 2, y2 + ny * w2 / 2);
-  c.lineTo(x2 - nx * w2 / 2, y2 - ny * w2 / 2); c.lineTo(x1 - nx * w1 / 2, y1 - ny * w1 / 2); c.closePath(); c.fill();
-  c.beginPath(); c.arc(x2, y2, w2 / 2, 0, TAU); c.fill();
-  c.beginPath(); c.arc(x1, y1, w1 / 2, 0, TAU); c.fill();
-}
-// goalkeeper sleeve: a short forearm behind the glove, pointing back toward the shoulder (below the
-// screen) and fading out, so the gloves read clearly without arms stretched across the whole view
-const ARM = { ang: 0 };
-function fpArm(c, shx, shy, gx, gy, gr) {
-  const dx = shx - gx, dy = shy - gy, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
-  const len = Math.min(L, gr * 3.4);
-  const wx = gx + ux * gr * 0.8, wy = gy + uy * gr * 0.8, ex = gx + ux * (gr * 0.8 + len), ey = gy + uy * (gr * 0.8 + len);
-  const ww = gr * 1.05, we = gr * 1.5, ol = Math.max(1.5, gr * 0.12);
-  const grad = (col) => {
-    const g = c.createLinearGradient(wx, wy, ex, ey);
-    g.addColorStop(0, col + '1)'); g.addColorStop(0.55, col + '0.9)'); g.addColorStop(1, col + '0)');
-    return g;
-  };
-  c.fillStyle = grad('rgba(10,18,38,'); taper(c, wx, wy, ex, ey, ww + ol * 2, we + ol * 2);
-  c.fillStyle = grad('rgba(255,201,60,'); taper(c, wx, wy, ex, ey, ww, we);
-  // shading along one side, then the orange cuff band at the wrist
-  const nx = -uy, ny = ux;
-  c.fillStyle = grad('rgba(190,105,0,');
-  c.globalAlpha = 0.3;
-  taper(c, wx + nx * ww * 0.25, wy + ny * ww * 0.25, ex + nx * we * 0.25, ey + ny * we * 0.25, ww * 0.45, we * 0.45);
-  c.globalAlpha = 1;
-  c.fillStyle = PAL.accent;
-  taper(c, lerp(wx, ex, 0.1), lerp(wy, ey, 0.1), lerp(wx, ex, 0.2), lerp(wy, ey, 0.2), lerp(ww, we, 0.12), lerp(ww, we, 0.2));
-  ARM.ang = Math.atan2(-uy, -ux);
-}
-// glove seen from the back of the hand: fingers along the forearm, thumb on the inner side
-function fpGloveDraw(c, x, y, r, ang, thumb, alpha) {
-  c.save();
-  c.globalAlpha = alpha;
-  c.translate(x, y); c.rotate(ang); c.scale(r, r);
-  c.lineCap = 'round'; c.lineJoin = 'round';
-  const LEN = [0.64, 0.74, 0.68, 0.52];
-  const parts = (pass) => {
-    // pass 0: dark outline, pass 1: colour
-    const o = pass ? 0 : 0.2;
-    c.fillStyle = pass ? '#f4f1e6' : PAL.ink; rr(c, -1.08 - o / 2, -0.62 - o / 2, 0.46 + o, 1.24 + o, 0.18); c.fill();
-    c.strokeStyle = pass ? PAL.glove : PAL.ink;
-    c.lineWidth = 0.3 + o;
-    for (let k = 0; k < 4; k++) { const yy = thumb * (0.52 - k * 0.35); c.beginPath(); c.moveTo(0.05, yy); c.lineTo(0.12 + LEN[k], yy); c.stroke(); }
-    c.lineWidth = 0.32 + o;
-    c.beginPath(); c.moveTo(-0.32, thumb * 0.58); c.lineTo(0.1, thumb * 0.96); c.stroke();
-    c.fillStyle = pass ? PAL.glove : PAL.ink; rr(c, -0.74 - o / 2, -0.72 - o / 2, 1.06 + o, 1.44 + o, 0.42); c.fill();
-  };
-  parts(0); parts(1);
-  // knuckle band, a white stripe on the back, the strap line
-  c.fillStyle = PAL.accentDeep; rr(c, -0.08, -0.7, 0.16, 1.4, 0.08); c.fill();
-  c.fillStyle = 'rgba(255,255,255,0.85)'; rr(c, -0.58, -0.16, 0.42, 0.32, 0.14); c.fill();
-  c.fillStyle = PAL.shorts; c.fillRect(-0.94, -0.6, 0.1, 1.2);
-  c.restore();
-}
-function drawFP(c, v) {
-  const K = S.K, W = v.w, H = v.h, m = Math.min(W, H);
-  const dir = K.diving ? K.dir : 0, e = FP.env;
-  const B = S.ball;
-  // a caught ball sits in the gloves
-  if (FP.holdOn && B.mode === 'held' && B.vis > 0.01) {
-    toScreen(v, FP.hold.x, FP.hold.y, FP.hold.z);
-    const r = BALL_R * TS * v.bk;
-    c.globalAlpha = B.vis; c.drawImage(BALL_SPR, TX - r, TY - r, r * 2, r * 2); c.globalAlpha = 1;
-  }
-  // shoulders sit just below the screen and travel with the body into the dive (higher for a high dive)
-  const shoulder = (i) => {
-    const sx = i ? 1 : -1, lead = sx === dir ? 1 : 0;
-    return [v.cx + sx * W * (0.3 - 0.08 * e) + dir * W * (0.2 + 0.06 * lead) * e, H + m * 0.1];
-  };
-  const gSize = (ts) => Math.max(m * 0.04, Math.min(0.24 * ts, m * 0.13));
-  // motion ghosts of the gloves while flying through the air
-  if (K.diving && K.t > CFG.LAUNCH + 0.02 && K.t < CFG.AIR_END) {
-    for (const [lag, al] of [[0.075, 0.12], [0.04, 0.22]]) {
-      for (let i = 0; i < 2; i++) {
-        fpGlove(v, i, K.t - lag, _fg); toScreen(v, _fg.x, _fg.y, _fg.z);
-        const gx = TX, gy = TY, gr = gSize(TS), [sxp, syp] = shoulder(i);
-        fpGloveDraw(c, gx, gy, gr, Math.atan2(gy - syp, gx - sxp), Math.sign(Math.sin(Math.atan2(gy - syp, gx - sxp)) * (i ? 1 : -1)) || 1, al);
-      }
-    }
-  }
-  const G = [];
-  for (let i = 0; i < 2; i++) {
-    const g = FP.g[i];
-    toScreen(v, g.x, g.y, g.z);
-    const gx = TX, gy = TY, gr = gSize(TS), [shx, shy] = shoulder(i);
-    fpArm(c, shx, shy, gx, gy, gr);
-    G.push([gx, gy, gr, ARM.ang]);
-  }
-  for (let i = 0; i < 2; i++) {
-    const [gx, gy, gr, ang] = G[i];
-    fpGloveDraw(c, gx, gy, gr, ang, Math.sign(Math.sin(ang) * (i ? 1 : -1)) || 1, 1);
-  }
-}
 function drawBoard(c, v, tm) {
   const b = v.board, W = v.w;
   const y0 = b.top, y1 = Math.min(v.h + 2, b.bot), h = y1 - y0;
@@ -2136,12 +1888,12 @@ function drawBoard(c, v, tm) {
 }
 
 // ---- characters -------------------------------------------------------
-function drawKicker(c, v, kp, alpha) {
+function drawKicker(c, v, kp) {
   if (kp.alpha <= 0.01) return;
   const K = KICKERS[kp.idx];
   proj(v, kp.x, 0, kp.z);
   c.save();
-  c.globalAlpha = alpha === undefined ? kp.alpha : alpha;
+  c.globalAlpha = kp.alpha;
   c.translate(PX, PY); c.scale(PS, PS);
   c.translate(0, -0.8 - kp.bob);
   c.lineCap = 'round'; c.lineJoin = 'round';
@@ -2295,19 +2047,12 @@ function wArm(c, sx, shx, shy, ex, ey, hx, hy, skin) {
   limb(c, shx, shy, mx, my, 0.17, PAL.accent);
   disc(c, hx, hy, 0.078, skin);
 }
-// with x squeezed (tall screens) the wall men keep their width, so spread them back out around the
-// wall's centre: they stand shoulder to shoulder instead of in a clump
-function wallX(v, sc, m) {
-  if (v.kx >= 1) return m.x;
-  const w = sc.wall; let cx = 0; for (const q of w) cx += q.x; cx /= w.length;
-  return cx + (m.x - cx) / v.kx;
-}
 function drawWallMan(c, v, sc, i, alpha) {
   const m = sc.wall[i], jy = wallJump(sc.wallT, m), tuck = jy / 0.36;
   const skin = WALL_SKIN[m.skin % WALL_SKIN.length], hair = WALL_HAIR[m.hair % WALL_HAIR.length];
   // reaction after the shot: kicker celebrating (goal) -> hands on head, kicker sad (save) -> arms up
   const mood = sc.kp.mode, bob = mood === 2 ? Math.abs(Math.sin((sc.live ? S.time : 0) * 8 + m.ph)) * 0.08 : 0;
-  proj(v, wallX(v, sc, m), 0, m.z);
+  proj(v, m.x, 0, m.z);
   c.save();
   c.globalAlpha = alpha;
   c.translate(PX, PY); c.scale(PS, PS); c.translate(0, -jy - bob);
@@ -2710,10 +2455,6 @@ function layoutZones() {
   set(el.z.TR, ZG.mid + g / 2, top, hw, ZG.ySplit - top - g / 2);
   set(el.z.L, g, ZG.ySplit + g / 2, hw, bot - ZG.ySplit - g / 2);
   set(el.z.R, ZG.mid + g / 2, ZG.ySplit + g / 2, hw, bot - ZG.ySplit - g / 2);
-  // the high-dive labels sit just above the crossbar, out of the ball's way
-  proj(VM, 0, GH + CFG.POST_R, 0);
-  const pb = Math.round(clamp(ZG.ySplit - PY + 6, 10, Math.max(10, ZG.ySplit - top - 40))) + 'px';
-  el.z.TL.style.paddingBottom = pb; el.z.TR.style.paddingBottom = pb;
 }
 function zoneAt(x, y) { return zoneOf(x < ZG.mid ? -1 : 1, y < ZG.ySplit); }
 let zoneTimer = 0;

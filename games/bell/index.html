@@ -1,0 +1,1832 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>땡땡땡</title>
+<meta name="theme-color" content="#7b1e4d">
+<meta name="description" content="마주 앉아 과일이 딱 맞게 모이면 땡! 먼저 종을 쳐요. 혼자면 컴퓨터와 해요!">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* Visual world: a sunny classroom desk between two animals. 다람이 (squirrel, orange side) and 고슴이 (hedgehog, lavender side) sit behind a brass
+   hand bell each; between them a green felt mat holds two fruit cards (딸기 / 바나나 / 포도 / 키위). The whole scene is drawn on the canvas; in portrait
+   the two players face each other (the opponent's HUD, cards and texts are turned 180 degrees), on wide screens they sit side by side. Menus, the
+   pause button and the result panels are DOM. Thick ink outlines, flat fills with one soft highlight, brass gradients for the bells. */
+:root {
+  --ink: #2b1b2e;
+  --text: #fff4dc;
+  --gold: #ffdf5e;
+  --gold-hi: #fff6b0;
+  --gold-d: #e09a14;
+  --p1: #ffb454;
+  --p1-d: #c9651a;
+  --p2: #8aa4ff;
+  --p2-d: #3a52c4;
+  --ok: #3ddc84;
+  --danger: #ff4d5e;
+  --berry: #7b1e4d;
+  --berry-d: #4a0f2e;
+  --ui-bg: rgba(43, 27, 46, 0.88);
+  --dim: #f0d3e2;
+  --muted: #d3a6bf;
+  --font-d: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --font-b: "Gowun Dodum", "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: #3b1030; color: var(--text);
+  font-family: var(--font-d); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: #3b1030; }
+#cv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-d); cursor: pointer; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- in-play buttons (placed by layout()) ---------- */
+.icon-btn {
+  position: absolute; z-index: 6; width: 44px; height: 44px; border-radius: 14px; padding: 0;
+  border: 2px solid rgba(255, 244, 220, 0.85); background: var(--ui-bg); color: var(--text);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+.icon-btn[hidden] { display: none; }
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 62px) calc(env(safe-area-inset-right, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 14px) calc(env(safe-area-inset-left, 0px) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(36, 8, 28, 0.38);
+}
+.overlay[hidden] { display: none; }
+#scrPause { justify-content: center; gap: 14px; background: rgba(36, 8, 28, 0.7); z-index: 30; padding-top: calc(env(safe-area-inset-top, 0px) + 14px); }
+#scrHow { z-index: 25; background: rgba(36, 8, 28, 0.66); }
+#scrOver { justify-content: center; gap: 12px; background: rgba(36, 8, 28, 0.55); padding-top: calc(env(safe-area-inset-top, 0px) + 14px); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(390px, 100%); margin: auto;
+  background: linear-gradient(180deg, #8c2a5c 0%, #5a1238 100%); color: var(--text);
+  border: 3px solid var(--ink); border-radius: 26px;
+  box-shadow: 0 0 0 3px #fff4dc, 0 0 0 6px var(--ink), 0 12px 0 6px rgba(0, 0, 0, 0.35);
+  padding: 20px 16px 14px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 9px;
+  background: repeating-linear-gradient(90deg, #ff4d6d 0 22px, #ffe14a 22px 44px, #9b5de5 44px 66px, #7bd83c 66px 88px);
+}
+.card.flip { transform: rotate(180deg); }
+.card.slim { padding: 18px 14px 12px; box-shadow: 0 0 0 3px #fff4dc, 0 0 0 6px var(--ink), 0 8px 0 6px rgba(0, 0, 0, 0.3); }
+@keyframes cardIn { from { opacity: 0; scale: 0.94; } to { opacity: 1; scale: 1; } }
+.logo { margin: 6px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 66px; line-height: 1.1; letter-spacing: 2px; white-space: nowrap; }
+.logo span { display: inline-block; animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 3s ease-in-out infinite; text-shadow: 0 3px 0 var(--ink), 2px 0 0 var(--ink), -2px 0 0 var(--ink), 0 -2px 0 var(--ink), 0 0 18px rgba(255, 223, 94, 0.5); color: var(--gold); }
+.logo span:nth-child(1) { rotate: -5deg; transform-origin: 50% 0; }
+.logo span:nth-child(2) { rotate: 2deg; animation-delay: 0.1s, 0.3s; color: #ffb454; }
+.logo span:nth-child(3) { rotate: 5deg; animation-delay: 0.2s, 0.6s; color: #ffa7c4; }
+@keyframes logoIn { from { transform: translateY(-30px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.tagline { margin: 6px 0 2px; font-family: var(--font-b); font-size: 15.5px; line-height: 1.45; color: var(--dim); }
+.mascot { display: block; width: 300px; height: 118px; margin: 4px auto 0; max-width: 100%; }
+.mascot.small { width: 170px; height: 100px; }
+.best-line { margin: 6px 0 10px; font-size: 15px; color: var(--muted); }
+.best-line b { color: var(--gold); font-weight: normal; font-size: 24px; font-variant-numeric: tabular-nums; }
+.best-line b.none { font-size: 15px; color: var(--muted); }
+.seg-row { display: grid; grid-template-columns: 78px 1fr; align-items: center; gap: 8px; margin: 0 0 8px; text-align: left; }
+.seg-row label { font-size: 14.5px; color: var(--dim); line-height: 1.15; }
+.seg { display: flex; gap: 4px; padding: 3px; border-radius: 14px; background: rgba(0, 0, 0, 0.28); border: 2px solid rgba(255, 244, 220, 0.3); }
+.seg button {
+  flex: 1; min-width: 0; min-height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--dim);
+  font-size: 16px; padding: 3px 2px 0; letter-spacing: -0.3px; touch-action: manipulation; line-height: 1.1;
+}
+.seg button small { display: block; font-size: 10.5px; color: inherit; opacity: 0.8; font-family: var(--font-b); letter-spacing: -0.3px; margin-top: 1px; }
+.seg button[aria-checked="true"] { background: var(--gold); color: var(--ink); box-shadow: 0 2px 0 var(--gold-d); }
+.seg button:focus-visible { outline: 3px solid var(--gold-hi); outline-offset: 1px; }
+.help-line { margin: -3px 0 10px; font-family: var(--font-b); font-size: 12.5px; color: var(--muted); text-align: left; padding-left: 86px; line-height: 1.3; }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; border-radius: 16px;
+  border: 2px solid var(--ink); background: var(--gold); color: var(--ink);
+  font-family: var(--font-d); font-size: 28px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 var(--gold-d); touch-action: manipulation; pointer-events: auto;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--gold-d); }
+.btn.alt { background: var(--p2); box-shadow: 0 5px 0 var(--p2-d); margin-top: 11px; min-height: 52px; font-size: 25px; }
+.btn.alt:active { box-shadow: 0 2px 0 var(--p2-d); }
+.btn.sub {
+  background: transparent; color: var(--text); border: 2px solid rgba(255, 244, 220, 0.5);
+  box-shadow: none; font-family: var(--font-d); font-size: 17px; min-height: 46px; margin-top: 10px; padding-top: 0; letter-spacing: 0;
+}
+.btn.sub.arm { border-color: var(--danger); color: #ffc2bb; }
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible { outline: 3px solid var(--gold-hi); outline-offset: 3px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); letter-spacing: -0.2px; font-family: var(--font-b); }
+.keyhint.desk { display: none; }
+@media (hover: hover) and (pointer: fine) { .keyhint.desk { display: block; } }
+.back {
+  position: absolute; left: calc(env(safe-area-inset-left, 0px) + 10px); top: calc(env(safe-area-inset-top, 0px) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--ui-bg); color: var(--text); border: 2px solid rgba(255, 244, 220, 0.85); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2;
+}
+.res-title { margin: 4px 0 0; font-size: 30px; font-weight: normal; font-family: var(--font-d); color: var(--text); letter-spacing: 1px; }
+.pause-line { margin: 4px 0 12px; font-family: var(--font-b); font-size: 15px; color: var(--dim); line-height: 1.5; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 .btn.sub { font-size: 16px; min-height: 46px; margin-top: 10px; padding: 0 4px; }
+.stamp-end { margin: 2px 0 0; font-family: var(--font-d); font-size: 32px; color: var(--gold); letter-spacing: 0.5px; line-height: 1.15; text-shadow: 0 2px 0 var(--ink); }
+.stamp-end.lose { color: #cfd6ff; }
+.res-big { margin: 2px 0 0; font-size: 54px; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: 2px; text-shadow: 0 3px 0 var(--ink); }
+.res-big small { font-size: 36px; color: var(--dim); margin: 0 14px; letter-spacing: 0; text-shadow: none; }
+.res-sub { margin: 2px 0 0; font-family: var(--font-b); font-size: 15px; color: var(--dim); line-height: 1.4; }
+.res-sub b { color: var(--gold); font-weight: normal; font-size: 19px; font-family: var(--font-d); }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 2px; padding: 4px 16px 5px 10px; border-radius: 12px;
+  background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 23px; border: 2px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge svg { width: 24px; height: 24px; animation: spin 2.4s linear infinite; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.stats { margin: 8px 0 4px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px 6px; }
+.stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 244, 220, 0.26); border-radius: 10px; padding: 5px 8px 4px; font-size: 12.5px; color: var(--muted); min-width: 0; text-align: left; }
+.stats b { font-weight: normal; font-size: 15px; color: var(--text); white-space: nowrap; }
+.seed { margin: 6px 0 0; font-size: 11px; color: var(--muted); opacity: 0.8; }
+/* how to play: four little cards */
+.how { list-style: none; margin: 10px 0 12px; padding: 0; display: grid; gap: 8px; text-align: left; }
+.how li { display: grid; grid-template-columns: 132px 1fr; gap: 12px; align-items: center; background: rgba(255, 255, 255, 0.08); border: 1.5px solid rgba(255, 244, 220, 0.3); border-radius: 16px; padding: 6px; }
+.how canvas { display: block; width: 132px; height: 88px; border-radius: 11px; }
+.how p { margin: 0; font-family: var(--font-b); font-size: 14.5px; line-height: 1.4; color: var(--text); }
+.how p b { color: var(--gold); font-weight: normal; }
+.how em { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 5px; border-radius: 50%; background: var(--gold); color: var(--ink); font-style: normal; font-size: 14px; padding-top: 1px; }
+kbd { display: inline-block; min-width: 24px; padding: 2px 6px 1px; border-radius: 7px; background: #fff4dc; color: var(--ink); border: 2px solid var(--ink); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); font-family: var(--font-d); font-size: 13px; text-align: center; line-height: 1.2; }
+
+@media (min-width: 600px) and (min-height: 700px) {
+  .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 14px); }
+}
+@media (max-height: 800px) {
+  .mascot { width: 250px; height: 98px; }
+  .logo { font-size: 54px; }
+  .card { padding-top: 16px; }
+}
+@media (max-height: 700px) {
+  .mascot { display: none; }
+  .mascot.small { display: block; width: 110px; height: 66px; }
+  .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 58px); }
+  .logo { font-size: 46px; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 10px); }
+  .card { padding: 12px 16px 10px; width: min(560px, 100%); }
+  .logo { font-size: 38px; }
+  .tagline { margin: 4px 0 2px; font-size: 13px; }
+  .mascot.small { display: none; }
+  .how { margin: 6px 0 8px; gap: 5px; } .how li { grid-template-columns: 96px 1fr; padding: 4px; } .how canvas { width: 96px; height: 64px; } .how p { font-size: 13px; }
+  .btn { min-height: 46px; font-size: 24px; }
+  .keyhint { display: none !important; }
+  .res-big { font-size: 40px; margin-top: 0; line-height: 1; }
+  .res-title, .stamp-end { font-size: 22px; margin: 0; }
+  .stats { display: none; }
+  .btn.sub { min-height: 44px; margin-top: 8px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .badge svg, .card { animation: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="땡땡땡 과일 카드 대결판"></canvas>
+  <div id="probe"></div>
+  <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지" hidden>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+  </button>
+  <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기" hidden>
+    <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+    <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+  </button>
+  <div class="sr" id="live" role="status" aria-live="polite"></div>
+
+  <!-- title + mode select -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <h1 class="logo" aria-label="땡땡땡"><span>땡</span><span>땡</span><span>땡</span></h1>
+      <p class="tagline">마주 앉아 과일이 딱 맞게 모이면 땡!<br>먼저 종을 쳐요. 혼자면 컴퓨터와 해요!</p>
+      <canvas class="mascot" id="mascotT" width="600" height="236" aria-hidden="true"></canvas>
+      <p class="best-line">내 최고 연승 기록 <b id="tBest" class="none">아직 기록이 없어요</b></p>
+      <div class="seg-row"><label id="lblLevel">컴퓨터 실력</label>
+        <div class="seg" id="segLevel" role="radiogroup" aria-labelledby="lblLevel">
+          <button type="button" role="radio" data-v="easy">쉬움</button><button type="button" role="radio" data-v="normal">보통</button><button type="button" role="radio" data-v="hard">어려움</button>
+        </div></div>
+      <div class="seg-row"><label id="lblBest">몇 판?</label>
+        <div class="seg" id="segBest" role="radiogroup" aria-labelledby="lblBest">
+          <button type="button" role="radio" data-v="3">3판 2선승</button><button type="button" role="radio" data-v="5">5판 3선승</button>
+        </div></div>
+      <div class="seg-row"><label id="lblHandi">도와주기</label>
+        <div class="seg" id="segHandi" role="radiogroup" aria-labelledby="lblHandi">
+          <button type="button" role="radio" data-v="0">없음</button><button type="button" role="radio" data-v="1">보통</button><button type="button" role="radio" data-v="2">많이</button>
+        </div></div>
+      <p class="help-line" id="helpHandi">느린 친구를 조금 도와줘요</p>
+      <button class="btn" id="btnSolo" type="button">컴퓨터와 한 판</button>
+      <button class="btn alt" id="btnDuo" type="button">둘이서 한 폰으로</button>
+      <div class="row2">
+        <button class="btn sub" id="btnHow" type="button">하는 법</button>
+        <button class="btn sub" id="btnMuteT" type="button">소리 끄기</button>
+      </div>
+      <p class="keyhint desk">1 2 3 실력 · Enter 컴퓨터와 · J 둘이서 · 판 중에는 F / J · P 멈춤</p>
+    </div>
+  </section>
+
+  <!-- how to play -->
+  <section class="overlay" id="scrHow" hidden>
+    <div class="card">
+      <h2 class="res-title">이렇게 해요</h2>
+      <ol class="how">
+        <li><canvas id="how0" width="264" height="176" aria-hidden="true"></canvas><p><em>1</em>카드가 <b>번갈아</b> 나와요. 두 카드에서 <b>같은 과일</b>을 세어 봐요.</p></li>
+        <li><canvas id="how1" width="264" height="176" aria-hidden="true"></canvas><p><em>2</em>합이 <b>'땡 숫자'</b>면 내 쪽을 탭! 먼저 치면 1점, <b>황금 카드</b>는 2점!</p></li>
+        <li><canvas id="how2" width="264" height="176" aria-hidden="true"></canvas><p><em>3</em>아닌데 치면 상대가 1점. <b>첫 실수는 봐줘요.</b></p></li>
+        <li><canvas id="how3" width="264" height="176" aria-hidden="true"></canvas><p><em>4</em>4점 먼저 얻으면 한 판, 판을 먼저 따면 이겨요. <b>앞서는 친구는 조금 더 빨라야</b> 인정돼요.</p></li>
+      </ol>
+      <p class="keyhint" style="margin:0 0 10px">한 폰에 둘이 하면 <b style="color:var(--p1)">내 쪽</b>을 탭하고, 키보드는 <kbd>F</kbd> / <kbd>J</kbd>예요.</p>
+      <button class="btn" id="btnHowOk" type="button">알겠어요</button>
+    </div>
+  </section>
+
+  <!-- pause and result panels are filled by script (two panels, one turned around, when two players face each other) -->
+  <section class="overlay" id="scrPause" hidden></section>
+  <section class="overlay" id="scrOver" hidden></section>
+</div>
+
+<script>
+'use strict';
+(() => {
+// =====================================================================
+// LOGIC (pure, no DOM, no Math.random, no Date): cards, 땡 detection, rings, the judging window, scores and 판 / match flow, plus the CPU brain.
+// The view feeds advance() timestamped taps and reads m.ev (cleared by the view every step) for sound and juice. The balance bots drive exactly these two blocks.
+// =====================================================================
+//#LOGIC-START
+// 땡땡땡 pure logic. No DOM, no Date, no Math.random. All times are seconds on the match clock.
+const WIN_SCORE = 4;                // points to win one 판
+const FRUITS = 4;                    // 0 딸기, 1 바나나, 2 포도, 3 키위
+const GRACE_HOLD = 1.35;             // after a hit card lands, the next flip waits at least this long
+const LOCK_WRONG = 0.9, LOCK_FIRST = 0.4;   // bell lock after a wrong slap (forgiven first one: shorter)
+const COUNTDOWN = 2.4;
+const STAR_P = 0.085;                // chance that a dealt card (from the 9th flip on) is a golden card; a 땡 with a golden card in it is worth 2
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// card: { c: [n0,n1,n2,n3] counts per fruit, star: bool }
+const TARGETS = [5, 6, 7, 5, 6];                     // the 땡 number of each 판 (shown on the school-bell sign)
+let TARGET = 5;                                     // set by startRound (module state is fine: one match at a time)
+function hitFruit(a, b) { if (!a || !b) return -1; for (let f = 0; f < FRUITS; f++) if (a.c[f] + b.c[f] === TARGET) return f; return -1; }
+function types(a, b) { let n = 0; for (let f = 0; f < FRUITS; f++) if ((a ? a.c[f] : 0) + (b ? b.c[f] : 0) > 0) n++; return n; }
+function symbols(a, b) { let n = 0; for (let f = 0; f < FRUITS; f++) n += (a ? a.c[f] : 0) + (b ? b.c[f] : 0); return n; }
+// 'near' = looks like a hit to a hasty eye: same-fruit sum 4 or 6, or 5 symbols in total of different fruits
+function isNear(a, b) {
+  if (!a || !b || hitFruit(a, b) >= 0) return false;
+  if (symbols(a, b) === TARGET) return true;
+  for (let f = 0; f < FRUITS; f++) { const s = a.c[f] + b.c[f]; if (s === TARGET - 1 || s === TARGET + 1) return true; }
+  return false;
+}
+function stageOf(flips) { return flips < 8 ? 0 : flips < 18 ? 1 : 2; }
+function flipInterval(roundT, roundNo) {          // seconds between flips: 1.9 -> 1.0, a little quicker every 판
+  const k = Math.min(1, roundT / 55);
+  return Math.max(0.95, (1.9 - 0.9 * k) - 0.06 * roundNo);
+}
+function rnd(rng, n) { return Math.floor(rng() * n); }
+function randomCard(rng, stage, forceFruit, forceCount) {
+  const c = [0, 0, 0, 0];
+  const mixed = stage === 0 ? false : rng() < (stage === 1 ? 0.5 : 0.8);
+  const f1 = forceFruit >= 0 ? forceFruit : rnd(rng, FRUITS);
+  const max1 = stage === 0 ? 3 : 4;
+  c[f1] = forceCount > 0 ? forceCount : 1 + rnd(rng, max1);
+  if (mixed) {
+    let f2 = rnd(rng, FRUITS); if (f2 === f1) f2 = (f2 + 1) % FRUITS;
+    c[f2] = 1 + rnd(rng, 3);
+  }
+  return { c, star: false };
+}
+function makeCard(rng, stage, other, want) {      // want: 'hit' | 'near' | 'free'
+  if (!other) return randomCard(rng, stage, -1, 0);
+  const fs = []; for (let f = 0; f < FRUITS; f++) if (other.c[f] > 0) fs.push(f);
+  if (want === 'hit') {
+    const ok = fs.filter(f => TARGET - other.c[f] >= 1 && TARGET - other.c[f] <= 4);
+    if (ok.length) { const f = ok[rnd(rng, ok.length)]; return randomCard(rng, stage, f, TARGET - other.c[f]); }
+  } else if (want === 'near') {
+    if (rng() < 0.5) {                            // same fruit, sum 4 or 6
+      const f = fs[rnd(rng, fs.length)], a = other.c[f], opts = [TARGET - 1 - a, TARGET + 1 - a].filter(b => b >= 1 && b <= 4);
+      if (opts.length) return randomCard(rng, stage, f, opts[rnd(rng, opts.length)]);
+    }
+    const s = symbols(other, null);               // different fruit, 5 symbols in total
+    const need = TARGET - s;
+    if (need >= 1 && need <= 4) {
+      const cand = []; for (let f = 0; f < FRUITS; f++) if (other.c[f] === 0) cand.push(f);
+      if (cand.length) { const c = [0, 0, 0, 0]; c[cand[rnd(rng, cand.length)]] = need; return { c, star: false }; }
+    }
+  }
+  return randomCard(rng, stage, -1, 0);
+}
+
+// opts: { bestOf: 3|5, catch: extra judging seconds per point of lead (0 / 0.10 / 0.18) }
+function newMatch(seed, opts) {
+  opts = opts || {};
+  return { rng: mulberry32(seed | 0), t: 0, bestOf: opts.bestOf === 5 ? 5 : 3, catch: opts.catch === undefined ? 0.10 : Math.max(0, Math.min(0.3, +opts.catch || 0)),
+    roundNo: 0, wins: [0, 0], score: [0, 0],
+    phase: 'count', phaseT: 0, cards: [null, null], turn: 0, flips: 0, roundT: 0, nextFlip: 0,
+    opp: null, lock: [0, 0], forgive: [1, 1], pile: 0, firstFlip: 0, ev: [], stats: { hit: 0, wrong: 0, miss: 0, golden: 0, tie: 0, late: 0, forgiven: 0 }, winner: -1, roundWinner: -1 };
+}
+function startRound(m) {
+  m.score = [0, 0]; m.cards = [null, null]; m.flips = 0; m.roundT = 0; m.pile = 0; m.opp = null; TARGET = TARGETS[Math.min(m.roundNo, TARGETS.length - 1)];
+  m.forgive = [1, 1]; m.lock = [0, 0]; m.phase = 'count'; m.phaseT = COUNTDOWN; m.turn = m.firstFlip;
+  m.ev.push({ k: 'roundStart', n: m.roundNo, target: TARGET });
+}
+function leadOf(m, p) { return Math.max(0, m.score[p] - m.score[1 - p]); }
+function windowOf(m, p) { return 0.10 + m.catch * Math.min(3, leadOf(m, p)); }   // judging window opened by a ring of p (s)
+function addPoint(m, p, n) {
+  m.score[p] += n;
+  if (m.score[p] >= WIN_SCORE) {
+    m.phase = 'roundEnd'; m.phaseT = 2.2; m.roundWinner = p; m.wins[p]++; m.firstFlip = 1 - p; m.opp = null;
+    m.ev.push({ k: 'roundEnd', p });
+    if (m.wins[p] >= Math.ceil(m.bestOf / 2)) { m.phase = 'matchEnd'; m.winner = p; m.ev.push({ k: 'matchEnd', p }); }
+  }
+}
+function doFlip(m) {
+  if (m.opp && !m.opp.resolved) { m.stats.miss++; m.ev.push({ k: 'miss' }); }
+  m.opp = null;
+  const p = m.turn, other = m.cards[1 - p], stage = stageOf(m.flips);
+  let want = 'free';
+  if (other) {
+    const r = m.rng(), ph = stage === 0 ? 0.34 : stage === 1 ? 0.27 : 0.23, pn = stage === 0 ? 0.30 : stage === 1 ? 0.40 : 0.45;
+    want = r < ph ? 'hit' : r < ph + pn ? 'near' : 'free';
+  }
+  if (other && m.roundNo === 0 && m.flips === 2 && m.wins[0] + m.wins[1] === 0) want = 'hit';   // first 판 of a match: the 3rd card is always an easy hit
+  const card = makeCard(m.rng, stage, other, want);
+  if (stage >= 1 && m.rng() < STAR_P) card.star = true;      // golden card: stays on the table with its frame until it is replaced
+  m.cards[p] = card; m.turn = 1 - p; m.flips++; m.pile++;
+  const hf = hitFruit(m.cards[0], m.cards[1]);
+  m.ev.push({ k: 'flip', p, near: isNear(m.cards[0], m.cards[1]), star: card.star });
+  let iv = flipInterval(m.roundT, m.roundNo);
+  if (hf >= 0) {
+    const golden = !!(m.cards[0].star || m.cards[1].star);
+    m.opp = { fruit: hf, since: m.t, golden, slaps: [null, null], first: -1, resolved: false, resolveAt: -1, cx: types(m.cards[0], m.cards[1]), sym: symbols(m.cards[0], m.cards[1]) };
+    iv = Math.max(iv, GRACE_HOLD);
+    m.ev.push({ k: 'hit', golden, fruit: hf });
+  }
+  m.nextFlip = m.t + iv;
+}
+// who: 0|1, tAt: the time of the tap on the match clock (the view maps the event timestamp). Returns a short code for the view/bots.
+function slap(m, who, tAt) {
+  if (m.phase !== 'play' || (who !== 0 && who !== 1)) return 'ignored';
+  if (typeof tAt !== 'number' || tAt !== tAt) tAt = m.t;
+  tAt = Math.min(m.t + 0.05, Math.max(m.t - 0.25, tAt));
+  if (tAt < m.lock[who]) return 'locked';
+  let o = m.opp;
+  if (o && !o.resolved && o.resolveAt >= 0 && tAt > o.resolveAt) {      // this tap came after the judging window closed: settle it first
+    resolve(m, o.resolveAt);
+    if (m.phase !== 'play') { m.stats.late++; return 'late'; }
+    o = m.opp;
+  }
+  if (o && !o.resolved) {
+    if (o.slaps[who] !== null) return 'dup';
+    o.slaps[who] = tAt;
+    if (o.slaps[1 - who] === null) {          // first slap: open the judging window (the leader waits a little longer)
+      o.first = who; o.resolveAt = tAt + windowOf(m, who);
+      m.ev.push({ k: 'bell', p: who, win: o.resolveAt - tAt });
+    } else if (tAt < o.slaps[1 - who]) {      // events can arrive out of order: the earlier tap is the first one
+      o.first = who; o.resolveAt = tAt + windowOf(m, who);
+    }
+    return 'ok';
+  }
+  if (o && o.resolved) { m.stats.late++; return 'late'; }   // the other one already took it: no penalty
+  // wrong slap
+  m.stats.wrong++;
+  if (m.forgive[who] > 0) { m.forgive[who]--; m.lock[who] = tAt + LOCK_FIRST; m.stats.forgiven++; m.ev.push({ k: 'oops', p: who, forgiven: true }); return 'forgiven'; }
+  m.lock[who] = tAt + LOCK_WRONG; m.ev.push({ k: 'oops', p: who, forgiven: false });
+  addPoint(m, 1 - who, 1);
+  return 'wrong';
+}
+function resolve(m, at) {
+  const o = m.opp; o.resolved = true;
+  let w = o.first, assist = false;
+  const other = 1 - w;
+  if (o.slaps[other] !== null) {              // both inside the window: the one who is behind wins; level => earlier slap
+    if (leadOf(m, w) > 0) { w = other; assist = true; m.stats.tie++; m.ev.push({ k: 'assist', p: w }); }
+  }
+  m.stats.hit++; if (o.golden) m.stats.golden++;
+  m.ev.push({ k: 'win', p: w, pts: o.golden ? 2 : 1, golden: o.golden, pile: m.pile, fruit: o.fruit, assist, close: o.slaps[other] !== null });
+  m.cards = [null, null]; m.pile = 0; m.nextFlip = at + 1.1; m.turn = 1 - w;
+  addPoint(m, w, o.golden ? 2 : 1);
+}
+function step(m, dt) {
+  m.t += dt;
+  if (m.phase === 'count') { m.phaseT -= dt; if (m.phaseT <= 0) { m.phase = 'play'; m.nextFlip = m.t + 0.6; m.ev.push({ k: 'go' }); } return; }
+  if (m.phase === 'roundEnd') { m.phaseT -= dt; if (m.phaseT <= 0) { m.roundNo++; startRound(m); } return; }
+  if (m.phase !== 'play') return;
+  m.roundT += dt;
+  if (m.opp && !m.opp.resolved && m.opp.resolveAt >= 0 && m.t >= m.opp.resolveAt) { resolve(m, m.t); if (m.phase !== 'play') return; }
+  if (m.t >= m.nextFlip && !(m.opp && !m.opp.resolved && m.opp.resolveAt >= 0)) doFlip(m);   // never flip away a card while a judging window is open
+}
+// One fixed step with timestamped taps: ins = [{ who, tAt }] sorted by tAt (consumed). A tap that happened before this step's flip is judged first,
+// so the order of events depends on their time and never on the frame they were processed in. Returns [{ who, tAt, res }].
+function advance(m, dt, ins) {
+  const out = [], end = m.t + dt;
+  while (ins.length && ins[0].tAt <= end && (m.phase !== 'play' || ins[0].tAt < m.nextFlip)) { const i = ins.shift(); out.push({ who: i.who, tAt: i.tAt, res: slap(m, i.who, i.tAt) }); }
+  step(m, dt);
+  while (ins.length && ins[0].tAt <= m.t) { const i = ins.shift(); out.push({ who: i.who, tAt: i.tAt, res: slap(m, i.who, i.tAt) }); }
+  return out;
+}
+function begin(m) { startRound(m); }
+//#LOGIC-END
+
+//#CPU-START
+// 고슴이 the CPU: a bot that sees only what a human sees (hit / decoy events). Own seeded rng, drives only taps (times on the match clock).
+const CPU_LEVELS = {
+  easy:   { mu: 0.46, perType: 0.10, sd: 0.28, miss: 0.25, pFalse: 0.14, itchy: 0.015 },
+  normal: { mu: 0.50, perType: 0.08, sd: 0.16, miss: 0.08, pFalse: 0.06, itchy: 0.006 },
+  hard:   { mu: 0.49, perType: 0.05, sd: 0.10, miss: 0.02, pFalse: 0.02, itchy: 0.002 },
+};
+const HUMANE_T = 12, HUMANE_DELAY = 0.15;      // first 12 s of a match: no false rings, +0.15 s fading to 0
+function gauss(r) { let u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+// prof: a CPU_LEVELS entry (or a bot profile with the same fields); opts: { seed, assist (s), humane (bool), minR }
+function makeBrain(prof, opts) {
+  opts = opts || {};
+  return { p: prof, rng: mulberry32(((opts.seed | 0) ^ 0x9e3779b9) | 0), q: [], assist: Math.max(0, Math.min(0.2, +opts.assist || 0)), humane: !!opts.humane, minR: opts.minR || 0.15 };
+}
+function cpuObserve(b, m, evs) {
+  const p = b.p, grace = b.humane && m.t < HUMANE_T ? 1 - m.t / HUMANE_T : 0;
+  for (const e of evs) {
+    if (e.k === 'flip' || e.k === 'win') b.q.length = 0;     // a scheduled ring belongs to the cards it saw: a new flip or a settled 땡 drops it
+    if (e.k === 'hit') {
+      if (b.rng() >= p.miss) b.q.push(m.t + Math.max(b.minR, p.mu + p.perType * (types(m.cards[0], m.cards[1]) - 1) + p.sd * gauss(b.rng) + b.assist + HUMANE_DELAY * grace));
+    } else if (e.k === 'flip' && e.near) {
+      if (!(b.humane && m.t < HUMANE_T) && b.rng() < p.pFalse) b.q.push(m.t + Math.max(0.15, p.mu + p.sd * gauss(b.rng)));
+    } else if (e.k === 'roundStart') b.q.length = 0;
+  }
+  b.q.sort((x, y) => x - y);
+}
+// taps due before time `end` (each stage: itchy rings and scheduled rings), as ascending times
+function cpuDue(b, m, dt, end) {
+  const due = [];
+  if (m.phase === 'play' && !(b.humane && m.t < HUMANE_T) && b.rng() < b.p.itchy * dt) due.push(m.t + dt * b.rng());
+  while (b.q.length && b.q[0] <= end) due.push(b.q.shift());
+  return due;
+}
+// wind-up for the paw animation: seconds until the next scheduled tap (or -1)
+function cpuNext(b, m) { return b.q.length ? b.q[0] - m.t : -1; }
+//#CPU-END
+
+// =====================================================================
+// CONFIG / UTIL / STORE
+// =====================================================================
+const KEY_BEST = 'arcade.bell.best';       // best 연승 점수 vs the CPU (plain integer string)
+const KEY_MUTE = 'arcade.bell.muted';
+const KEY_LEVEL = 'arcade.bell.level';
+const KEY_BESTOF = 'arcade.bell.bestof';
+const KEY_HANDI = 'arcade.bell.handi';
+const KEY_SEEN = 'arcade.bell.seen';
+const TAU = Math.PI * 2;
+const FONT_D = '"Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif';
+const FONT_B = '"Gowun Dodum", "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif';
+const INK = '#2b1b2e', CREAM = '#fff4dc', GOLD = '#ffdf5e', BRASS = '#ffd23f';
+const P1C = '#ffb454', P1D = '#c9651a', P2C = '#8aa4ff', P2D = '#3a52c4', BAD = '#ff4d5e';
+const NAMES = ['다람이', '고슴이'];
+const LEVELS = ['easy', 'normal', 'hard'];
+const LEVEL_PTS = { easy: 1, normal: 2, hard: 3 };      // 연승 점수 per match won vs the CPU
+const HANDI = [0, 0.10, 0.18];                          // judging window per point of lead: 없음 / 보통 / 많이
+const VIEW = {
+  STEP: 1 / 60,                 // fixed logic step
+  MAX_STEPS: 8,                 // per frame; the rest of a long frame is dropped
+  MATCH_END_T: 2.0,             // celebration before the result panel
+  RESUME_T: 1.0,                // mini countdown after a pause
+  PALM: 56,                     // a touch wider/taller than this (CSS px) is a palm, not a fingertip
+  EDGE: 12,                     // touches this close to the screen edge are ignored
+  MAX_PTR: 4,                   // tracked pointers
+  ASSIST_STEP_LOSS: 0.04, ASSIST_STEP_WIN: 0.03, ASSIST_MAX: 0.12,   // 눈높이 도우미 (쉬움 / 보통 only)
+  OVER_LOCK: 0.7,               // the result panel ignores taps this long
+  MAX_PARTS: 120,
+};
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, k) => a + (b - a) * k;
+const easeOut = (k) => 1 - (1 - k) * (1 - k) * (1 - k);
+const easeOutBack = (k) => { const c1 = 1.9, c3 = c1 + 1, x = k - 1; return 1 + c3 * x * x * x + c1 * x * x; };
+const rv = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only (the game itself has its own seeded streams)
+const QS = new URLSearchParams(location.search);
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+const fmtNum = (n) => { try { return Math.floor(n).toLocaleString('ko-KR'); } catch (e) { return String(Math.floor(n)); } };
+const readInt = (k) => { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; };
+const $ = (id) => document.getElementById(id);
+const seedParam = QS.get('seed');
+const RUN_SEED = seedParam !== null && seedParam !== '' && isFinite(+seedParam) ? (+seedParam | 0) : null;
+const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const freshSeed = () => ((Math.random() * 2147483647) | 0);
+const nowMs = () => (window.performance && performance.now ? performance.now() : Date.now());
+function buzz(p) {   // haptics only after a real touch (browsers log an error otherwise), never with reduced motion
+  try { if (!reduceMotion && navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ }
+}
+function rgba(hex, a) { const p = parseInt(hex.slice(1), 16); return 'rgba(' + (p >> 16) + ',' + ((p >> 8) & 255) + ',' + (p & 255) + ',' + a + ')'; }
+
+// =====================================================================
+// AUDIO (all synthesized, one master gain + a compressor, at most 32 voices). Created on the first gesture; a failure just means a silent game.
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0, unavailable: false,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx && !this.unavailable) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { this.unavailable = true; return; }
+        let c;
+        try { c = new AC({ latencyHint: 'interactive' }); } catch (e) { c = new AC(); }
+        this.ctx = c;
+        this.master = c.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.7;
+        const comp = c.createDynamicsCompressor();
+        comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.2;
+        this.master.connect(comp); comp.connect(c.destination);
+        const sr = c.sampleRate, len = Math.floor(sr * 1);
+        this.noiseBuf = c.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        try { const b = c.createBuffer(1, 1, 22050), s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch (e) { /* iOS unlock is best effort */ }
+      }
+      this.unlock();
+    } catch (e) { this.ctx = null; this.unavailable = true; }
+  },
+  unlock() {
+    const c = this.ctx;
+    if (c && c.state !== 'running') { try { const p = c.resume(); if (p && p.catch) p.catch(() => { /* needs another gesture */ }); } catch (e) { /* ignore */ } }
+  },
+  running() { return !!this.ctx && this.ctx.state === 'running'; },
+  live() { return this.running() && !V.ff && !this.muted; },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.7, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  suspend() { if (this.ctx && this.ctx.state === 'running') { try { this.ctx.suspend(); } catch (e) { /* ignore */ } } },
+  now() { return this.ctx ? this.ctx.currentTime : 0; },
+  // one short oscillator voice; o: { atk, lp }
+  tone(type, f0, f1, dur, vol, t, o) {
+    if (!this.live() || this.voices >= 32) return null;
+    o = o || {};
+    try {
+      const c = this.ctx, at = t === undefined ? c.currentTime : t;
+      const osc = c.createOscillator(), g = c.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f0, at);
+      if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), at + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), at + (o.atk || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      let out = g; osc.connect(g);
+      if (o.lp) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp; out.connect(f); out = f; }
+      out.connect(this.master);
+      this.voices++; osc.onended = () => { this.voices--; };
+      osc.start(at); osc.stop(at + dur + 0.03);
+      return osc;
+    } catch (e) { return null; }
+  },
+  // filtered noise burst
+  noise(dur, freq, q, vol, t, type) {
+    if (!this.live() || this.voices >= 32) return;
+    try {
+      const c = this.ctx, at = t === undefined ? c.currentTime : t;
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), at + Math.min(0.01, dur * 0.3));
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(at, Math.random() * 0.5); s.stop(at + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  ui() { this.tone('square', 660, 660, 0.04, 0.07, undefined, { lp: 3000 }); },
+  flip() { this.noise(0.04, 2800, 1.2, 0.2); this.tone('sine', 1200, 1200, 0.03, 0.1); },
+  // the bell: four sine partials at f, 2.76f, 5.40f, 8.93f, a slow decay. P1 880 Hz, P2 988 Hz
+  ding(p, vol, t) {
+    const f = p === 1 ? 988 : 880, at = t === undefined ? this.now() : t, v = vol === undefined ? 0.2 : vol;
+    [[1, 1, 1.1], [2.76, 0.5, 0.8], [5.4, 0.25, 0.5], [8.93, 0.12, 0.3]].forEach((q) => this.tone('sine', f * q[0], f * q[0], q[2], v * q[1], at, { atk: 0.002 }));
+  },
+  correct() { const t = this.now(); this.tone('triangle', 659.25, 880, 0.12, 0.22, t); this.tone('triangle', 880, 880, 0.1, 0.16, t + 0.1); },
+  golden(p) {
+    const t = this.now(); this.ding(p, 0.2, t); this.ding(p, 0.14, t + 0.12);
+    [880, 1108.7, 1318.5, 1760].forEach((f, i) => this.tone('triangle', f, f, 0.16, 0.14, t + 0.2 + i * 0.07));
+  },
+  buzz() { const t = this.now(); this.tone('sawtooth', 120, 70, 0.22, 0.2, t, { lp: 600 }); },
+  forgive() { this.tone('sine', 440, 440, 0.1, 0.16); },
+  assist() { const t = this.now(); [392, 493.9, 587.3].forEach((f, i) => this.tone('triangle', f, f, 0.14, 0.18, t + i * 0.06)); },
+  tick() { this.tone('square', 1100, 1100, 0.025, 0.05, undefined, { lp: 3000 }); },
+  count(go) { if (go) { const t = this.now(); this.tone('square', 880, 880, 0.12, 0.08, t, { lp: 3500 }); this.ding(0, 0.2, t); } else this.tone('square', 660, 660, 0.1, 0.09, undefined, { lp: 3000 }); },
+  roundWin() { const t = this.now(); [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.tone('triangle', f, f, 0.18, 0.2, t + i * 0.08)); },
+  matchWin() {
+    const t = this.now(); [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.5].forEach((f, i) => { this.tone('triangle', f, f, 0.2, 0.2, t + i * 0.1); this.tone('square', f, f, 0.14, 0.04, t + i * 0.1, { lp: 3000 }); });
+  },
+  lose() { const t = this.now(); this.tone('triangle', 392, 329.63, 0.3, 0.2, t); this.tone('triangle', 329.63, 261.63, 0.4, 0.2, t + 0.3); },
+  record() { const t = this.now() + 0.7; [783.99, 987.77, 1174.66, 1567.98].forEach((f, i) => this.tone('sine', f, f, 0.2, 0.14, t + i * 0.09)); },
+};
+
+// =====================================================================
+// STATE
+// =====================================================================
+const el = {
+  app: $('app'), cv: $('cv'), btnPause: $('btnPause'), btnMute: $('btnMute'), live: $('live'),
+  scrTitle: $('scrTitle'), scrHow: $('scrHow'), scrPause: $('scrPause'), scrOver: $('scrOver'),
+  tBest: $('tBest'), btnMuteT: $('btnMuteT'), mascotT: $('mascotT'), how: [$('how0'), $('how1'), $('how2'), $('how3')],
+  segLevel: $('segLevel'), segBest: $('segBest'), segHandi: $('segHandi'), helpHandi: $('helpHandi'),
+};
+const stage = el.cv, ctx = stage.getContext('2d');
+const readSel = (k, list, d) => { const v = store.get(k, ''); return list.indexOf(v) >= 0 ? v : d; };
+const V = {
+  phase: 'title',            // title | play | over
+  paused: false, ff: false, clock: 0, scale: 1,
+  duo: false, level: readSel(KEY_LEVEL, LEVELS, 'normal'), bestOf: store.get(KEY_BESTOF, '3') === '5' ? 5 : 3, handi: clamp(parseInt(store.get(KEY_HANDI, '1'), 10) || 0, 0, 2),
+  m: null, brain: null, assist: 0, streak: 0, matchStreak: 0, best: readInt(KEY_BEST), bestAtStart: 0, newRecord: false, gained: 0, tally: [0, 0],
+  nextSeed: 0, matchCount: 0, seed: 0,
+  ins: [], acc: 0, tEnd: 0, lastTs: 0, resumeT: 0, endT: -1, overT: 0, overShown: false,
+  // view state
+  target: 5, shown: [null, null], collect: null, dispScore: [0, 0], coins: [], parts: [], pops: [], waves: [], banner: null, shake: 0, flash: 0, flashCol: '#ffd23f',
+  S: [mkSide(0), mkSide(1)], log: [], hintT: 0, cardId: 0,
+};
+function mkSide(p) { return { p, paw: 0, pawGo: 0, squash: 0, rock: 0, face: 'idle', faceT: 0, blink: 0, blinkT: 2 + p, jump: 0, sweat: 0, lockT: 0, lockMax: 0, wind: 0, pulse: 0, look: 0 }; }
+let fine = false;
+try { fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) { fine = false; }
+
+// =====================================================================
+// LAYOUT: two modes. 'facing' (portrait): P2 on top, P1 at the bottom, the felt table in between; with two players everything of P2 is turned 180 degrees.
+// 'side' (desktop / landscape): P1 left, P2 right, the table in the middle, nothing rotated. Everything is computed in px from the viewport.
+// Station = one animal + its bell (origin = the bell's base, the animal grows toward -y, drawn with scale S and rotation rot).
+// =====================================================================
+const LAY = { W: 390, H: 844, dpr: 1, u: 1, mode: 'facing', sat: 0, sab: 0, sal: 0, sar: 0, st: [{}, {}], hud: [{}, {}], slot: [{}, {}], sign: [], msg: [{}, {}], pad: [], cw: 220, ch: 118, rotP: [0, 0], center: { x: 0, y: 0 }, bandY: 0, bandH: 0, short: false };
+const ST_H = 172;              // station height in station units (bell base up to the ears)
+function layout() {
+  const probe = getComputedStyle($('probe'));
+  const sat = parseFloat(probe.paddingTop) || 0, sab = parseFloat(probe.paddingBottom) || 0, sal = parseFloat(probe.paddingLeft) || 0, sar = parseFloat(probe.paddingRight) || 0;
+  const vv = window.visualViewport;
+  const W = Math.max(1, Math.round(vv && vv.width ? vv.width : window.innerWidth)), H = Math.max(1, Math.round(vv && vv.height ? vv.height : window.innerHeight));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const facing = H >= W * 1.1, duo = V.duo, rotP2 = facing && duo ? Math.PI : 0;
+  const L = LAY;
+  L.W = W; L.H = H; L.dpr = dpr; L.sat = sat; L.sab = sab; L.sal = sal; L.sar = sar; L.mode = facing ? 'facing' : 'side'; L.rotP = [0, rotP2];
+  L.short = H < 500 && W > H;
+  if (facing) {
+    const u = clamp(Math.min(W / 390, H / 844), 0.55, 1.4), zoneH = H * 0.31;
+    const hudH = 46 * u, hudW = Math.min(W - 20 - sal - sar, 360 * u * 1.1), cx = W / 2 + (sal - sar) / 2;
+    L.u = u;
+    const hy1 = H - sab - 5 * u - hudH / 2, base1 = hy1 - hudH / 2 - 10 * u;
+    const hy2 = sat + 5 * u + hudH / 2;
+    const base2 = duo ? hy2 + hudH / 2 + 10 * u : hy2 + hudH / 2 + 10 * u + (ST_H - 8) * u;
+    L.st[0] = { x: cx, y: base1, S: u, rot: 0 };
+    L.st[1] = { x: cx, y: base2, S: u, rot: rotP2 };
+    L.hud[0] = { x: cx, y: hy1, w: hudW, h: hudH, rot: 0, u };
+    L.hud[1] = { x: cx, y: hy2, w: hudW, h: hudH, rot: rotP2, u };
+    const bandH = H - 2 * zoneH, cu = Math.min(1.1, (bandH - 26) / 250, (W - 150) / 220);
+    L.bandY = zoneH; L.bandH = bandH;
+    const cw = 220 * cu, ch = 118 * cu, g = 12 * cu, cy = H / 2;
+    L.cw = cw; L.ch = ch; L.cu = cu;
+    L.slot[0] = { x: cx, y: cy + (ch + g) / 2, w: cw, h: ch, rot: 0 };
+    L.slot[1] = { x: cx, y: cy - (ch + g) / 2, w: cw, h: ch, rot: rotP2 };
+    const sx = (W - cw) / 4;
+    L.sign = [{ x: sx + sal / 2, y: cy + (ch + g) / 2 + 14 * cu, rot: 0, u: Math.min(u, cu) }];
+    if (duo) L.sign.push({ x: W - sx - sar / 2, y: cy - (ch + g) / 2 - 14 * cu, rot: Math.PI, u: Math.min(u, cu) });
+    L.center = { x: cx, y: cy };
+    L.msg[0] = { x: cx, y: cy + bandH * 0.2, rot: 0 };
+    L.msg[1] = duo ? { x: cx, y: cy - bandH * 0.2, rot: Math.PI } : { x: cx, y: cy - bandH * 0.2, rot: 0 };
+    L.banner = duo ? [{ x: cx, y: cy + bandH * 0.19, rot: 0 }, { x: cx, y: cy - bandH * 0.19, rot: Math.PI }] : [{ x: cx, y: cy, rot: 0 }];
+    L.pause = { x: sal + 8, y: cy - 30 }; L.mute = { x: W - sar - 52, y: cy - 30 };
+    L.pad = duo ? [{ x0: 0, y0: H / 2, x1: W, y1: H }, { x0: 0, y0: 0, x1: W, y1: H / 2 }] : [{ x0: 0, y0: 0, x1: W, y1: H }, null];
+  } else {
+    const zw = W * 0.31, colW = W - 2 * zw, us = clamp(Math.min(H / 400, zw / 245), 0.5, 1.55), u = clamp(Math.min(H / 780, W / 1100), 0.5, 1.3);
+    const hu = clamp(Math.min(us, (zw - 14) / 350), 0.5, 1.4);
+    L.u = u;
+    const hudH = 46 * hu, block = ST_H * us + 12 * us + hudH, top = Math.max(sat + 8, (H - sab - block) / 2 + 14 * us);
+    const base = top + ST_H * us, hy = base + 12 * us + hudH / 2;
+    const cxs = [zw / 2 + sal / 2, W - zw / 2 - sar / 2];
+    for (let p = 0; p < 2; p++) {
+      L.st[p] = { x: cxs[p], y: base, S: us, rot: 0 };
+      L.hud[p] = { x: cxs[p], y: hy, w: Math.min(zw - 14, 380 * hu), h: hudH, rot: 0, u: hu };
+    }
+    const cu = Math.min(1.25, (colW - 36) / 440, (H * 0.34) / 118), cw = 220 * cu, ch = 118 * cu, g = 16 * cu, cx = W / 2, cy = H * 0.52;
+    L.cw = cw; L.ch = ch; L.cu = cu; L.bandY = 0; L.bandH = H;
+    L.slot[0] = { x: cx - (cw + g) / 2, y: cy, w: cw, h: ch, rot: 0 };
+    L.slot[1] = { x: cx + (cw + g) / 2, y: cy, w: cw, h: ch, rot: 0 };
+    L.sign = [{ x: cx, y: Math.max(sat + 70 * u, cy - ch / 2 - 74 * Math.min(u, cu + 0.1)), rot: 0, u: Math.min(1.1, Math.max(0.6, Math.min(u + 0.1, cu + 0.1))) }];
+    L.center = { x: cx, y: cy };
+    L.msg[0] = { x: L.slot[0].x, y: cy, rot: 0 }; L.msg[1] = { x: L.slot[1].x, y: cy, rot: 0 };
+    L.banner = [{ x: cx, y: cy, rot: 0 }];
+    L.pause = { x: cx - 52, y: sat + 12 }; L.mute = { x: cx + 8, y: sat + 12 };
+    L.pad = [{ x0: 0, y0: 0, x1: duo ? W / 2 : W, y1: H }, duo ? { x0: W / 2, y0: 0, x1: W, y1: H } : null];
+  }
+  stage.width = Math.round(W * dpr); stage.height = Math.round(H * dpr);
+  el.btnPause.style.left = L.pause.x + 'px'; el.btnPause.style.top = L.pause.y + 'px';
+  el.btnMute.style.left = L.mute.x + 'px'; el.btnMute.style.top = L.mute.y + 'px';
+  bgDirty = true;
+}
+let bgDirty = true;
+
+// =====================================================================
+// DRAWING PRIMITIVES
+// =====================================================================
+function circ(c, x, y, r) { c.beginPath(); c.arc(x, y, Math.max(0.001, r), 0, TAU); }
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(0.001, rx), Math.max(0.001, ry), rot || 0, 0, TAU); }
+function rrect(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+function stroke(c, w, col, cap) { c.lineWidth = w; c.strokeStyle = col; c.lineCap = cap || 'round'; c.lineJoin = 'round'; c.stroke(); }
+function fs(c, fill, w) { c.fillStyle = fill; c.fill(); if (w !== 0) stroke(c, w || 2.5, INK); }   // fill + the dark outline
+function line(c, x1, y1, x2, y2, w, col) { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); stroke(c, w, col); }
+function outText(c, txt, x, y, size, col, ow, edge, font, rot) {
+  c.save(); c.translate(x, y); if (rot) c.rotate(rot);
+  c.font = size + 'px ' + (font || FONT_D); c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+  c.lineWidth = ow === undefined ? Math.max(3, size * 0.16) : ow; c.strokeStyle = edge || INK; if (c.lineWidth > 0) c.strokeText(txt, 0, 0); c.fillStyle = col; c.fillText(txt, 0, 0);
+  c.restore();
+}
+function star5(c, x, y, r, rot) {
+  c.beginPath();
+  for (let i = 0; i < 10; i++) { const a = (rot || 0) - Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.46 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  c.closePath();
+}
+function sparkle(c, x, y, r, col, alpha) {   // a four-pointed twinkle
+  c.save(); c.globalAlpha = alpha === undefined ? 1 : alpha; c.fillStyle = col; c.beginPath();
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, rr = i % 2 ? r * 0.26 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  c.closePath(); c.fill(); c.restore();
+}
+
+// =====================================================================
+// FRUITS: four shapes you can tell apart without colour - strawberry (rounded triangle + leaf crown), banana (crescent), grapes (a cluster of
+// balls) and kiwi (a round slice with a seed ring). Drawn in a unit box around (0,0) and scaled by s.
+// =====================================================================
+function drawFruit(c, f, x, y, s, rot) {
+  c.save(); c.translate(x, y); if (rot) c.rotate(rot); c.scale(s, s);
+  const lw = Math.max(0.07, 2.5 / s);
+  if (f === 0) {   // 딸기
+    c.beginPath(); c.moveTo(0, -0.6);
+    c.bezierCurveTo(0.45, -0.95, 1.0, -0.6, 0.95, -0.05); c.bezierCurveTo(0.9, 0.45, 0.4, 0.85, 0, 1.0);
+    c.bezierCurveTo(-0.4, 0.85, -0.9, 0.45, -0.95, -0.05); c.bezierCurveTo(-1.0, -0.6, -0.45, -0.95, 0, -0.6); c.closePath();
+    fs(c, '#ff4d6d', lw);
+    ell(c, -0.5, -0.2, 0.12, 0.27, 0.45); c.fillStyle = 'rgba(255,255,255,0.4)'; c.fill();
+    for (const q of [[-0.42, 0.02], [0.4, -0.12], [0.02, 0.1], [-0.2, 0.52], [0.34, 0.38], [-0.52, 0.38], [0.04, 0.72]]) { ell(c, q[0], q[1], 0.065, 0.1, 0.2); c.fillStyle = '#ffe08a'; c.fill(); }
+    ell(c, -0.34, -0.72, 0.36, 0.15, -0.35); fs(c, '#3dbb4c', lw); ell(c, 0.34, -0.72, 0.36, 0.15, 0.35); fs(c, '#3dbb4c', lw); ell(c, 0, -0.8, 0.14, 0.27, 0); fs(c, '#4fcf5c', lw);
+    line(c, 0, -1.0, 0.05, -1.18, lw * 1.3, INK);
+  } else if (f === 1) {   // 바나나
+    c.scale(1.0, 1.16); c.translate(0, -0.08);
+    c.beginPath(); c.moveTo(-0.95, -0.52);
+    c.bezierCurveTo(-0.85, 0.55, 0.0, 1.02, 0.97, -0.12); c.lineTo(1.02, -0.4);
+    c.bezierCurveTo(0.35, 0.36, -0.35, 0.27, -0.6, -0.62); c.closePath();
+    fs(c, '#ffe14a', lw);
+    c.beginPath(); c.moveTo(-0.7, -0.22); c.quadraticCurveTo(0.0, 0.62, 0.84, -0.16); stroke(c, lw * 0.8, '#e6b400');
+    c.beginPath(); c.moveTo(-0.62, 0.0); c.quadraticCurveTo(-0.3, 0.55, 0.0, 0.7); stroke(c, lw * 1.2, 'rgba(255,255,255,0.55)');
+    rrect(c, -1.04, -0.9, 0.3, 0.42, 0.1); fs(c, '#8a6a2a', lw);
+    circ(c, 1.0, -0.27, 0.12); fs(c, '#5a3d1a', lw);
+  } else if (f === 2) {   // 포도
+    const balls = [[0, 0.64], [-0.33, 0.14], [0.33, 0.14], [-0.64, -0.36], [0, -0.36], [0.64, -0.36]];
+    for (const b of balls) { circ(c, b[0], b[1], 0.37); fs(c, '#9b5de5', lw); }
+    for (const b of balls) { c.beginPath(); c.arc(b[0], b[1], 0.23, Math.PI * 1.05, Math.PI * 1.6); stroke(c, lw * 1.3, 'rgba(255,255,255,0.55)'); }
+    line(c, 0, -0.68, 0.06, -0.98, lw * 1.5, INK); line(c, 0, -0.68, 0.06, -0.98, lw * 0.7, '#8a5a2a');
+    ell(c, 0.42, -0.88, 0.34, 0.15, -0.4); fs(c, '#3dbb4c', lw);
+  } else {   // 키위
+    circ(c, 0, 0, 0.97); fs(c, '#a3793a', lw);
+    circ(c, 0, 0, 0.8); c.fillStyle = '#8ee04b'; c.fill();
+    circ(c, 0, 0, 0.56); c.fillStyle = '#b9ee6a'; c.fill();
+    for (let i = 0; i < 12; i++) { const a = i * TAU / 12; line(c, Math.cos(a) * 0.2, Math.sin(a) * 0.2, Math.cos(a) * 0.56, Math.sin(a) * 0.56, lw * 0.6, 'rgba(255,255,255,0.5)'); }
+    ell(c, 0, 0, 0.22, 0.22, 0); c.fillStyle = '#fffbd0'; c.fill();
+    for (let i = 0; i < 10; i++) { const a = i * TAU / 10 + 0.15; ell(c, Math.cos(a) * 0.44, Math.sin(a) * 0.44, 0.045, 0.1, a + Math.PI / 2); c.fillStyle = INK; c.fill(); }
+    c.beginPath(); c.arc(0, 0, 0.88, Math.PI * 1.1, Math.PI * 1.45); stroke(c, lw * 1.4, 'rgba(255,255,255,0.5)');
+  }
+  c.restore();
+}
+
+// =====================================================================
+// CARDS: 220 x 118 logical, cream with an ink border; no number is printed (counting is the game). A golden card has a gold frame and sparkles.
+// =====================================================================
+function drawCard(c, x, y, w, h, rot, card, o) {
+  o = o || {};
+  c.save(); c.translate(x, y); if (rot) c.rotate(rot);
+  const k = w / 220, r = 13 * k, t = o.t || 0;
+  if (o.sx !== undefined) c.scale(o.sx, 1);
+  if (o.sc !== undefined) c.scale(o.sc, o.sc);
+  if (o.alpha !== undefined) c.globalAlpha = o.alpha;
+  c.shadowColor = 'rgba(0,0,0,0.3)'; c.shadowBlur = 8 * k; c.shadowOffsetY = 4 * k;
+  if (card && card.star) {
+    rrect(c, -w / 2 - 6 * k, -h / 2 - 6 * k, w + 12 * k, h + 12 * k, r + 5 * k);
+    const g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); g.addColorStop(0, '#fff3a0'); g.addColorStop(0.5, '#ffcf40'); g.addColorStop(1, '#e8a317');
+    fs(c, g, 3 * k);
+  }
+  c.shadowColor = 'transparent';
+  rrect(c, -w / 2, -h / 2, w, h, r);
+  const gr = c.createLinearGradient(0, -h / 2, 0, h / 2); gr.addColorStop(0, '#fffaf0'); gr.addColorStop(1, '#ffe9c0');
+  fs(c, gr, 3 * k);
+  rrect(c, -w / 2 + 6 * k, -h / 2 + 6 * k, w - 12 * k, h - 12 * k, r - 5 * k); stroke(c, 1.5 * k, 'rgba(160,110,60,0.35)');
+  if (card) {
+    const fr = []; for (let f = 0; f < FRUITS; f++) if (card.c[f] > 0) fr.push(f);
+    const rows = fr.length, sp = (w - 44 * k) / 4, s = sp * (rows === 1 ? 0.54 : 0.46);
+    fr.forEach((f, ri) => {
+      const n = card.c[f], ry = rows === 1 ? 0 : (ri === 0 ? -0.235 : 0.235) * h;
+      for (let i = 0; i < n; i++) {
+        const id = (o.id || 0) * 17 + f * 5 + i;
+        if (o.hiF === f) { circ(c, (i - (n - 1) / 2) * sp, ry, s * 1.28); c.fillStyle = 'rgba(61,220,132,0.55)'; c.fill(); stroke(c, 2 * k, '#3ddc84'); }
+        drawFruit(c, f, (i - (n - 1) / 2) * sp + (hash(id * 3.1) - 0.5) * 3 * k, ry + (hash(id * 7.7) - 0.5) * 4 * k, s, (hash(id * 1.9) - 0.5) * 0.4);
+      }
+    });
+  }
+  if (card && card.star) {
+    star5(c, -w / 2 + 16 * k, -h / 2 + 16 * k, 10 * k, 0); fs(c, '#ffe14a', 2 * k);
+    star5(c, w / 2 - 16 * k, h / 2 - 16 * k, 10 * k, 0); fs(c, '#ffe14a', 2 * k);
+    for (let i = 0; i < 4; i++) {
+      const tw = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.7), cx = (i % 2 ? 1 : -1) * (w / 2 + 3 * k), cy = (i < 2 ? -1 : 1) * (h / 2 + 3 * k);
+      sparkle(c, cx, cy, (4 + 6 * tw) * k, '#fffbe0', 0.5 + 0.5 * tw);
+    }
+  }
+  c.restore();
+}
+
+// =====================================================================
+// THE BELL: a brass hand bell on a coloured plate. Origin = the middle of the plate's bottom edge, the dome grows toward -y (about 82 units tall).
+// o: { dark, light, press (0..1 plunger), squash, rock, locked, key }
+// =====================================================================
+function drawBell(c, o) {
+  const press = o.press || 0, sq = o.squash || 0;
+  rrect(c, -56, -17, 112, 17, 8); fs(c, o.dark, 3);
+  rrect(c, -50, -14.5, 100, 5, 2.5); c.fillStyle = o.light; c.globalAlpha = 0.55; c.fill(); c.globalAlpha = 1;
+  if (o.key) { c.font = '11px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = 'rgba(255,255,255,0.9)'; c.fillText(o.key, 0, -5); }
+  c.save(); c.translate(0, -16); c.rotate(o.rock || 0); c.scale(1 + sq * 0.07, 1 - sq * 0.13);
+  const by = -58 + press * 8;
+  rrect(c, -4.5, by, 9, -49 - by, 2); fs(c, '#b8780f', 2.2);
+  c.beginPath(); c.moveTo(-47, 0); c.bezierCurveTo(-47, -35, -26, -50, 0, -50); c.bezierCurveTo(26, -50, 47, -35, 47, 0); c.closePath();
+  const g = c.createLinearGradient(-47, 0, 47, 0);
+  g.addColorStop(0, '#d98e10'); g.addColorStop(0.2, '#ffe27a'); g.addColorStop(0.38, '#fff6b0'); g.addColorStop(0.55, BRASS); g.addColorStop(1, '#c9840e');
+  fs(c, g, 3);
+  if (o.locked) { c.save(); c.clip(); c.fillStyle = 'rgba(110,110,140,0.62)'; c.fillRect(-50, -52, 100, 54); c.restore(); }
+  c.beginPath(); c.moveTo(-34, -6); c.quadraticCurveTo(-37, -30, -17, -41); stroke(c, 4, 'rgba(255,255,255,0.7)');
+  rrect(c, -51, -9, 102, 10, 5); fs(c, o.locked ? '#8d8aa0' : '#e8a317', 2.6);
+  ell(c, 0, by, 11, 6.6, 0); fs(c, o.locked ? '#a7a4b8' : '#ffe27a', 2.4);
+  ell(c, -3, by - 1.8, 4, 1.8, -0.2); c.fillStyle = 'rgba(255,255,255,0.75)'; c.fill();
+  c.restore();
+}
+
+// =====================================================================
+// THE ANIMALS. Station origin = the bell's base; the head is centred 116 units up. Both are chubby busts with the same face layout:
+// big ink-oval eyes (a sixth of the head wide) with a white highlight, a small nose, a philtrum line and a "ᴗ" smile under it, round blush cheeks.
+// Squirrel 다람이: orange-brown, tall ears with tufts, cream muzzle, two buck teeth, a big fluffy tail. Hedgehog 고슴이: lavender quills with a
+// jagged fringe, cream face and belly, tiny round ears under the fringe, a bigger round nose.
+// =====================================================================
+const SQ = { fur: '#e8913a', dark: '#b3601f', cream: '#ffe9c4', ear: '#f7b9a0' };
+const HG = { quill: '#6a7fe0', quillD: '#4a5cc4', quillL: '#9cabf5', face: '#ffe3c4', mask: '#fff2e0', ear: '#f7b9a0' };
+const HEAD_Y = -120;
+function spikeRing(c, cx, cy, rx, ry, a0, a1, n, depth) {   // a zig-zag ring of rounded quills
+  c.beginPath();
+  for (let i = 0; i <= n * 2; i++) {
+    const a = a0 + (a1 - a0) * i / (n * 2), out = i % 2 === 0, k = out ? 1 : 1 - depth;
+    const x = cx + Math.cos(a) * rx * k, y = cy + Math.sin(a) * ry * k;
+    if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+  }
+  c.closePath();
+}
+function drawEyes(c, expr, ex, ey, look, blink, skin) {
+  const lk = look * 1.6;
+  for (const sd of [-1, 1]) {
+    const x = sd * ex;
+    if (expr === 'win') { c.beginPath(); c.moveTo(x - 5.5, ey + 3); c.quadraticCurveTo(x, ey - 6, x + 5.5, ey + 3); stroke(c, 3, INK); }
+    else if (expr === 'oops') { c.beginPath(); c.moveTo(x - sd * 5, ey - 5); c.lineTo(x + sd * 3.5, ey); c.lineTo(x - sd * 5, ey + 5); stroke(c, 3, INK); }
+    else if (expr === 'sleepy' || blink) { c.beginPath(); c.moveTo(x - 5.5, ey + 1); c.quadraticCurveTo(x, ey + 6, x + 5.5, ey + 1); stroke(c, 2.8, INK); }
+    else {
+      const big = expr === 'ready', rx = big ? 6.2 : 5.2, ry = big ? 8.2 : 6.6;
+      ell(c, x + lk * 0.6, ey, rx, ry, 0); c.fillStyle = INK; c.fill();
+      circ(c, x + lk * 0.6 - 1.7, ey - 2.4, big ? 2.4 : 1.9); c.fillStyle = '#fff'; c.fill();
+      circ(c, x + lk * 0.6 + 1.9, ey + 2.6, 1); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill();
+      if (expr === 'late') { c.save(); c.beginPath(); c.rect(x - 8, ey - 9, 16, 8.5); c.clip(); c.fillStyle = skin; c.fillRect(x - 8, ey - 9, 16, 9); c.restore(); line(c, x - 6, ey - 0.5, x + 6, ey - 0.5, 2.2, INK); }
+    }
+  }
+}
+function drawMouth(c, expr, my, teeth, nose) {
+  if (expr === 'win') {
+    c.beginPath(); c.moveTo(-10, my - 3); c.quadraticCurveTo(0, my + 20, 10, my - 3); c.closePath(); c.fillStyle = '#7a1f3a'; c.fill();
+    c.save(); c.clip(); ell(c, 0, my + 9.5, 6, 4.5, 0); c.fillStyle = '#ff8fa6'; c.fill(); c.restore();
+    c.beginPath(); c.moveTo(-10, my - 3); c.quadraticCurveTo(0, my + 20, 10, my - 3); c.closePath(); stroke(c, 2.2, INK);
+    if (teeth) { rrect(c, -4, my - 3, 8, 4.5, 1); fs(c, '#fff', 1.4); }
+    return;
+  }
+  line(c, 0, my - 5, 0, my - 1.5, 2, INK);
+  if (expr === 'ready') { ell(c, 0, my + 3, 3.1, 3.8, 0); fs(c, '#7a1f3a', 2); }
+  else if (expr === 'oops') { c.beginPath(); c.moveTo(-8, my + 3); c.quadraticCurveTo(-4, my - 2, 0, my + 2); c.quadraticCurveTo(4, my + 6, 8, my + 1); stroke(c, 2.4, INK); }
+  else if (expr === 'late') { c.beginPath(); c.moveTo(-5.5, my + 4); c.quadraticCurveTo(0, my - 1, 5.5, my + 4); stroke(c, 2.4, INK); }
+  else if (expr === 'sleepy') { ell(c, 0, my + 2.5, 2.4, 2, 0); fs(c, '#7a1f3a', 1.8); }
+  else {
+    if (teeth) { rrect(c, -3.6, my - 0.2, 7.2, 5.4, 1.4); fs(c, '#fff', 1.5); }
+    c.beginPath(); c.moveTo(-7, my - 0.5); c.quadraticCurveTo(0, my + 8, 7, my - 0.5); stroke(c, 2.5, INK);
+  }
+}
+// the head, centred on (0,0); who 0 squirrel / 1 hedgehog; o: { expr, look, blink }
+function drawHead(c, who, o) {
+  const expr = o.expr || 'idle', blink = !!o.blink, look = o.look || 0;
+  if (who === 0) {
+    for (const sd of [-1, 1]) {   // ears with a dark tuft
+      c.save(); c.translate(sd * 26, -24); c.rotate(sd * 0.28);
+      ell(c, 0, 0, 12, 18, 0); fs(c, SQ.fur, 2.8);
+      ell(c, 0, 2, 6.5, 11, 0); c.fillStyle = SQ.ear; c.fill();
+      c.beginPath(); c.moveTo(-5, -14); c.lineTo(0, -27); c.lineTo(5, -14); c.closePath(); fs(c, SQ.dark, 2.2);
+      c.restore();
+    }
+    ell(c, 0, 0, 38, 33, 0); fs(c, SQ.fur, 3);
+    ell(c, -14, -17, 14, 6, -0.5); c.fillStyle = 'rgba(255,255,255,0.22)'; c.fill();
+    ell(c, 0, 10, 23, 16.5, 0); c.fillStyle = SQ.cream; c.fill();
+    for (const sd of [-1, 1]) { ell(c, sd * 27, 9, 6.5, 4.4, 0); c.fillStyle = 'rgba(255,110,130,0.55)'; c.fill(); }
+    drawEyes(c, expr, 15, -2, look, blink, SQ.fur);
+    ell(c, 0, 5.8, 4.6, 3.4, 0); fs(c, INK, 0); ell(c, -1.2, 4.8, 1.5, 0.9, 0); c.fillStyle = 'rgba(255,255,255,0.7)'; c.fill();
+    drawMouth(c, expr, 14, true);
+  } else {
+    for (const sd of [-1, 1]) { circ(c, sd * 33, -9, 9.5); fs(c, HG.face, 2.8); circ(c, sd * 33, -9, 5); c.fillStyle = HG.ear; c.fill(); }
+    ell(c, 0, 0, 38, 33, 0); fs(c, HG.face, 3);
+    ell(c, 0, 8, 26, 21, 0); c.fillStyle = HG.mask; c.fill();
+    // jagged quill fringe over the forehead: one closed shape (spiky top edge, ragged lower edge) with a single outline
+    c.beginPath();
+    const n = 8, a0 = Math.PI * 1.07, a1 = Math.PI * 1.93;
+    for (let i = 0; i <= n * 2; i++) { const a = a0 + (a1 - a0) * i / (n * 2), k = i % 2 === 0 ? 1.2 : 1.0; const x = Math.cos(a) * 38.5 * k, y = Math.sin(a) * 33.5 * k; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); }
+    for (let i = n * 2; i >= 0; i--) { const x = 35 * (i / n - 1), y = -13 + (i % 2 ? 4.5 : -0.5) + Math.abs(x) * 0.12; c.lineTo(x, y); }
+    c.closePath(); fs(c, HG.quill, 3);
+    c.beginPath(); c.moveTo(-16, -27); c.lineTo(-10, -20); c.moveTo(0, -31); c.lineTo(5, -23); c.moveTo(16, -27); c.lineTo(22, -20); stroke(c, 2, HG.quillL);
+    for (const sd of [-1, 1]) { ell(c, sd * 27, 11, 6.5, 4.4, 0); c.fillStyle = 'rgba(255,110,130,0.5)'; c.fill(); }
+    drawEyes(c, expr, 14, 0, look, blink, HG.face);
+    ell(c, 0, 8.5, 6.2, 4.6, 0); fs(c, INK, 0); ell(c, -1.8, 7, 2.2, 1.3, -0.3); c.fillStyle = 'rgba(255,255,255,0.7)'; c.fill();
+    drawMouth(c, expr, 15, false);
+  }
+  if (expr === 'oops') {   // a sweat drop
+    c.save(); c.translate(34, -16); c.beginPath(); c.moveTo(0, -8); c.quadraticCurveTo(6.5, 1, 0, 5); c.quadraticCurveTo(-6.5, 1, 0, -8); fs(c, '#9ad7ff', 1.8); c.restore();
+  }
+}
+// 2-bone arm from the shoulder to a paw target; the elbow bends outward (side = -1 left arm, +1 right arm)
+function armTo(c, sx, sy, tx, ty, side, fur, thick) {
+  const l1 = 29, l2 = 29;
+  let dx = tx - sx, dy = ty - sy, d = Math.hypot(dx, dy); const dm = Math.min(d, (l1 + l2) * 0.985);
+  if (d > 0) { dx *= dm / d; dy *= dm / d; tx = sx + dx; ty = sy + dy; d = dm; }
+  const a = (d * d + l1 * l1 - l2 * l2) / (2 * d || 1), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  const ux = dx / (d || 1), uy = dy / (d || 1);
+  let px = -uy * side, py = ux * side; if (px * side < 0) { px = -px; py = -py; }
+  const ex = sx + ux * a + px * h, ey = sy + uy * a + py * h;
+  c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.lineTo(tx, ty); stroke(c, thick + 5, INK); c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.lineTo(tx, ty); stroke(c, thick, fur);
+  circ(c, tx, ty, 9); fs(c, fur, 2.6);
+  for (const q of [-3.4, 0, 3.4]) { c.beginPath(); c.moveTo(tx + q, ty + 1); c.lineTo(tx + q * 1.1, ty + 5.5); stroke(c, 1.3, 'rgba(43,27,46,0.55)'); }
+}
+// paw pose of the slapping (right) arm: s.pawT = seconds since the ring (-1 = none), s.wind = 0..1 for the CPU's paw rising before a ring
+const PAW_REST = [40, -33], PAW_WIND = [60, -118], PAW_HIT = [14, -76];
+function pawPos(s) {
+  let t = s.pawT;
+  if (t >= 0) {
+    if (s.pawFrom) t += 0.05;                       // the paw was already up: skip the raise
+    if (t < 0.05) return mixP(PAW_REST, PAW_WIND, easeOut(t / 0.05));
+    if (t < 0.1) return mixP(PAW_WIND, PAW_HIT, (t - 0.05) / 0.05);
+    if (t < 0.22) return PAW_HIT;
+    if (t < 0.45) return mixP(PAW_HIT, PAW_REST, easeOut((t - 0.22) / 0.23));
+    return PAW_REST;
+  }
+  return s.wind > 0 ? mixP(PAW_REST, PAW_WIND, easeOut(Math.min(1, s.wind))) : PAW_REST;
+}
+function pressOf(s) { let t = s.pawT; if (t < 0) return 0; if (s.pawFrom) t += 0.05; return t >= 0.09 && t < 0.3 ? 1 - clamp((t - 0.2) / 0.1, 0, 1) * 0.6 : 0; }
+function mixP(a, b, k) { return [lerp(a[0], b[0], k), lerp(a[1], b[1], k)]; }
+// who: 0|1; s: the side's animation state; o: { dark, light, key, locked, expr }
+function drawStation(c, who, s, o) {
+  const wob = Math.sin(V.clock * 2 + who * 1.7);
+  const sq = s.squash;
+  // back layer: tail / quills
+  if (who === 0) {
+    c.save(); c.translate(-62, -60 + wob * 1.5); c.rotate(-0.25 + wob * 0.04);
+    c.beginPath(); c.moveTo(14, 8); c.bezierCurveTo(-30, 20, -52, -22, -34, -62); c.bezierCurveTo(-26, -78, -2, -70, -2, -46); c.bezierCurveTo(-8, -28, 6, -14, 14, -10); c.closePath(); fs(c, SQ.fur, 3);
+    c.beginPath(); c.moveTo(-8, -62); c.bezierCurveTo(-30, -66, -42, -40, -30, -18); stroke(c, 4, SQ.dark);
+    c.beginPath(); c.moveTo(-14, -52); c.bezierCurveTo(-26, -46, -26, -34, -20, -26); stroke(c, 3, SQ.cream);
+    c.restore();
+  } else {
+    spikeRing(c, 0, -88, 80, 76, Math.PI * 0.86, Math.PI * 2.14, 14, 0.2); fs(c, HG.quill, 3);
+    spikeRing(c, 0, -88, 66, 62, Math.PI * 1.05, Math.PI * 1.95, 10, 0.12); c.fillStyle = HG.quillD; c.globalAlpha = 0.35; c.fill(); c.globalAlpha = 1;
+  }
+  // body
+  ell(c, 0, -44, 62, 42, 0); fs(c, who === 0 ? SQ.fur : HG.face, 3);
+  if (who === 0) { ell(c, 0, -38, 36, 30, 0); c.fillStyle = SQ.cream; c.fill(); } else { ell(c, 0, -38, 40, 30, 0); c.fillStyle = HG.mask; c.fill(); }
+  // head
+  c.save(); c.translate(0, HEAD_Y + Math.sin(V.clock * 2.3 + who) * 0.8 - s.jump * 0.0); c.rotate(s.tilt || 0);
+  drawHead(c, who, { expr: o.expr, look: s.look, blink: s.blink > 0 });
+  c.restore();
+  // bell
+  drawBell(c, { dark: o.dark, light: o.light, key: o.key, locked: o.locked, press: pressOf(s), squash: sq, rock: s.rock });
+  // arms: the left one rests on the bell, the right one slaps
+  const fur = who === 0 ? SQ.fur : HG.face;
+  armTo(c, -49, -64, -40, -33 + (o.expr === 'win' ? -26 : 0), -1, fur, 14);
+  const pp = pawPos(s);
+  armTo(c, 49, -64, pp[0], pp[1] + (o.expr === 'win' && s.pawT < 0 ? -40 : 0), 1, fur, 14);
+}
+
+// =====================================================================
+// SCENE: background (cached), table, the 땡 숫자 sign, HUD, effects
+// =====================================================================
+const bgCv = document.createElement('canvas');
+function paintBg() {
+  const L = LAY, W = L.W, H = L.H, dpr = L.dpr;
+  bgCv.width = Math.round(W * dpr); bgCv.height = Math.round(H * dpr);
+  const c = bgCv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const facing = L.mode === 'facing';
+  const zone = (x, y, w, h, c1, c2, vert) => {
+    const g = vert ? c.createLinearGradient(0, y, 0, y + h) : c.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, c1); g.addColorStop(1, c2);
+    c.fillStyle = g; c.fillRect(x, y, w, h);
+  };
+  // the two halves (P1 warm orange, P2 cool lavender); in the facing layout P2 is the top half
+  if (facing) { zone(0, H / 2, W, H / 2, '#ffcf8a', '#f2a043', true); zone(0, 0, W, H / 2, '#8aa4ff', '#b8c6ff', true); }
+  else { zone(0, 0, W / 2, H, '#ffcf8a', '#f2a043', false); zone(W / 2, 0, W / 2, H, '#a9bbff', '#8aa4ff', false); }
+  c.fillStyle = 'rgba(255,255,255,0.1)';
+  for (let y = 10, r = 0; y < H; y += 26, r++) for (let x = (r % 2) * 13 + 6; x < W; x += 26) { c.beginPath(); c.arc(x, y, 2.6, 0, TAU); c.fill(); }
+  // the felt table
+  const fx = facing ? -8 : W * 0.31, fy = facing ? L.bandY : -8, fw = facing ? W + 16 : W * 0.38, fh = facing ? L.bandH : H + 16;
+  const g = c.createLinearGradient(fx, fy, facing ? fx : fx + fw, facing ? fy + fh : fy); g.addColorStop(0, '#2f9e6b'); g.addColorStop(0.5, '#34b077'); g.addColorStop(1, '#237a52');
+  c.fillStyle = g; c.fillRect(fx, fy, fw, fh);
+  c.save(); c.beginPath(); c.rect(fx, fy, fw, fh); c.clip();
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1.5;
+  for (let i = -fh; i < fw + fh; i += 30) { c.beginPath(); c.moveTo(fx + i, fy); c.lineTo(fx + i + fh, fy + fh); c.moveTo(fx + i + fh, fy); c.lineTo(fx + i, fy + fh); c.stroke(); }
+  // each half of the felt takes a hint of its player's colour: the half you tap is the half that is yours
+  c.fillStyle = 'rgba(255,180,84,0.2)'; if (facing) c.fillRect(fx, H / 2, fw, fh / 2); else c.fillRect(fx, fy, fw / 2, fh);
+  c.fillStyle = 'rgba(138,164,255,0.2)'; if (facing) c.fillRect(fx, fy, fw, H / 2 - fy); else c.fillRect(fx + fw / 2, fy, fw / 2, fh);
+  c.restore();
+  c.strokeStyle = INK; c.lineWidth = 4; c.beginPath();
+  if (facing) { c.moveTo(0, fy); c.lineTo(W, fy); c.moveTo(0, fy + fh); c.lineTo(W, fy + fh); } else { c.moveTo(fx, 0); c.lineTo(fx, H); c.moveTo(fx + fw, 0); c.lineTo(fx + fw, H); }
+  c.stroke();
+  c.strokeStyle = 'rgba(255,244,220,0.65)'; c.lineWidth = 2; c.beginPath();
+  if (facing) { c.moveTo(0, fy + 5); c.lineTo(W, fy + 5); c.moveTo(0, fy + fh - 5); c.lineTo(W, fy + fh - 5); } else { c.moveTo(fx + 5, 0); c.lineTo(fx + 5, H); c.moveTo(fx + fw - 5, 0); c.lineTo(fx + fw - 5, H); }
+  c.stroke();
+  c.setLineDash([10, 9]); c.strokeStyle = 'rgba(255,244,220,0.3)'; c.lineWidth = 2; c.beginPath();
+  if (facing) { c.moveTo(0, H / 2); c.lineTo(W, H / 2); } else { c.moveTo(W / 2, 0); c.lineTo(W / 2, H); }
+  c.stroke(); c.setLineDash([]);
+}
+
+// the school-bell sign "땡 숫자": a brass plaque with the number and that many tiny bells
+function drawSign(c, sg, n) {
+  c.save(); c.translate(sg.x, sg.y); c.rotate(sg.rot); const u = sg.u; c.scale(u, u);
+  const w = 66, h = 86;
+  rrect(c, -w / 2, -h / 2, w, h, 12);
+  const g = c.createLinearGradient(0, -h / 2, 0, h / 2); g.addColorStop(0, '#fff0a0'); g.addColorStop(0.5, '#ffd23f'); g.addColorStop(1, '#e8a317');
+  c.shadowColor = 'rgba(0,0,0,0.3)'; c.shadowBlur = 6; c.shadowOffsetY = 3; fs(c, g, 3); c.shadowColor = 'transparent';
+  rrect(c, -w / 2 + 5, -h / 2 + 5, w - 10, h - 10, 8); stroke(c, 1.5, 'rgba(120,70,0,0.45)');
+  for (const q of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { circ(c, q[0] * (w / 2 - 8), q[1] * (h / 2 - 8), 2); c.fillStyle = '#a56a0a'; c.fill(); }
+  c.font = '13px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK; c.fillText('땡 숫자', 0, -h / 2 + 15);
+  outText(c, String(n), 0, 3, 46, CREAM, 6, INK, FONT_D);
+  const rows = n > 5 ? [Math.ceil(n / 2), Math.floor(n / 2)] : [n];
+  rows.forEach((cnt, ri) => { for (let i = 0; i < cnt; i++) { const x = (i - (cnt - 1) / 2) * 9, y = h / 2 - 12 + (ri - (rows.length - 1) / 2) * 7.5; circ(c, x, y, 3.1); fs(c, '#fff6b0', 1.4); } });
+  c.restore();
+}
+
+function pipPos(p, i) {   // screen position of score pip i of player p
+  const h = LAY.hud[p], hu = h.u, w = h.w / hu, lx = (w / 2 - 15 - (3 - i) * 27) * hu, ly = 0, cs = Math.cos(h.rot), sn = Math.sin(h.rot);
+  return { x: h.x + lx * cs - ly * sn, y: h.y + lx * sn + ly * cs };
+}
+function trailingBonus(p) {   // seconds the judging window gives player p right now (shown as "+0.20초 도와줘요")
+  const m = V.m; if (!m || m.phase !== 'play') return 0;
+  return m.catch * Math.min(3, leadOf(m, 1 - p));
+}
+function drawHud(c, p) {
+  const h = LAY.hud[p], hu = h.u, w = h.w / hu, m = V.m;
+  c.save(); c.translate(h.x, h.y); c.rotate(h.rot); c.scale(hu, hu);
+  const col = p === 0 ? P1C : P2C;
+  rrect(c, -w / 2, -23, w, 46, 15); c.fillStyle = 'rgba(43,27,46,0.82)'; c.fill(); stroke(c, 3, col);
+  // face badge
+  c.save(); c.translate(-w / 2 + 25, 0); circ(c, 0, 0, 18); c.fillStyle = p === 0 ? '#ffd9a0' : '#d3dcff'; c.fill(); c.save(); c.clip();
+  c.translate(0, 4); c.scale(0.44, 0.44); drawHead(c, p, { expr: V.S[p].face === 'win' ? 'win' : 'idle', look: 0 }); c.restore();
+  circ(c, 0, 0, 18); stroke(c, 2.5, INK); c.restore();
+  const name = V.duo ? NAMES[p] : (p === 0 ? NAMES[0] : '컴퓨터');
+  c.font = '17px ' + FONT_D; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = CREAM; c.fillText(name, -w / 2 + 50, -8);
+  const need = m ? Math.ceil(m.bestOf / 2) : 2;
+  for (let i = 0; i < need; i++) { const on = m && m.wins[p] > i; star5(c, -w / 2 + 57 + i * 17, 11, 7.4, 0); fs(c, on ? '#ffe14a' : 'rgba(255,255,255,0.12)', 1.6); }
+  for (let i = 0; i < WIN_SCORE; i++) {
+    const x = w / 2 - 15 - (3 - i) * 27, on = V.dispScore[p] > i, pop = V.S[p].pipPop && V.S[p].pipI === i ? 1 + V.S[p].pipPop * 0.45 : 1;
+    c.save(); c.translate(x, 0); c.scale(pop, pop);
+    circ(c, 0, 0, 10.5);
+    if (on) { const g = c.createRadialGradient(-3, -3, 1, 0, 0, 11); g.addColorStop(0, '#fff6b0'); g.addColorStop(1, '#e8a317'); fs(c, g, 2.4); circ(c, 0, 0, 6); stroke(c, 1.3, 'rgba(160,100,10,0.7)'); }
+    else fs(c, 'rgba(255,255,255,0.1)', 2.2);
+    c.restore();
+  }
+  const bonus = trailingBonus(p);
+  if (bonus >= 0.095) {   // the judging window is helping this (trailing) player
+    c.font = '12.5px ' + FONT_B; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#bfe3ff';
+    c.fillText('+' + bonus.toFixed(2) + '초 도와줘요', -w / 2 + 96, 11);
+  }
+  c.restore();
+}
+
+// ---------- table cards ----------
+function drawTable(c) {
+  const L = LAY, t = V.clock;
+  for (let p = 0; p < 2; p++) {   // empty slots: dashed outlines
+    const sl = L.slot[p];
+    c.save(); c.translate(sl.x, sl.y); c.rotate(sl.rot);
+    rrect(c, -sl.w / 2, -sl.h / 2, sl.w, sl.h, 13 * L.cu); c.setLineDash([8, 7]); stroke(c, 2, 'rgba(255,244,220,0.28)', 'butt'); c.setLineDash([]);
+    c.restore();
+  }
+  const dissolve = V.collect;
+  for (let p = 0; p < 2; p++) {
+    const sl = L.slot[p], sh = V.shown[p];
+    if (!sh) continue;
+    const o = { id: sh.id, t };
+    let x = sl.x, y = sl.y;
+    const k = reduceMotion ? 1 : clamp(sh.age / 0.16, 0, 1);
+    if (k < 1) {
+      const e = easeOut(k); o.sx = Math.max(0.04, e); const d = (1 - e) * 46 * L.cu;
+      if (L.mode === 'facing') y += (p === 0 ? 1 : -1) * d; else x += (p === 0 ? -1 : 1) * d;
+    }
+    if (reduceMotion) o.alpha = clamp(sh.age / 0.06, 0, 1);
+    if (dissolve && dissolve.items[p]) continue;
+    if (V.missT > 0) { o.alpha = 0.85; y += Math.sin(V.missT * 18) * 1.5; }
+    drawCard(c, x, y, sl.w, sl.h, sl.rot, sh.card, o);
+  }
+  if (dissolve) {   // the winning pair pops (the matching fruit glows), then shrinks toward the winner's score pips
+    const u = clamp(dissolve.t / 0.55, 0, 1), tp = pipPos(dissolve.w, 0), g = clamp((u - 0.3) / 0.7, 0, 1), ge = g * g;
+    for (let p = 0; p < 2; p++) {
+      const it = dissolve.items[p]; if (!it) continue;
+      const sl = L.slot[p], pop = u < 0.3 ? 1 + 0.1 * Math.sin(u / 0.3 * Math.PI / 2) : 1.1 * Math.pow(1 - ge, 1.6) + 0.12 * ge;
+      c.save(); c.globalAlpha = reduceMotion ? 1 - u : clamp(1 - Math.max(0, g - 0.55) / 0.45, 0, 1);
+      drawCard(c, lerp(sl.x, tp.x, ge), lerp(sl.y, tp.y, ge), sl.w, sl.h, sl.rot, it.card, { id: it.id, t, sc: pop, hiF: dissolve.f });
+      c.restore();
+    }
+  }
+  const n = V.target;
+  for (const sg of L.sign) drawSign(c, sg, n);
+}
+
+// ---------- effects ----------
+function stationTransform(c, p) { const s = LAY.st[p]; c.translate(s.x, s.y); c.rotate(s.rot); c.scale(s.S, s.S); }
+function drawFx(c) {
+  const L = LAY;
+  for (const w of V.waves) {   // bell ripples + the floating 땡
+    const k = w.t / 0.7; if (k >= 1) continue;
+    c.save(); stationTransform(c, w.p);
+    for (let i = 0; i < 2; i++) {
+      const kk = clamp(k * 1.25 - i * 0.2, 0, 1); if (kk <= 0 || kk >= 1) continue;
+      ell(c, 0, -52, 30 + kk * 62, 22 + kk * 40, 0); stroke(c, 4 * (1 - kk) + 1, 'rgba(255,246,176,' + (0.85 * (1 - kk)) + ')');
+    }
+    if (k < 0.8 && !w.quiet) outText(c, '땡', 84 * (w.p === 0 ? 1 : 1), -92 - k * 22, 30 + 6 * Math.sin(k * 6), BRASS, 5, INK, FONT_D, (w.p ? -0.2 : 0.2) + Math.sin(k * 20) * 0.1);
+    c.restore();
+  }
+  for (const q of V.S) {   // bell lock timer: a red bar under the bell's plate that drains while the bell is locked
+    const m = V.m; if (!m || m.phase !== 'play') continue;
+    const rem = m.lock[q.p] - m.t; if (rem <= 0) continue;
+    const frac = clamp(rem / (q.lockMax || 0.9), 0, 1);
+    c.save(); stationTransform(c, q.p); rrect(c, -56, 3, 112, 7, 3.5); fs(c, 'rgba(43,27,46,0.8)', 2); rrect(c, -55 + (110 - 110 * frac) / 2, 4.2, 110 * frac, 4.6, 2.3); c.fillStyle = BAD; c.fill(); c.restore();
+  }
+  // tap hint on the bells during the very first countdown
+  if (V.hintT > 0 && !reduceMotion) {
+    const a = clamp(V.hintT, 0, 1);
+    for (let p = 0; p < (V.duo ? 2 : 1); p++) {
+      c.save(); stationTransform(c, p); const k = (V.clock * 1.4) % 1;
+      ell(c, 0, -30, 58 + k * 22, 44 + k * 16, 0); stroke(c, 3, 'rgba(255,255,255,' + (0.75 * (1 - k) * a) + ')');
+      c.globalAlpha = a; outText(c, '내 쪽을', -100, -34, 15, CREAM, 4, INK, FONT_D); outText(c, '탭!', -100, -16, 17, GOLD, 4, INK, FONT_D); c.restore();
+    }
+  }
+  for (const pt of V.parts) {
+    const a = clamp(pt.life / pt.max, 0, 1);
+    c.save(); c.globalAlpha = Math.min(1, a * 1.6); c.translate(pt.x, pt.y); c.rotate(pt.rot);
+    if (pt.k >= 0) drawFruit(c, pt.k, 0, 0, pt.s, 0); else if (pt.k === -2) sparkle(c, 0, 0, pt.s, pt.col, 1); else { circ(c, 0, 0, pt.s * 0.5); c.fillStyle = pt.col; c.fill(); }
+    c.restore();
+  }
+  for (const cn of V.coins) {
+    const u = clamp(cn.t / cn.life, 0, 1), e = easeOut(u), x = lerp(cn.x0, cn.x1, e), y = lerp(cn.y0, cn.y1, e) - Math.sin(u * Math.PI) * 50 * LAY.u, r = (cn.big ? 15 : 11) * LAY.u * (1 - u * 0.3);
+    c.save(); c.translate(x, y); circ(c, 0, 0, r); const g = c.createRadialGradient(-r * 0.3, -r * 0.3, 1, 0, 0, r); g.addColorStop(0, '#fff6b0'); g.addColorStop(1, '#e8a317'); fs(c, g, 2.4); circ(c, 0, 0, r * 0.55); stroke(c, 1.4, 'rgba(160,100,10,0.7)'); c.restore();
+  }
+  for (const pp of V.pops) {
+    const u = pp.t / pp.life, a = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3, sc = u < 0.15 ? 0.6 + easeOutBack(u / 0.15) * 0.4 : 1;
+    c.save(); c.globalAlpha = clamp(a, 0, 1); c.translate(pp.x, pp.y - pp.rise * easeOut(clamp(u, 0, 1)) * (pp.rot ? -1 : 1)); c.rotate(pp.rot); c.scale(sc, sc);
+    outText(c, pp.txt, 0, 0, pp.size, pp.col, Math.max(4, pp.size * 0.2), INK, pp.font || FONT_D);
+    c.restore();
+  }
+  const b = V.banner;
+  if (b) {
+    const u = b.t / b.life, a = u < 0.8 ? 1 : 1 - (u - 0.8) / 0.2, sc = u < 0.12 ? 0.5 + easeOutBack(u / 0.12) * 0.5 : 1 + (b.pulse ? Math.sin(b.t * 6) * 0.02 : 0);
+    for (const an of L.banner) {
+      c.save(); c.globalAlpha = clamp(a, 0, 1); c.translate(an.x, an.y); c.rotate(an.rot); const bu = Math.min(1.2, L.mode === 'facing' ? L.u : Math.max(0.7, L.u)); c.scale(sc * bu, sc * bu);
+      if (b.panel === false) {   // the countdown: big numerals straight on the felt
+        outText(c, b.title, 0, -22, b.size || 80, b.col, 10, INK, FONT_D);
+        if (b.sub) outText(c, b.sub, 0, 34, 22, CREAM, 5, INK, FONT_D);
+        if (b.sub2) outText(c, b.sub2, 0, 60, 15, GOLD, 4, INK, FONT_B);
+      } else {
+        if (b.sub || b.sub2) { rrect(c, -126, -(b.big ? 62 : 44), 252, b.big ? 124 : 88 + (b.sub2 ? 22 : 0), 22); c.fillStyle = 'rgba(43,27,46,0.72)'; c.fill(); stroke(c, 3, b.col); }
+        outText(c, b.title, 0, b.sub ? -(b.big ? 24 : 14) : 0, b.size || 46, b.col, 8, INK, FONT_D);
+        if (b.sub) outText(c, b.sub, 0, b.sub2 ? 22 : 30, 21, CREAM, 5, INK, FONT_D);
+        if (b.sub2) outText(c, b.sub2, 0, 48, 17, GOLD, 4, INK, FONT_B);
+      }
+      c.restore();
+    }
+  }
+}
+
+// ---------- the whole frame ----------
+function sideExpr(p) {
+  const s = V.S[p];
+  if (s.faceT > 0) return s.face;
+  if (p === 1 && !V.duo && V.brain && V.m && V.m.phase === 'play') { const nx = cpuNext(V.brain, V.m); if (nx >= 0 && nx < 0.22) return 'ready'; }
+  return 'idle';
+}
+function render() {
+  const L = LAY, c = ctx, W = L.W, H = L.H;
+  if (bgDirty) { paintBg(); bgDirty = false; }
+  c.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+  c.clearRect(0, 0, W, H);
+  c.save();
+  if (V.shake > 0 && !reduceMotion) c.translate(rv(-1, 1) * V.shake, rv(-1, 1) * V.shake);
+  c.drawImage(bgCv, 0, 0, W, H);
+  for (let p = 0; p < 2; p++) {
+    const s = V.S[p], st = L.st[p], m = V.m;
+    c.save(); c.translate(st.x, st.y); c.rotate(st.rot); c.scale(st.S, st.S);
+    const jump = s.jump > 0 && !reduceMotion ? Math.abs(Math.sin(s.jump * Math.PI * 2.4)) * 16 * Math.min(1, s.jump * 2) : 0;
+    c.translate(0, -jump);
+    const locked = m && m.phase === 'play' && m.lock[p] > m.t;
+    drawStation(c, p, s, { dark: p === 0 ? P1D : P2D, light: p === 0 ? P1C : P2C, key: fine ? (V.duo ? (p === 0 ? 'F' : 'J') : (p === 0 ? 'F' : '')) : '', locked, expr: sideExpr(p) });
+    c.restore();
+  }
+  drawTable(c);
+  for (let p = 0; p < 2; p++) drawHud(c, p);
+  drawFx(c);
+  if (V.flash > 0) { c.fillStyle = rgba(V.flashCol, V.flash * 0.45); c.fillRect(0, 0, W, H); }
+  if (V.resumeT > 0) {   // mini countdown after a pause
+    c.fillStyle = 'rgba(36,8,28,0.45)'; c.fillRect(0, 0, W, H);
+    for (const an of L.banner) outText(c, String(Math.max(1, Math.ceil(V.resumeT / (VIEW.RESUME_T / 3)))), an.x, an.y, 80, GOLD, 10, INK, FONT_D, an.rot);
+  }
+  c.restore();
+}
+
+// =====================================================================
+// SMALL CANVASES: the title mascots and the how-to cards
+// =====================================================================
+function fitCanvas(cv) {   // DPR-aware size for the small DOM canvases (cap 2)
+  const r = cv.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return d;
+}
+const demoSide = [mkSide(0), mkSide(1)];
+function drawMascotTitle(cv, tt) {
+  const d = fitCanvas(cv), c = cv.getContext('2d'), W = cv.width / d, H = cv.height / d;
+  c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, H);
+  const k = Math.min(W / 400, H / 182), base = H - 6 * k;
+  for (let p = 0; p < 2; p++) {
+    const s = demoSide[p], ph = (tt + p * 1.3) % 3.2;
+    s.pawT = ph < 0.4 ? ph : -1; s.squash = ph < 0.3 ? 1 - ph / 0.3 : 0; s.rock = ph < 0.8 ? Math.sin(ph * 30) * 0.1 * (1 - ph / 0.8) : 0; s.wind = 0; s.look = 0; s.jump = 0;
+    s.blink = (tt * 0.9 + p) % 3 < 0.12 ? 1 : 0;
+    c.save(); c.translate(W / 2 + (p ? 1 : -1) * W * 0.25, base); c.scale(k, k);
+    drawStation(c, p, s, { dark: p ? P2D : P1D, light: p ? P2C : P1C, key: '', locked: false, expr: ph < 1.2 ? 'win' : 'idle' });
+    c.restore();
+  }
+  c.save(); c.translate(W / 2, base - 70 * k); c.scale(k, k);
+  for (let i = 0; i < 3; i++) sparkle(c, Math.cos(tt * 2 + i * 2.1) * 26, Math.sin(tt * 2 + i * 2.1) * 12 - 6, 6 + 4 * Math.sin(tt * 5 + i), '#fff6b0', 0.5 + 0.4 * Math.sin(tt * 4 + i));
+  drawFruit(c, Math.floor(tt / 1.6) % 4, 0, -4 + Math.sin(tt * 3) * 3, 20, Math.sin(tt * 2) * 0.2);
+  c.restore();
+}
+function miniBg(c, W, H) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#34b077'); g.addColorStop(1, '#237a52'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1.5;
+  for (let i = -H; i < W + H; i += 24) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + H, H); c.moveTo(i + H, 0); c.lineTo(i, H); c.stroke(); }
+}
+function drawHowTo(cv, i, tt) {
+  const d = fitCanvas(cv), c = cv.getContext('2d'), W = cv.width / d, k = W / 132;
+  c.setTransform(d * k, 0, 0, d * k, 0, 0); const w = 132, h = 88;
+  c.clearRect(0, 0, w, h); miniBg(c, w, h);
+  const ph = (tt % 3) / 3;
+  if (i === 0) {
+    drawCard(c, 34, 40, 62, 33, 0, { c: [2, 0, 1, 0], star: false }, { id: 3, t: tt });
+    drawCard(c, 98, 40, 62, 33, 0, { c: [3, 0, 0, 2], star: false }, { id: 8, t: tt });
+    outText(c, '2 + 3 = 5', 66, 72, 19, ph > 0.5 ? '#fff6b0' : CREAM, 4, INK, FONT_D);
+  } else if (i === 1) {
+    c.save(); c.translate(66, 78); c.scale(0.62, 0.62);
+    drawBell(c, { dark: P1D, light: P1C, press: ph > 0.1 && ph < 0.3 ? 1 : 0, squash: ph > 0.1 && ph < 0.3 ? 0.8 : 0, rock: 0 }); c.restore();
+    if (ph > 0.1) { const kk = clamp((ph - 0.1) / 0.5, 0, 1); ell(c, 66, 46, 14 + kk * 34, 8 + kk * 18, 0); stroke(c, 2.5 * (1 - kk) + 0.5, 'rgba(255,246,176,' + (1 - kk) + ')'); }
+    outText(c, '땡!', 66, 18, 22 + (ph > 0.1 && ph < 0.3 ? 4 : 0), BRASS, 5, INK, FONT_D);
+    drawCard(c, 24, 54, 34, 18, 0, { c: [2, 0, 0, 0], star: true }, { id: 4, t: tt });
+    outText(c, ph > 0.5 ? '+2' : '+1', 108, 56, 17, ph > 0.5 ? '#fff6b0' : CREAM, 4, INK, FONT_D);
+  } else if (i === 2) {
+    c.save(); c.translate(48, 80); c.scale(0.6, 0.6); drawBell(c, { dark: '#8d8aa0', light: '#cfcde0', locked: ph > 0.3, press: 0 }); c.restore();
+    outText(c, '✕', 48, 30, 24, BAD, 5, INK, FONT_D);
+    outText(c, '한 번은', 100, 28, 14, '#ffe14a', 4, INK, FONT_D); outText(c, '봐줘요', 100, 46, 14, '#ffe14a', 4, INK, FONT_D);
+    drawFruit(c, 0, 100, 68, 10, 0); outText(c, '+1', 112, 72, 11, CREAM, 3, INK, FONT_D);
+  } else {
+    for (let q = 0; q < 4; q++) { const on = (ph * 5) > q + 0.4; circ(c, 20 + q * 28, 28, 10); if (on) { const g = c.createRadialGradient(17 + q * 28, 25, 1, 20 + q * 28, 28, 11); g.addColorStop(0, '#fff6b0'); g.addColorStop(1, '#e8a317'); fs(c, g, 2); } else fs(c, 'rgba(255,255,255,0.12)', 2); }
+    const on2 = ph > 0.8;
+    for (let q = 0; q < 2; q++) { star5(c, 50 + q * 32, 62, 11, 0); fs(c, on2 && q === 0 ? '#ffe14a' : 'rgba(255,255,255,0.14)', 2); }
+    outText(c, '4점!', 112, 62, 15, GOLD, 4, INK, FONT_D);
+  }
+}
+function drawResFaces() {
+  const list = el.scrOver.querySelectorAll('canvas.rf');
+  list.forEach((cv) => {
+    const d = fitCanvas(cv), c = cv.getContext('2d'), W = cv.width / d, H = cv.height / d, who = +cv.dataset.who, expr = cv.dataset.expr;
+    c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, H);
+    c.save(); c.translate(W / 2, H / 2 + 4); const k = Math.min(W, H) / 112; c.scale(k, k); c.translate(0, Math.sin(V.clock * 3) * (expr === 'win' ? 3 : 0));
+    drawHead(c, who, { expr, look: 0 }); c.restore();
+  });
+}
+
+// =====================================================================
+// FX helpers
+// =====================================================================
+function spawn(o) { if (V.parts.length < VIEW.MAX_PARTS) { o.max = o.life; V.parts.push(o); } }
+function msgPos(p, dx, dy) {   // a point on player p's message anchor, offset in that player's own (turned) frame
+  const m = LAY.msg[p], r = m.rot, cs = Math.cos(r), sn = Math.sin(r);
+  return { x: m.x + dx * cs - dy * sn, y: m.y + dx * sn + dy * cs, rot: r };
+}
+function popText(p, txt, col, size, life, dx, dy, font) {
+  const q = msgPos(p, dx || 0, dy || 0);
+  V.pops.push({ x: q.x, y: q.y, rot: q.rot, txt, col, size: size * Math.min(1.25, Math.max(0.8, LAY.u)), t: 0, life: life || 1, rise: 26, font });
+}
+function stationMsg(p, txt, col, size, life) {   // a message by player p's own animal: above the head toward the table, or below the bell for an upright CPU on top
+  const st = LAY.st[p], sc = st.S, dy = (p === 1 && st.rot === 0 && LAY.mode === 'facing') ? 40 : -180, r = st.rot, cs = Math.cos(r), sn = Math.sin(r);
+  V.pops.push({ x: st.x - dy * sc * sn, y: st.y + dy * sc * cs, rot: r, txt, col, size: size * Math.min(1.25, Math.max(0.8, LAY.u)), t: 0, life: life || 1, rise: 14 });
+}
+function confetti(n, x, y, spread, up) {
+  if (reduceMotion) n = Math.min(n, 8);
+  for (let i = 0; i < n; i++) {
+    const a = rv(0, TAU), v = rv(60, spread || 260);
+    spawn({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (up || 120), g: 420, rot: rv(0, TAU), vr: rv(-6, 6), life: rv(0.9, 1.6), k: i % 4 === 3 ? -2 : Math.floor(rv(0, 4)), col: ['#fff6b0', '#ff8fa6', '#8aa4ff', '#9bf0a8'][i % 4], s: rv(7, 12) });
+  }
+}
+function ringSide(p, loud, wrong) {
+  const s = V.S[p];
+  s.pawT = 0; s.pawFrom = s.wind > 0.6; s.wind = 0; s.squash = 1; s.rockA = (p ? -1 : 1) * (wrong ? 0.05 : 0.11); s.rockT = 0;
+  if (!wrong) { V.waves.push({ p, t: 0, quiet: !loud }); Sound.ding(p, loud ? 0.22 : 0.08); }
+  buzz(loud ? 12 : 6);
+}
+function setFace(p, f, t) { const s = V.S[p]; s.face = f; s.faceT = t; }
+
+// =====================================================================
+// EVENTS from the logic: sound and juice. Rings themselves come from advance() results (every tap, with its outcome).
+// =====================================================================
+function handleResult(r) {
+  const p = r.who;
+  V.log.push({ who: p, res: r.res, tAt: +r.tAt.toFixed(4) }); if (V.log.length > 120) V.log.shift();
+  if (r.res === 'ok') ringSide(p, true, false);
+  else if (r.res === 'late' || r.res === 'dup') { ringSide(p, false, false); if (r.res === 'late' && (V.duo || p === 0)) stationMsg(p, '늦었어요', '#d9c8ff', 17, 0.8); }
+  else if (r.res === 'forgiven' || r.res === 'wrong') ringSide(p, false, true);
+  else if (r.res === 'locked') { V.S[p].squash = 0.3; Sound.tick(); if (V.duo || p === 0) stationMsg(p, '잠시 잠겼어요', '#ffb1b9', 15, 0.7); }
+}
+function handleEvent(e) {
+  const m = V.m, S = V.S;
+  if (e.k === 'roundStart') {
+    V.target = e.target; V.shown = [null, null]; V.collect = null; V.dispScore = [0, 0]; V.coins.length = 0; V.cdN = 0; V.banner = null; V.missT = 0;
+    V.hintT = e.n === 0 ? 4.5 : 0; V.S.forEach((s) => { s.face = 'idle'; s.faceT = 0; s.lockMax = 0; });
+  } else if (e.k === 'go') {
+    Sound.count(true); V.banner = { title: '땡!', col: GOLD, size: 84, t: 0, life: 0.75, pulse: true };
+    for (const pt of ptrs.values()) pt.stale = true;   // a finger resting on the screen when the 판 starts must lift first
+  } else if (e.k === 'flip') {
+    const card = m.cards[e.p]; V.shown[e.p] = { card: { c: card.c.slice(), star: card.star }, id: ++V.cardId, age: 0 };
+    Sound.flip();
+    if (e.star) { Sound.tone('triangle', 1568, 1568, 0.12, 0.08); }
+    if (!reduceMotion) for (let i = 0; i < 4; i++) spawn({ x: LAY.slot[e.p].x + rv(-50, 50), y: LAY.slot[e.p].y + rv(-20, 20), vx: rv(-40, 40), vy: rv(-30, 10), g: 0, rot: 0, vr: 0, life: 0.35, k: -1, col: 'rgba(255,255,255,0.7)', s: rv(3, 6) });
+  } else if (e.k === 'oops') {
+    const p = e.p; S[p].lockMax = e.forgiven ? 0.4 : 0.9; setFace(p, 'oops', 1.0);
+    if (e.forgiven) { Sound.forgive(); stationMsg(p, '한 번은 봐줘요', '#ffe14a', 21, 1.5); }
+    else {
+      Sound.buzz(); stationMsg(p, '✕', BAD, 44, 0.9);
+      const o = 1 - p, from = LAY.st[p], to = pipPos(o, Math.min(WIN_SCORE - 1, Math.max(0, m.score[o] - 1)));
+      V.coins.push({ x0: from.x, y0: from.y - 40 * from.S * (from.rot ? -1 : 1), x1: to.x, y1: to.y, t: -0.05, life: 0.7, p: o, i: m.score[o] - 1 });
+      setFace(o, 'win', 0.9); stationMsg(o, '+1', '#fff6b0', 34, 1.0);
+    }
+  } else if (e.k === 'assist') {
+    Sound.assist(); stationMsg(e.p, '도와주기 발동!', '#9ad7ff', 24, 1.5);
+  } else if (e.k === 'win') {
+    const p = e.p, o = 1 - p;
+    V.collect = { t: 0, w: p, f: e.fruit, items: [V.shown[0] ? { card: V.shown[0].card, id: V.shown[0].id } : null, V.shown[1] ? { card: V.shown[1].card, id: V.shown[1].id } : null] };
+    if (e.golden) Sound.golden(p); else Sound.correct();
+    const sc = Math.max(0, m.score[p] - e.pts);
+    for (let i = 0; i < e.pts; i++) {
+      const to = pipPos(p, Math.min(WIN_SCORE - 1, sc + i));
+      V.coins.push({ x0: LAY.center.x + (i ? 18 : -6), y0: LAY.center.y, x1: to.x, y1: to.y, t: -0.12 * i - 0.1, life: 0.6, p, i: sc + i, big: e.golden });
+    }
+    setFace(p, 'win', 1.0); setFace(o, 'late', 1.0); V.S[p].jump = 0.7;
+    popText(p, e.golden ? '황금 +2!' : '+1', e.golden ? '#fff6b0' : '#9bf0a8', e.golden ? 40 : 38, 1.1, 0, e.golden ? -4 : 0);
+    if (e.close && !e.assist) popText(p, '아슬아슬!', CREAM, 18, 1.1, 0, 50);
+    if (e.golden) { V.flash = 0.8; V.flashCol = '#ffd23f'; V.shake = 6; confetti(18, LAY.center.x, LAY.center.y, 300); for (let i = 0; i < 12; i++) spawn({ x: LAY.center.x, y: LAY.center.y, vx: rv(-220, 220), vy: rv(-220, 220), g: 0, rot: 0, vr: 0, life: 0.8, k: -2, col: '#fff6b0', s: rv(7, 13) }); }
+    else { V.shake = 3; confetti(8, LAY.center.x, LAY.center.y, 200); }
+    buzz(e.golden ? [20, 30, 20] : 14);
+    el.live.textContent = (p === 0 || V.duo ? NAMES[p] : '컴퓨터') + ' 땡 ' + e.pts + '점';
+  } else if (e.k === 'miss') {
+    V.missT = 0.6; popText(0, '놓쳤어요', '#e6d9ff', 20, 1.0, 0, 20); if (V.duo) popText(1, '놓쳤어요', '#e6d9ff', 20, 1.0, 0, 20);
+    if (!V.duo && V.level === 'easy') setFace(1, 'sleepy', 1.4);
+  } else if (e.k === 'roundEnd') {
+    const w = e.p, name = !V.duo && w === 1 ? '컴퓨터' : NAMES[w], nxt = TARGETS[Math.min(m.roundNo + 1, TARGETS.length - 1)];
+    V.banner = { title: name + ' 승!', sub: m.wins[0] + ' : ' + m.wins[1], sub2: m.phase === 'matchEnd' ? '' : '다음 판 땡 숫자 ' + nxt, col: w ? P2C : P1C, size: 42, t: 0, life: 2.1, big: true };
+    Sound.roundWin(); confetti(26, LAY.st[w].x, LAY.st[w].y - 90, 320); V.S[w].jump = 1.0; setFace(w, 'win', 1.6); setFace(1 - w, 'late', 1.6);
+  } else if (e.k === 'matchEnd') {
+    V.endT = 0; 
+    if (!V.duo && e.p === 1) Sound.lose(); else Sound.matchWin();
+    confetti(40, LAY.st[e.p].x, LAY.st[e.p].y - 100, 420);
+    V.banner = { title: (V.duo ? NAMES[e.p] : (e.p ? '컴퓨터' : '내')) + (V.duo || e.p ? ' 우승!' : ' 승리!'), sub: V.m.wins[0] + ' : ' + V.m.wins[1], col: e.p ? P2C : P1C, size: 46, t: 0, life: VIEW.MATCH_END_T + 0.5, big: true };
+  }
+}
+
+// =====================================================================
+// MATCH FLOW
+// =====================================================================
+function levelHasAssist() { return V.level !== 'hard'; }
+function resetView() {
+  V.shown = [null, null]; V.collect = null; V.coins.length = 0; V.parts.length = 0; V.pops.length = 0; V.waves.length = 0; V.banner = null; V.shake = 0; V.flash = 0; V.missT = 0;
+  V.dispScore = [0, 0]; V.ins.length = 0; V.acc = 0; V.tEnd = 0; V.endT = -1; V.cdN = 0; V.resumeT = 0; V.hintT = 0;
+  V.log.length = 0; V.S = [mkSide(0), mkSide(1)]; V.cnt = [{ wins: 0, wrong: 0 }, { wins: 0, wrong: 0 }];
+  releaseInput();
+}
+function startMatch(duo, seed) {
+  Sound.ensure();
+  const explicit = seed !== undefined && seed !== null;
+  const sd = explicit ? seed | 0 : V.nextSeed;
+  V.matchCount++; V.seed = sd; V.nextSeed = explicit || RUN_SEED !== null ? (sd + 1) | 0 : freshSeed();
+  V.duo = !!duo;
+  resetView();
+  V.m = newMatch(sd, { bestOf: V.bestOf, catch: HANDI[V.handi] }); begin(V.m);
+  V.brain = V.duo ? null : makeBrain(CPU_LEVELS[V.level], { seed: sd, assist: levelHasAssist() ? V.assist : 0, humane: true });
+  V.phase = 'play'; V.paused = false; V.newRecord = false; V.gained = 0; V.overShown = false;
+  V.bestAtStart = readInt(KEY_BEST); V.best = Math.max(V.best, V.bestAtStart);
+  document.body.classList.remove('paused');
+  el.scrTitle.hidden = true; el.scrPause.hidden = true; el.scrOver.hidden = true; el.scrHow.hidden = true;
+  el.btnPause.hidden = false; el.btnMute.hidden = false;
+  layout(); uiMute();
+  for (const e of V.m.ev.splice(0)) handleEvent(e);
+}
+function toTitle() {
+  V.phase = 'title'; V.paused = false; V.duo = false; V.m = null; V.brain = null; resetView();
+  el.btnPause.hidden = true; el.btnMute.hidden = true;
+  el.scrPause.hidden = true; el.scrOver.hidden = true; el.scrHow.hidden = true; el.scrTitle.hidden = false;
+  uiBest(); uiSegs(); layout(); Sound.suspend();
+}
+function finishMatch() {   // the celebration is over: streak, record, result panel
+  const m = V.m; V.phase = 'over'; V.overT = 0; V.overShown = false; V.endT = -1;
+  el.btnPause.hidden = true; el.btnMute.hidden = true;
+  const won = m.winner === 0;
+  if (V.duo) { V.tally[m.winner]++; }
+  else {
+    if (won) { V.gained = LEVEL_PTS[V.level]; V.streak += V.gained; if (levelHasAssist()) V.assist = Math.max(0, V.assist - VIEW.ASSIST_STEP_WIN); }
+    else { V.streak = 0; if (levelHasAssist()) V.assist = Math.min(VIEW.ASSIST_MAX, V.assist + VIEW.ASSIST_STEP_LOSS); }
+    const prev = Math.max(V.bestAtStart, readInt(KEY_BEST));
+    V.newRecord = won && V.streak > prev;
+    if (V.newRecord) { V.best = V.streak; store.set(KEY_BEST, String(V.streak)); Sound.record(); }
+    V.assist = Math.round(V.assist * 100) / 100;
+  }
+  uiBest(); buildOver();
+  el.scrOver.hidden = false;
+}
+function shortTime(s) { s = Math.max(0, Math.round(s)); return s >= 60 ? Math.floor(s / 60) + '분 ' + (s % 60) + '초' : s + '초'; }
+function resPanel(p, who, slim) {   // result panel text for the viewer `who` (0|1); p = class for turning it around
+  const m = V.m, w = m.winner, stats = m.stats;
+  let title, lose = false, face = w, faceExp = 'win';
+  if (V.duo) {
+    if (who === w) title = '이겼어요!'; else { title = '아쉬워요, 한 판 더?'; lose = true; }
+    face = who; faceExp = who === w ? 'win' : 'late';
+  } else {
+    if (w === 0) title = '이겼어요!'; else { title = '아쉬워요, 한 판 더?'; lose = true; }
+    face = w === 0 ? 0 : 1; faceExp = w === 0 ? 'win' : 'win';
+  }
+  const names = V.duo ? NAMES : [NAMES[0], '컴퓨터'];
+  let h = '<div class="card' + (slim ? ' slim' : '') + (p ? ' flip' : '') + '" data-who="' + who + '">';
+  h += '<canvas class="mascot small rf" data-who="' + face + '" data-expr="' + faceExp + '" width="170" height="100" aria-hidden="true"></canvas>';
+  h += '<p class="stamp-end' + (lose ? ' lose' : '') + '" role="status">' + title + '</p>';
+  const mine = V.duo ? who : 0, theirs = 1 - mine;
+  h += '<div class="res-big">' + m.wins[mine] + '<small>:</small>' + m.wins[theirs] + '</div>';
+  h += '<p class="res-sub">' + names[mine] + ' ' + m.wins[mine] + '판 · ' + names[theirs] + ' ' + m.wins[theirs] + '판</p>';
+  if (V.duo) h += '<p class="res-sub">오늘 전적 <b>' + NAMES[0] + ' ' + V.tally[0] + ' : ' + V.tally[1] + ' ' + NAMES[1] + '</b></p>';
+  else {
+    h += '<p class="res-sub">이번 연승 점수 <b>' + V.streak + '점</b>' + (w === 0 ? ' (+' + V.gained + ')' : ' · 연승이 끝났어요') + '</p>';
+    if (V.newRecord) h += '<div class="badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5l3 6.9 7.5.7-5.7 5 1.7 7.4L12 17.6 5.5 21.5l1.7-7.4-5.7-5 7.5-.7z" fill="#ff7ad9" stroke="#2b1b2e" stroke-width="1.8" stroke-linejoin="round"/></svg>새 기록!</div>';
+    else if (V.best > 0) h += '<p class="res-sub">내 최고 기록 ' + V.best + '점</p>';
+    if (!slim) h += '<div class="stats"><div>내가 친 땡<b>' + V.cnt[0].wins + '개</b></div><div>틀린 종<b>' + V.cnt[0].wrong + '번</b></div><div>황금 카드<b>' + stats.golden + '장</b></div><div>걸린 시간<b>' + shortTime(m.t) + '</b></div></div>';
+    if (V.assist > 0.005 && levelHasAssist()) h += '<p class="res-sub" style="font-size:12.5px;color:var(--muted)">눈높이 도우미 +' + V.assist.toFixed(2) + '초</p>';
+  }
+  h += '<button class="btn" data-act="again" type="button" style="margin-top:10px' + (slim ? ';min-height:50px;font-size:25px' : '') + '">한 판 더</button>';
+  h += '<div class="row2"><button class="btn sub" data-act="title" type="button">처음으로</button>' + (p || slim ? '<button class="btn sub" data-act="mute" type="button">' + (Sound.muted ? '소리 켜기' : '소리 끄기') + '</button>' : '<a class="btn sub" href="../../index.html" data-link="1">목록으로</a>') + '</div>';
+  if (!slim && !p && RUN_SEED !== null) h += '<p class="seed">시드 ' + V.seed + '</p>';
+  return h + '</div>';
+}
+function buildOver() {
+  const facing = LAY.mode === 'facing' && V.duo;
+  el.scrOver.innerHTML = facing ? resPanel(true, 1, true) + resPanel(false, 0, true) : resPanel(false, 0, false);
+  bindLinks(el.scrOver);
+}
+function buildPause() {
+  const facing = LAY.mode === 'facing' && V.duo;
+  const one = (turn, full) => '<div class="card slim' + (turn ? ' flip' : '') + '"><h2 class="res-title">잠깐 멈췄어요</h2>' +
+    (full && !V.duo ? '<p class="pause-line">내 쪽 아무 데나 탭하면 종을 쳐요.<br>첫 실수는 봐줘요.</p>' : '<p class="pause-line">누구든 계속하기를 눌러요.</p>') +
+    '<button class="btn" data-act="resume" type="button">계속하기</button>' +
+    '<div class="row2"><button class="btn sub" data-act="restart" type="button">다시 시작</button><button class="btn sub" data-act="title" type="button">처음으로</button></div>' +
+    '<div class="row2"><button class="btn sub" data-act="mute" type="button">' + (Sound.muted ? '소리 켜기' : '소리 끄기') + '</button>' + (turn ? '<span></span>' : '<a class="btn sub" href="../../index.html" data-link="1">목록으로</a>') + '</div>' +
+    (turn ? '' : '<p class="keyhint desk">P · Esc로 이어해요</p>') + '</div>';
+  el.scrPause.innerHTML = facing ? one(true, false) + one(false, true) : one(false, true);
+  bindLinks(el.scrPause);
+}
+function pauseGame() {
+  if (V.paused || V.phase !== 'play') return;
+  V.paused = true; document.body.classList.add('paused'); releaseInput(); Sound.suspend();
+  buildPause(); el.scrPause.hidden = false; V.restartArmed = false;
+}
+function resumeGame() {
+  if (!V.paused) return;
+  V.paused = false; document.body.classList.remove('paused'); el.scrPause.hidden = true;
+  V.resumeT = VIEW.RESUME_T; V.acc = 0; V.ins.length = 0; lastTs = 0; Sound.ensure();
+}
+
+// ---------- one fixed step ----------
+function stepOnce() {
+  const m = V.m, end = m.t + VIEW.STEP;
+  if (V.brain) for (const t of cpuDue(V.brain, m, VIEW.STEP, end)) queueTap(1, t, true);
+  const res = advance(m, VIEW.STEP, V.ins);
+  for (const r of res) { handleResult(r); if (r.res === 'wrong' || r.res === 'forgiven') V.cnt[r.who].wrong++; }
+  const evs = m.ev; m.ev = [];
+  for (const e of evs) { if (V.brain) cpuObserve(V.brain, m, [e]); if (e.k === 'win') V.cnt[e.p].wins++; handleEvent(e); }
+}
+function updatePlay(dt) {
+  const m = V.m;
+  if (V.resumeT > 0) { V.resumeT = Math.max(0, V.resumeT - dt); return; }
+  if (V.endT >= 0) {   // celebrating the match: logic is over, the panel comes after a moment
+    V.endT += dt; if (V.endT >= VIEW.MATCH_END_T) finishMatch(); return;
+  }
+  V.acc += dt * V.scale;
+  let n = 0; const cap = Math.ceil(VIEW.MAX_STEPS * Math.max(1, V.scale));
+  while (V.acc >= VIEW.STEP && n < cap && V.endT < 0) { stepOnce(); V.acc -= VIEW.STEP; n++; }
+  if (n >= cap) V.acc = 0;
+  V.tEnd = m.t + V.acc;
+  if (m.phase === 'count') {   // 3 - 2 - 1
+    const k = Math.ceil(m.phaseT / 0.8 - 1e-6);
+    if (k !== V.cdN && k >= 1 && k <= 3) {
+      V.cdN = k; Sound.count(false);
+      V.banner = { title: String(k), sub: '이번 판 땡 숫자 ' + V.target, sub2: m.roundNo === 0 ? '카드 두 장에서 같은 과일을 세요' : (m.roundNo + 1) + '번째 판', col: GOLD, size: 80, t: 0, life: 0.8, pulse: true, panel: false };
+    }
+  }
+}
+function animStep(dt) {
+  for (const s of V.S) {
+    if (s.pawT >= 0) { s.pawT += dt; if (s.pawT > 0.45) s.pawT = -1; } else s.pawT = -1;
+    s.squash = Math.max(0, s.squash - dt * 5);
+    if (s.rockA) { s.rockT += dt; s.rock = s.rockA * Math.sin(s.rockT * 34) * Math.exp(-s.rockT * 7); if (s.rockT > 0.7) { s.rockA = 0; s.rock = 0; } }
+    if (s.faceT > 0) { s.faceT -= dt; if (s.faceT <= 0) s.face = 'idle'; }
+    s.jump = Math.max(0, s.jump - dt * 1.3);
+    s.blinkT -= dt; if (s.blinkT <= 0) { s.blink = 0.12; s.blinkT = rv(2, 4.5); } else s.blink = Math.max(0, s.blink - dt);
+    if (s.pipPop) s.pipPop = Math.max(0, s.pipPop - dt * 4);
+    s.look = Math.sin(V.clock * 0.7 + s.p * 2) * 0.5;
+  }
+  if (V.phase === 'play' && V.m && V.brain && V.m.phase === 'play' && V.resumeT <= 0) {   // the CPU's paw rises just before it rings
+    const nx = cpuNext(V.brain, V.m), s = V.S[1], tgt = nx >= 0 && nx < 0.12 ? clamp(1 - nx / 0.12, 0, 1) : 0;
+    s.wind += (tgt - s.wind) * Math.min(1, dt * 24);
+  } else V.S[1].wind = 0;
+  for (let i = V.waves.length - 1; i >= 0; i--) { const w = V.waves[i]; w.t += dt; if (w.t > 0.7) V.waves.splice(i, 1); }
+  for (let i = V.pops.length - 1; i >= 0; i--) { const q = V.pops[i]; q.t += dt; if (q.t >= q.life) V.pops.splice(i, 1); }
+  for (let i = V.coins.length - 1; i >= 0; i--) {
+    const q = V.coins[i]; q.t += dt;
+    if (q.t >= q.life || reduceMotion && q.t >= 0) { V.dispScore[q.p] = Math.max(V.dispScore[q.p], q.i + 1); V.S[q.p].pipPop = 1; V.S[q.p].pipI = q.i; Sound.tick(); V.coins.splice(i, 1); }
+  }
+  for (let i = V.parts.length - 1; i >= 0; i--) { const q = V.parts[i]; q.life -= dt; if (q.life <= 0) { V.parts.splice(i, 1); continue; } q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.rot += q.vr * dt; }
+  if (V.banner) { V.banner.t += dt; if (V.banner.t >= V.banner.life) V.banner = null; }
+  V.shake = Math.max(0, V.shake - dt * 20); V.flash = Math.max(0, V.flash - dt * 2.4); V.missT = Math.max(0, V.missT - dt); V.hintT = Math.max(0, V.hintT - dt);
+  for (const sh of V.shown) if (sh) sh.age += dt;
+  if (V.collect) { V.collect.t += dt; if (V.collect.t >= 0.55) { V.collect = null; V.shown = [null, null]; } }
+}
+function update(dt) {
+  if (!(dt > 0)) dt = 0; if (dt > 0.25) dt = 0.25;
+  V.clock += dt;
+  if (V.phase === 'play') {
+    if (!V.paused) updatePlay(dt);
+  } else if (V.phase === 'over') { V.overT += dt; if (V.overT > VIEW.OVER_LOCK) V.overShown = true; }
+  if (!V.paused) animStep(dt);
+}
+let lastTs = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts; V.lastTs = ts;
+  if (!(dt > 0)) dt = 0; if (dt > 0.1) dt = 0.1;
+  update(dt);
+  render();
+  if (!el.scrTitle.hidden) drawMascotTitle(el.mascotT, V.clock);
+  if (!el.scrHow.hidden) el.how.forEach((cv, i) => drawHowTo(cv, i, V.clock));
+  if (!el.scrOver.hidden) drawResFaces();
+}
+
+// =====================================================================
+// INPUT. Every tap carries its own timestamp, mapped onto the match clock (queueTap) and judged by the logic in time order - never by the frame it
+// happened to be processed in. Touch: each player owns a half (solo: the whole screen is mine); one fingertip per player counts, a finger that stays
+// down never rings again, palm-sized contacts and the very screen edge are ignored. Mouse: a click on your half. Keys: F = P1, J = P2 (solo: also Space / Enter).
+// =====================================================================
+const ptrs = new Map();            // pointerId -> { pad, stale, t0 }
+const padOwner = [null, null];     // pointerId currently holding each player's pad
+const keysHeld = new Set();
+function releaseInput() { ptrs.clear(); padOwner[0] = padOwner[1] = null; keysHeld.clear(); }
+function evTime(ts) {   // event timestamp (DOMHighResTimeStamp) -> match clock seconds
+  const now = nowMs(), t = typeof ts === 'number' && isFinite(ts) && ts > 0 && ts <= now + 5 ? ts : now;
+  return V.tEnd + (t - V.lastTs) / 1000;
+}
+function queueTap(p, tAt, exact) {
+  const m = V.m; if (!m || (p !== 0 && p !== 1)) return false;
+  if (typeof tAt !== 'number' || tAt !== tAt) tAt = V.tEnd;
+  if (!exact) tAt = clamp(tAt, m.t - 0.1, V.tEnd + 0.02);
+  if (V.ins.length >= 64) return false;
+  let i = V.ins.length; while (i > 0 && V.ins[i - 1].tAt > tAt) i--;
+  V.ins.splice(i, 0, { who: p, tAt });
+  return true;
+}
+function padAt(x, y) {
+  for (let p = 0; p < 2; p++) { const r = LAY.pad[p]; if (r && x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return p; }
+  return -1;
+}
+function inPlay() { return V.phase === 'play' && !V.paused && V.resumeT <= 0 && !!V.m; }
+el.cv.addEventListener('pointerdown', (e) => {
+  if (e.cancelable) e.preventDefault();
+  Sound.ensure();
+  if (!inPlay()) return;
+  const mouse = e.pointerType === 'mouse';
+  if (mouse && e.button !== 0) return;
+  if (ptrs.size >= VIEW.MAX_PTR && !ptrs.has(e.pointerId)) return;
+  const rec = { pad: -1, stale: false, t0: nowMs() };
+  ptrs.set(e.pointerId, rec);
+  if (!mouse) {
+    if (e.width > VIEW.PALM || e.height > VIEW.PALM) return;                      // a palm, not a fingertip
+    if (e.clientX < VIEW.EDGE || e.clientY < VIEW.EDGE || e.clientX > LAY.W - VIEW.EDGE || e.clientY > LAY.H - VIEW.EDGE) return;
+  }
+  const pad = padAt(e.clientX, e.clientY); if (pad < 0) return;
+  const ow = padOwner[pad];
+  if (ow !== null && ow !== e.pointerId) {   // one touch per player: a newer one only replaces a finger that was resting since before the 판 or for ages
+    const o = ptrs.get(ow);
+    if (o && !o.stale && nowMs() - o.t0 < 3000) return;
+    if (o) { o.pad = -1; o.stale = true; }
+  }
+  padOwner[pad] = e.pointerId; rec.pad = pad;
+  try { el.cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  queueTap(pad, evTime(e.timeStamp));
+});
+function endPtr(e) {
+  const r = ptrs.get(e.pointerId); if (!r) return;
+  if (r.pad >= 0 && padOwner[r.pad] === e.pointerId) padOwner[r.pad] = null;
+  ptrs.delete(e.pointerId);
+}
+el.cv.addEventListener('pointerup', endPtr);
+el.cv.addEventListener('pointercancel', endPtr);
+el.cv.addEventListener('lostpointercapture', endPtr);
+window.addEventListener('pointerup', endPtr);
+window.addEventListener('pointercancel', endPtr);
+
+const onBtnOrLink = (e) => e.target && e.target.closest && e.target.closest('a,button');
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const code = e.code; Sound.ensure();
+  if (code === 'KeyM') { if (!e.repeat) { Sound.setMuted(!Sound.muted); uiMute(); } return; }
+  if (V.phase === 'title') {
+    if (!el.scrHow.hidden) { if ((code === 'Enter' || code === 'Space') && !onBtnOrLink(e)) { e.preventDefault(); if (!e.repeat) closeHow(); } return; }
+    if (e.repeat) return;
+    if (code === 'Digit1' || code === 'Digit2' || code === 'Digit3') { setLevel(LEVELS[+code.slice(5) - 1]); Sound.ui(); return; }
+    if ((code === 'Enter' || code === 'Space') && !onBtnOrLink(e)) { e.preventDefault(); Sound.ui(); onStart(false); return; }
+    if (code === 'KeyJ') { Sound.ui(); onStart(true); }
+    return;
+  }
+  if (V.phase === 'over') {
+    if (e.repeat) return;
+    if ((code === 'Enter' || code === 'Space' || code === 'KeyR') && !onBtnOrLink(e)) { e.preventDefault(); if (V.overShown) { Sound.ui(); startMatch(V.duo); } }
+    else if (code === 'Escape') { Sound.ui(); toTitle(); }
+    return;
+  }
+  if (code === 'KeyP' || code === 'Escape') { e.preventDefault(); if (e.repeat) return; if (V.paused) resumeGame(); else pauseGame(); return; }
+  if (V.paused) { if ((code === 'Enter' || code === 'Space') && !onBtnOrLink(e)) { e.preventDefault(); if (!e.repeat) resumeGame(); } return; }
+  if (!inPlay()) return;
+  let who = -1;
+  if (code === 'KeyF') who = 0; else if (code === 'KeyJ') who = V.duo ? 1 : 0; else if (!V.duo && (code === 'Space' || code === 'Enter')) who = 0;
+  if (who < 0) return;
+  e.preventDefault();
+  if (e.repeat || keysHeld.has(code)) return;     // a held key never rings twice
+  keysHeld.add(code); queueTap(who, evTime(e.timeStamp));
+});
+window.addEventListener('keyup', (e) => { keysHeld.delete(e.code); });
+
+// =====================================================================
+// SCREENS / BUTTONS
+// =====================================================================
+function uiMute() {
+  const t = Sound.muted ? '소리 켜기' : '소리 끄기';
+  el.btnMuteT.textContent = t; el.btnMute.classList.toggle('muted', Sound.muted); el.btnMute.setAttribute('aria-label', t);
+  document.querySelectorAll('[data-act="mute"]').forEach((b) => { b.textContent = t; });
+}
+function uiBest() {
+  V.best = Math.max(V.best, readInt(KEY_BEST));
+  if (V.best > 0) { el.tBest.className = ''; el.tBest.textContent = fmtNum(V.best) + '점'; }
+  else { el.tBest.className = 'none'; el.tBest.textContent = '아직 기록이 없어요'; }
+}
+const HANDI_HELP = ['앞서든 뒤서든 똑같이 겨뤄요', '근소한 차이는 점수가 뒤진 친구가 유리해요', '점수가 뒤진 친구가 더 많이 유리해요'];
+function uiSegs() {
+  const mark = (seg, val) => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === String(val))));
+  mark(el.segLevel, V.level); mark(el.segBest, V.bestOf); mark(el.segHandi, V.handi);
+  el.helpHandi.textContent = HANDI_HELP[V.handi];
+}
+function setLevel(l) { if (LEVELS.indexOf(l) < 0) return; if (l !== V.level) V.assist = 0; V.level = l; store.set(KEY_LEVEL, l); uiSegs(); }
+function onStart(duo) {
+  if (store.get(KEY_SEEN, '') !== '1' && !V.howSeen) { V.howStart = !!duo; V.howPending = true; openHow(); } else startMatch(duo);
+}
+function openHow() { V.howSeen = true; store.set(KEY_SEEN, '1'); el.scrTitle.hidden = true; el.scrHow.hidden = false; $('btnHowOk').focus({ preventScroll: true }); }
+function closeHow() {
+  el.scrHow.hidden = true;
+  if (V.howPending) { V.howPending = false; startMatch(V.howStart); } else if (V.phase === 'title') el.scrTitle.hidden = false;
+}
+function bindLinks(root) {   // "목록으로" links: go back in history when we came from the hub
+  root.querySelectorAll('a[data-link]').forEach((a) => a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  }));
+}
+function btn(node, fn) { node.addEventListener('click', () => { Sound.ensure(); fn(); }); node.addEventListener('pointerdown', (e) => e.stopPropagation()); }
+btn($('btnSolo'), () => { Sound.ui(); onStart(false); });
+btn($('btnDuo'), () => { Sound.ui(); onStart(true); });
+btn($('btnHow'), () => { Sound.ui(); V.howPending = false; openHow(); });
+btn($('btnHowOk'), () => { Sound.ui(); closeHow(); });
+btn(el.btnPause, () => { Sound.ui(); pauseGame(); });
+btn(el.btnMute, () => { Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+btn(el.btnMuteT, () => { Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+for (const [seg, fn] of [[el.segLevel, (v) => setLevel(v)], [el.segBest, (v) => { V.bestOf = v === '5' ? 5 : 3; store.set(KEY_BESTOF, V.bestOf); uiSegs(); }], [el.segHandi, (v) => { V.handi = clamp(+v | 0, 0, 2); store.set(KEY_HANDI, V.handi); uiSegs(); }]]) {
+  seg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { Sound.ensure(); Sound.ui(); fn(b.dataset.v); } });
+}
+function panelClick(e) {
+  const b = e.target.closest && e.target.closest('[data-act]'); if (!b) return;
+  Sound.ensure(); const act = b.dataset.act;
+  if (act === 'resume') { Sound.ui(); resumeGame(); }
+  else if (act === 'restart') {
+    if (!V.restartArmed) { V.restartArmed = true; el.scrPause.querySelectorAll('[data-act="restart"]').forEach((x) => { x.textContent = '정말요? 한 번 더'; x.classList.add('arm'); }); clearTimeout(V.restartT); V.restartT = setTimeout(() => { V.restartArmed = false; el.scrPause.querySelectorAll('[data-act="restart"]').forEach((x) => { x.textContent = '다시 시작'; x.classList.remove('arm'); }); }, 3000); }
+    else { V.restartArmed = false; Sound.ui(); startMatch(V.duo); }
+  }
+  else if (act === 'title') { Sound.ui(); toTitle(); }
+  else if (act === 'mute') { Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); }
+  else if (act === 'again') { if (!V.overShown) return; Sound.ui(); startMatch(V.duo); }
+}
+el.scrPause.addEventListener('click', panelClick);
+el.scrOver.addEventListener('click', panelClick);
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseInput(); pauseGame(); } });
+window.addEventListener('blur', () => { releaseInput(); pauseGame(); });
+window.addEventListener('pagehide', () => { releaseInput(); pauseGame(); });
+function relayout() { layout(); if (!el.scrOver.hidden && V.m) buildOver(); if (!el.scrPause.hidden && V.m) buildPause(); }
+window.addEventListener('resize', relayout);
+window.addEventListener('orientationchange', () => { releaseInput(); setTimeout(relayout, 150); });
+if (window.visualViewport) window.visualViewport.addEventListener('resize', relayout);
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (e.cancelable && (!e.target.closest || !e.target.closest('.overlay'))) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back')) {
+  a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  });
+}
+
+// =====================================================================
+// TEST HOOKS: window.__game (the real UI plus a fast-forward for bots) and window.__bell (the pure logic)
+// =====================================================================
+const LOGIC = { newMatch, begin, step, slap, advance, resolve, hitFruit, isNear, types, symbols, makeBrain, cpuObserve, cpuDue, CPU_LEVELS, TARGETS, windowOf, leadOf, mulberry32 };
+const hook = {
+  logic: LOGIC,
+  state() {
+    const m = V.m;
+    return {
+      phase: V.phase, paused: V.paused, ff: V.ff, duo: V.duo, level: V.level, bestOf: V.bestOf, handi: V.handi, streak: V.streak, best: V.best, bestAtStart: V.bestAtStart, newRecord: V.newRecord, gained: V.gained,
+      assist: V.assist, muted: Sound.muted, audio: Sound.ctx ? Sound.ctx.state : 'none', resumeT: V.resumeT, endT: V.endT, overShown: V.overShown, seed: V.seed, tally: V.tally.slice(),
+      target: V.target, shownScore: V.dispScore.slice(), tEnd: V.tEnd, inQueue: V.ins.length, parts: V.parts.length, banner: V.banner ? V.banner.title : '',
+      log: V.log.slice(-40), ptrs: Array.from(ptrs.entries()).map((q) => ({ id: q[0], pad: q[1].pad, stale: q[1].stale })), padOwner: padOwner.slice(),
+      m: m ? { t: m.t, phase: m.phase, phaseT: m.phaseT, roundNo: m.roundNo, wins: m.wins.slice(), score: m.score.slice(), cards: m.cards.map((c) => c ? c.c.slice() : null), stars: m.cards.map((c) => !!(c && c.star)),
+        lock: m.lock.slice(), forgive: m.forgive.slice(), nextFlip: m.nextFlip, flips: m.flips, winner: m.winner, bestOf: m.bestOf, catch: m.catch,
+        opp: m.opp ? { fruit: m.opp.fruit, golden: m.opp.golden, resolved: m.opp.resolved, slaps: m.opp.slaps.slice(), first: m.opp.first, resolveAt: m.opp.resolveAt } : null, stats: Object.assign({}, m.stats) } : null,
+    };
+  },
+  geometry() { return { W: LAY.W, H: LAY.H, dpr: LAY.dpr, u: LAY.u, mode: LAY.mode, pad: LAY.pad, st: LAY.st, hud: LAY.hud, slot: LAY.slot, sign: LAY.sign, pause: LAY.pause, mute: LAY.mute, center: LAY.center }; },
+  startSolo(seed) { startMatch(false, seed); }, startDuo(seed) { startMatch(true, seed); }, title() { toTitle(); },
+  pause() { pauseGame(); }, resume() { resumeGame(); },
+  set timeScale(v) { V.scale = Math.max(0.1, +v || 1); }, get timeScale() { return V.scale; },
+  ring(p, offsetMs) { return inPlay() && queueTap(p, V.tEnd + (+offsetMs || 0) / 1000); },          // a tap now (+ offset) on the match clock, as if the event had that timestamp
+  ringTs(p, ts) { return inPlay() && queueTap(p, evTime(ts)); },
+  tick(dt, noDraw) { if (!V.paused) update(dt); if (!noDraw) render(); },                // one simulated frame (frame-rate tests)
+  poke(fn) { return fn(V.m, V); },
+  setBest(v) { V.best = v; store.set(KEY_BEST, String(v)); uiBest(); },
+  // fast-forward without drawing or sound: policy(m, V) returns a player to tap, or -1, asked every step
+  fastForward(seconds, policy) {
+    V.ff = true;
+    try { const n = Math.ceil(seconds / VIEW.STEP); for (let i = 0; i < n; i++) { if (V.paused || V.phase !== 'play') break; if (policy && V.m) { const w = policy(V.m, V); if (w === 0 || w === 1) queueTap(w, V.tEnd); } V.clock += VIEW.STEP; updatePlay(VIEW.STEP); animStep(VIEW.STEP); } } finally { V.ff = false; }
+  },
+  raw: { V, LAY, Sound, store, render, layout, el, ctx, VIEW, handleEvent, ptrs, padOwner, finishMatch },
+};
+window.__bell = hook; window.__game = hook;
+
+// =====================================================================
+// BOOT
+// =====================================================================
+V.nextSeed = RUN_SEED !== null ? RUN_SEED : freshSeed();
+V.howSeen = false; V.howStart = false; V.howPending = false; V.restartArmed = false; V.missT = 0; V.cdN = 0; V.cnt = [{ wins: 0, wrong: 0 }, { wins: 0, wrong: 0 }]; V.target = 5;
+uiMute(); uiBest(); uiSegs(); toTitle(); layout();
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1649 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>또박또박</title>
+<meta name="theme-color" content="#244c42">
+<meta name="description" content="분필 친구 필이와 칠판 위 글자 카드를 이어 낱말을 또박또박 써요. 옆 칸으로 쭉 드래그해서 숨은 낱말을 찾아요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* Visual world: a green school chalkboard in a wooden frame. Letter cards (one Hangul syllable each) lie on it; the player drags
+   through neighbouring cards to write a word. The chalk stick 필이 cheers on. The playfield is drawn on one canvas; the HUD is a
+   390 px wide DOM column placed and scaled by layout(). */
+:root {
+  --ink: #2a3733;
+  --board: #244c42;
+  --board-2: #2f6a58;
+  --wood: #8a5a33;
+  --wood-d: #4a2f18;
+  --chalk: #f7f3e6;
+  --yellow: #ffd75e;
+  --yellow-d: #c9961a;
+  --pink: #ff8fa3;
+  --blue: #8fd4ff;
+  --coral: #ff7a59;
+  --coral-d: #c4482b;
+  --green: #6fe0a0;
+  --bad: #ff6b5e;
+  --paper: #fff9e8;
+  --muted: #6d7f78;
+  --panel: rgba(20, 44, 38, 0.94);
+  --hud-bg: rgba(20, 44, 38, 0.86);
+  --dim: #cfe3da;
+  --font-d: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif;
+  --font-b: "Gowun Dodum", "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: #244c42; color: var(--chalk);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: #244c42; }
+#cv, #bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#bg { pointer-events: none; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+body.paused #col * { animation-play-state: paused !important; }
+
+/* ---------- HUD (stage px: the column is 390 wide, its height follows the screen) ---------- */
+#col { position: absolute; left: 0; top: 0; width: 390px; height: 760px; transform-origin: 0 0; z-index: 5; pointer-events: none; }
+#col[hidden] { display: none; }
+#col > * { position: absolute; }
+.icon-btn {
+  top: 5px; width: 48px; height: 48px; border-radius: 15px; padding: 0;
+  border: 2px solid rgba(247, 243, 230, 0.85); background: var(--hud-bg); color: var(--chalk);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(8, 20, 16, 0.6);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(8, 20, 16, 0.6); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnPause { left: 6px; }
+#btnMute { left: 60px; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+.pill {
+  top: 6px; height: 46px; display: flex; align-items: center; justify-content: center; gap: 5px;
+  background: var(--hud-bg); border-radius: 16px; border: 2px solid rgba(255, 215, 94, 0.8);
+}
+.pill b { font-family: var(--font-d); font-weight: normal; font-size: 30px; line-height: 1; color: var(--yellow); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.pill small { font-family: var(--font-d); font-size: 17px; color: var(--dim); padding-top: 6px; }
+#pillTime { left: 114px; width: 104px; border-color: rgba(143, 212, 255, 0.85); }
+#pillTime b { color: var(--blue); }
+#pillTime.low { border-color: var(--bad); animation: lowT 0.5s ease-in-out infinite alternate; }
+#pillTime.low b { color: #ffb0a6; }
+@keyframes lowT { from { background: var(--hud-bg); } to { background: rgba(120, 36, 30, 0.9); } }
+#pillTime.plus b { animation: pop 0.4s ease-out; color: var(--green); }
+#pillScore { left: 224px; width: 160px; }
+#pillScore.pop b { animation: pop 0.3s ease-out; }
+@keyframes pop { 0% { transform: scale(1.28); } 100% { transform: none; } }
+.chip {
+  top: 60px; height: 34px; display: flex; align-items: center; gap: 5px; padding: 0 10px; border-radius: 999px; overflow: hidden;
+  background: var(--hud-bg); border: 2px solid rgba(207, 227, 218, 0.5); font-size: 13.5px; color: var(--dim); white-space: nowrap;
+}
+.chip b { font-family: var(--font-d); font-weight: normal; font-size: 17px; color: var(--yellow); font-variant-numeric: tabular-nums; padding-top: 2px; }
+#chipBest { left: 8px; width: 112px; justify-content: center; }
+#chipProg { left: 126px; width: 140px; border-color: rgba(111, 224, 160, 0.7); justify-content: center; z-index: 0; }
+#chipProg .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: rgba(111, 224, 160, 0.35); transition: width 0.25s; z-index: -1; }
+#chipProg b { color: var(--green); }
+#chipCombo { left: 272px; width: 110px; justify-content: center; border-color: rgba(255, 143, 163, 0.5); z-index: 0; }
+#chipCombo .fill { position: absolute; left: 0; bottom: 0; height: 4px; width: 0%; background: var(--pink); z-index: -1; }
+#chipCombo b { color: var(--pink); }
+#chipCombo.on { border-color: var(--pink); }
+#chipCombo.pop b { animation: pop 0.3s ease-out; }
+#bubble {
+  left: 98px; top: 104px; width: 284px; height: 58px; display: flex; align-items: center; padding: 4px 14px;
+  background: var(--chalk); color: var(--ink); border: 3px solid var(--ink); border-radius: 18px;
+  font-size: 16px; line-height: 1.3; font-weight: 700; box-shadow: 0 3px 0 rgba(8, 20, 16, 0.5);
+}
+#bubble::before {
+  content: ''; position: absolute; left: -10px; top: 20px; width: 14px; height: 14px; background: var(--chalk);
+  border-left: 3px solid var(--ink); border-bottom: 3px solid var(--ink); transform: rotate(45deg);
+}
+#bubble span { display: block; width: 100%; overflow: hidden; }
+#bubble.bad { background: #ffe1db; }
+#bubble.good { background: #fff3c4; }
+#bubble.bump { animation: bump 0.25s ease-out; }
+@keyframes bump { 0% { transform: scale(0.94); } 60% { transform: scale(1.04); } 100% { transform: none; } }
+#remain {
+  left: 98px; top: 168px; height: 24px; display: flex; align-items: center; padding: 0 10px; border-radius: 999px;
+  background: rgba(20, 44, 38, 0.7); border: 1.5px solid rgba(207, 227, 218, 0.4); font-size: 13px; color: var(--dim);
+}
+#remain b { font-family: var(--font-d); font-weight: normal; font-size: 16px; color: var(--yellow); margin: 0 2px; padding-top: 1px; }
+#curWord {
+  left: 0; right: 0; top: 198px; height: 52px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-d); font-size: 38px; line-height: 1; letter-spacing: 2px; color: var(--chalk); text-shadow: 0 3px 0 rgba(8, 20, 16, 0.5);
+}
+#curWord span { padding-top: 5px; min-width: 60px; text-align: center; transition: color 0.1s; }
+#curWord.valid span { color: var(--yellow); }
+#curWord.empty span { font-family: var(--font-b); font-size: 15px; letter-spacing: 0; color: rgba(207, 227, 218, 0.55); text-shadow: none; }
+#curWord.ok span { color: var(--green); }
+#curWord.bad span { color: var(--bad); }
+#curWord.dup span { color: var(--blue); }
+#foundBox {
+  left: 10px; right: 10px; height: 62px; padding: 6px 8px; border-radius: 14px; overflow: hidden;
+  background: rgba(8, 24, 20, 0.45); border: 2px dashed rgba(207, 227, 218, 0.35); display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start;
+}
+#foundBox .empty { width: 100%; text-align: center; font-size: 14px; color: rgba(207, 227, 218, 0.6); line-height: 46px; }
+#foundBox i {
+  font-style: normal; font-family: var(--font-d); font-size: 16px; line-height: 1; padding: 5px 9px 4px; border-radius: 10px;
+  background: var(--chalk); color: var(--ink); border: 2px solid var(--ink);
+}
+#foundBox i.l3 { background: #ffe9a6; } #foundBox i.l4 { background: #ffc6d1; } #foundBox i.l5 { background: #bfe6ff; }
+#foundBox i.new { animation: pop 0.35s ease-out; }
+#btnHint {
+  left: 10px; right: 10px; height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 16px;
+  border: 3px solid var(--ink); background: var(--yellow); color: var(--ink); font-family: var(--font-d); font-size: 21px;
+  box-shadow: 0 4px 0 var(--yellow-d); pointer-events: auto; touch-action: manipulation; padding: 3px 0 0;
+}
+#btnHint:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--yellow-d); }
+#btnHint:disabled { background: #b9c3be; box-shadow: 0 4px 0 #7d8a84; opacity: 0.85; cursor: default; }
+#btnHint svg { width: 22px; height: 22px; margin-top: -3px; }
+#banner {
+  left: 0; right: 0; top: 21%; text-align: center; pointer-events: none; opacity: 0; transform: scale(0.7);
+  font-family: var(--font-d); font-size: 42px; line-height: 1.15; color: var(--yellow);
+  -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 rgba(8, 20, 16, 0.5);
+}
+#banner small { display: block; font-size: 22px; -webkit-text-stroke: 5px var(--ink); color: var(--chalk); margin-top: 4px; }
+#banner.show { animation: bannerIn 1.8s ease-out forwards; }
+#banner.show.fast { animation-duration: 1.3s; }
+@keyframes bannerIn { 0% { opacity: 0; transform: scale(0.6) rotate(-3deg); } 14% { opacity: 1; transform: scale(1.12) rotate(1deg); } 24% { transform: scale(1) rotate(0); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1.04); } }
+#keys { left: 0; right: 0; bottom: 3px; height: 14px; text-align: center; font-size: 11.5px; line-height: 14px; color: var(--dim); opacity: 0.85; letter-spacing: -0.2px; }
+#keys[hidden] { display: none; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 60px) calc(env(safe-area-inset-right, 0px) + 16px) calc(env(safe-area-inset-bottom, 0px) + 16px) calc(env(safe-area-inset-left, 0px) + 16px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(8, 24, 20, 0.2);
+}
+.overlay[hidden] { display: none; }
+#scrTitle { background: none; overflow: hidden; touch-action: none; justify-content: space-between; padding-top: calc(env(safe-area-inset-top, 0px) + 58px); }
+#scrPause { justify-content: center; background: rgba(8, 24, 20, 0.74); z-index: 30; }
+#scrOver { background: rgba(8, 24, 20, 0.62); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(390px, 100%); margin: auto;
+  background: var(--paper); color: var(--ink);
+  border: 3px solid var(--wood-d); border-radius: 26px;
+  box-shadow: 0 8px 0 rgba(8, 20, 16, 0.6);
+  padding: 22px 18px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 9px;
+  background: repeating-linear-gradient(90deg, var(--yellow) 0 22px, #fff 22px 44px, var(--pink) 44px 66px, #fff 66px 88px, var(--blue) 88px 110px, #fff 110px 132px);
+}
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.titleTop { text-align: center; pointer-events: none; flex: none; }
+.titleBot { width: min(390px, 100%); text-align: center; flex: none; }
+@media (min-width: 820px) and (min-height: 560px) { .titleBot { position: absolute; right: 7%; top: 46%; transform: translateY(-30%); width: 360px; } .titleTop { position: absolute; left: 7%; top: 14%; } }
+.logo { margin: 0; font-family: var(--font-d); font-weight: normal; font-size: 62px; line-height: 1.05; letter-spacing: 0; white-space: nowrap; }
+.logo span { display: inline-block; color: #fff; -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 rgba(8, 20, 16, 0.4); animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 3.4s ease-in-out infinite; }
+.logo span:nth-child(odd) { color: var(--yellow); rotate: -3deg; }
+.logo span:nth-child(even) { color: #fff; rotate: 3deg; }
+.logo span:nth-child(3) { color: var(--pink); }
+.logo span:nth-child(2) { animation-delay: 0.08s, 0.2s; } .logo span:nth-child(3) { animation-delay: 0.16s, 0.4s; } .logo span:nth-child(4) { animation-delay: 0.24s, 0.6s; }
+@keyframes logoIn { from { transform: translateY(-30px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.tagline { margin: 4px auto 0; max-width: 340px; font-family: var(--font-d); font-size: 19px; line-height: 1.3; color: var(--chalk); text-shadow: 0 2px 0 rgba(8, 20, 16, 0.7), 0 0 10px rgba(8, 20, 16, 0.8); }
+.best-line { margin: 0 auto 10px; width: fit-content; padding: 4px 16px 3px; border-radius: 999px; background: rgba(247, 243, 230, 0.96); border: 2px solid var(--ink); font-size: 16px; color: var(--ink); font-weight: 700; }
+.best-line b { color: var(--coral-d); font-weight: normal; font-family: var(--font-d); font-size: 24px; }
+.best-line b.none { font-family: var(--font-b); font-weight: 700; font-size: 16px; color: var(--muted); }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 58px; border-radius: 18px;
+  border: 3px solid var(--ink); background: var(--yellow); color: var(--ink);
+  font-family: var(--font-d); font-size: 30px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 var(--yellow-d); touch-action: manipulation; pointer-events: auto;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--yellow-d); }
+.btn.sub {
+  background: var(--paper); color: var(--ink); border: 2.5px solid var(--ink);
+  box-shadow: 0 4px 0 rgba(8, 20, 16, 0.45); font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0; letter-spacing: 0;
+}
+.btn.sub:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(8, 20, 16, 0.45); }
+.btn.sub.arm { border-color: #d6453a; color: #b83428; }
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, #btnHint:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--chalk); letter-spacing: -0.2px; text-shadow: 0 1px 3px rgba(8, 20, 16, 0.9); }
+.card .keyhint { color: var(--muted); text-shadow: none; }
+.keyhint.desk { display: none; }
+@media (hover: hover) and (pointer: fine) { .keyhint.desk { display: block; } }
+.back {
+  position: absolute; left: calc(env(safe-area-inset-left, 0px) + 10px); top: calc(env(safe-area-inset-top, 0px) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--chalk); border: 2px solid rgba(247, 243, 230, 0.8); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.mascot { display: block; width: 210px; height: 200px; margin: 0 auto; }
+#mascotT { width: min(260px, 70%); height: auto; aspect-ratio: 1 / 1; flex: 0 1 auto; min-height: 0; }
+#demoT { display: block; width: min(372px, 100%); height: auto; aspect-ratio: 372 / 96; margin: 0 auto 6px; }
+.howto { margin: 0 auto 10px; max-width: 350px; padding: 8px 14px; border-radius: 16px; background: rgba(20, 44, 38, 0.8); border: 2px solid rgba(207, 227, 218, 0.4); font-size: 15px; line-height: 1.45; color: var(--chalk); text-align: center; }
+.howto b { color: var(--yellow); font-weight: 700; }
+.res-title { margin: 2px 0 0; font-size: 30px; font-weight: normal; font-family: var(--font-d); color: var(--ink); letter-spacing: 1px; }
+.pause-line { margin: 8px 0 12px; font-size: 16.5px; color: var(--muted); line-height: 1.45; }
+.grade-line { margin: 0; font-family: var(--font-d); font-size: 21px; color: var(--coral-d); }
+.stamp-end { margin: 2px 0 0; font-family: var(--font-d); font-size: 28px; color: var(--ink); letter-spacing: 0.5px; line-height: 1.15; }
+.res-big { margin: 6px 0 0; font-family: var(--font-d); font-size: 58px; line-height: 1.1; color: var(--coral-d); font-variant-numeric: tabular-nums; }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 22px; color: var(--ink); margin-left: 4px; }
+.badge {
+  display: inline-block; margin-top: 2px; padding: 4px 16px 5px; border-radius: 12px;
+  background: var(--yellow); color: var(--ink); font-family: var(--font-d); font-size: 23px; border: 2.5px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge[hidden] { display: none; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.goal { margin: 6px 0 0; font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+.goal b { color: var(--coral-d); font-weight: 700; }
+.missed { margin: 8px 0 0; padding: 6px 10px; border-radius: 12px; background: rgba(47, 106, 88, 0.12); border: 1px dashed rgba(42, 55, 51, 0.4); font-size: 13.5px; color: var(--ink); line-height: 1.4; }
+.missed[hidden] { display: none; }
+.missed b { font-family: var(--font-d); font-weight: normal; font-size: 16px; color: var(--board-2); margin: 0 2px; }
+.stats { margin: 10px 0 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.stats div { background: rgba(47, 106, 88, 0.12); border: 1px solid rgba(42, 55, 51, 0.3); border-radius: 12px; padding: 5px 2px 4px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 20px; color: var(--ink); margin-top: 1px; white-space: nowrap; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 .btn.sub { font-size: 16px; min-height: 46px; margin-top: 12px; padding: 0 4px; }
+.seed { margin: 6px 0 0; font-size: 11px; color: var(--muted); opacity: 0.8; }
+.seed[hidden] { display: none; }
+
+@media (max-height: 880px) {
+  .mascot:not(#mascotT) { width: 176px; height: 168px; }
+  .res-big { font-size: 48px; }
+  .stats { margin-top: 8px; } .goal { margin-top: 4px; }
+}
+@media (max-height: 760px) {
+  .logo { font-size: 52px; }
+  .tagline { font-size: 17px; }
+  .mascot:not(#mascotT) { width: 150px; height: 144px; }
+  #mascotT { width: min(190px, 56%); }
+  .howto { font-size: 14px; padding: 6px 12px; margin-bottom: 8px; }
+}
+@media (max-height: 700px) {
+  #mascotR, #mascotP { display: none; }
+  .res-big { font-size: 44px; }
+}
+@media (max-height: 640px) {
+  #mascotT { display: none; }
+  #scrTitle { justify-content: flex-start; gap: 12px; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  #scrTitle { padding-top: calc(env(safe-area-inset-top, 0px) + 10px); }
+  .titleTop { position: absolute; left: 3%; top: 56px; width: 44%; }
+  .titleBot { position: absolute; left: 3%; bottom: 10px; width: 44%; transform: none; right: auto; top: auto; }
+  .titleBot .btn.sub { margin-top: 6px; }
+  .logo { font-size: 38px; }
+  .tagline { font-size: 14px; }
+  .card { padding: 12px 16px 10px; width: min(560px, 100%); }
+  .mascot:not(#mascotT) { display: none; }
+  #mascotT { display: block; position: absolute; right: 7%; top: 50%; transform: translateY(-50%); width: auto; height: 70%; margin: 0; }
+  .btn { min-height: 46px; font-size: 24px; }
+  .btn.sub { min-height: 40px; margin-top: 6px; font-size: 15px; }
+  .keyhint { display: none !important; }
+  .res-big { font-size: 38px; }
+  .stats { grid-template-columns: repeat(4, 1fr); }
+  .howto, #demoT { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card, #pillScore.pop b, #chipCombo.pop b, #foundBox i.new, #bubble.bump, #pillTime.low { animation: none; }
+  #chipProg .fill { transition: none; }
+  #banner.show { animation: none; opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <canvas id="cv" aria-label="또박또박 글자 칠판"></canvas>
+  <div id="probe"></div>
+  <div class="sr" id="live" role="status" aria-live="polite"></div>
+
+  <div id="col" hidden>
+    <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+    </button>
+    <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+    </button>
+    <div class="pill" id="pillTime" aria-label="남은 시간"><b id="hTime">1:40</b></div>
+    <div class="pill" id="pillScore" aria-label="점수"><b id="hScore">0</b><small>점</small></div>
+    <div class="chip" id="chipBest">최고 <b id="hBest">-</b></div>
+    <div class="chip" id="chipProg"><i class="fill" id="progFill"></i><span id="hStage">1단계</span> <b id="hProg">0/5</b></div>
+    <div class="chip" id="chipCombo"><i class="fill" id="comboFill"></i><span>연속</span> <b id="hCombo">0</b></div>
+    <div id="bubble" role="status"><span id="bubbleTxt"></span></div>
+    <div id="remain">숨은 낱말 <b id="hRemain">0</b>개 남음</div>
+    <div id="curWord" class="empty"><span id="hWord">글자를 이어 보세요</span></div>
+    <div id="foundBox" aria-label="찾은 낱말"><div class="empty">찾은 낱말이 여기에 모여요</div></div>
+    <button id="btnHint" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+      <span id="hintLbl">힌트 3번 남음</span>
+    </button>
+    <div id="banner" aria-hidden="true"><span id="bannerTxt"></span><small id="bannerSub"></small></div>
+    <div id="keys" hidden>방향키 이동 · Space 글자 고르기/확정 · Enter 제출 · Esc 취소 · H 힌트 · P 멈춤</div>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="titleTop">
+      <h1 class="logo" aria-label="또박또박"><span>또</span><span>박</span><span>또</span><span>박</span></h1>
+      <p class="tagline">칠판 위 글자 카드를 이어서 낱말을 또박또박 써요. 필이와 숨은 낱말을 찾아요!</p>
+    </div>
+    <canvas class="mascot" id="mascotT" width="520" height="520" aria-hidden="true"></canvas>
+    <div class="titleBot">
+      <canvas id="demoT" width="744" height="192" aria-hidden="true"></canvas>
+      <p class="howto"><b>옆 칸으로 쭉 끌어서 이은 뒤 손을 떼면</b> 낱말이 제출돼요. 100초 안에 낱말을 많이 찾아요.</p>
+      <p class="best-line" id="tBestLine">내 최고 기록 <b id="tBest" class="none">아직 기록이 없어요</b></p>
+      <button class="btn" id="btnStart" type="button">시작하기</button>
+      <div class="row2">
+        <button class="btn sub" id="btnMuteT" type="button">소리 끄기</button>
+        <a class="btn sub" href="../../index.html">← 게임 목록</a>
+      </div>
+      <p class="keyhint desk">방향키 이동 · Space 글자 고르기 · Enter 제출 · H 힌트</p>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card">
+      <canvas class="mascot" id="mascotP" width="420" height="400" aria-hidden="true"></canvas>
+      <h2 class="res-title">잠깐 쉬어요</h2>
+      <p class="pause-line">필이도 칠판 앞에서 쉬고 있어요.<br>준비되면 계속해요. 시간은 멈춰 있어요.</p>
+      <button class="btn" id="btnResume" type="button">계속하기</button>
+      <button class="btn sub" id="btnPauseRetry" type="button">처음부터</button>
+      <div class="row2">
+        <button class="btn sub" id="btnMuteP" type="button">소리 끄기</button>
+        <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+      </div>
+      <p class="keyhint desk">P · Esc로 계속해요</p>
+    </div>
+  </section>
+
+  <!-- result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot" id="mascotR" width="420" height="400" aria-hidden="true"></canvas>
+      <p class="grade-line" id="rGrade">연습 끝!</p>
+      <p class="stamp-end" id="rTitle" role="status">시간이 다 됐어요</p>
+      <div class="res-big"><span id="rScore">0</span><small>점</small></div>
+      <div class="badge" id="rBadge" hidden>새 기록!</div>
+      <p class="goal" id="rGoal"></p>
+      <div class="stats">
+        <div>찾은 낱말<b id="rWords">0개</b></div>
+        <div>도달 단계<b id="rStage">1단계</b></div>
+        <div>가장 긴 낱말<b id="rLong">-</b></div>
+        <div>최고 연속<b id="rCombo">0번</b></div>
+      </div>
+      <p class="missed" id="rMissed" hidden></p>
+      <button class="btn" id="btnAgain" type="button" style="margin-top:14px">다시 하기</button>
+      <div class="row2">
+        <button class="btn sub" id="btnMuteR" type="button">소리 끄기</button>
+        <a class="btn sub" href="../../index.html">목록으로</a>
+      </div>
+      <p class="keyhint desk">Enter · R 키로도 다시 할 수 있어요</p>
+      <p class="seed" id="rSeed" hidden></p>
+    </div>
+  </section>
+</div>
+<script>
+'use strict';
+(() => {
+//#LOGIC-START
+// 또박또박 pure logic. No DOM, no Date, no Math.random, no AudioContext. Deterministic for (seed, input sequence).
+// A board is n x n cards, each holding one Hangul syllable. A word is a path of distinct, 8-neighbour cards whose syllables spell a
+// dictionary word. Boards are made by planting dictionary words as random paths, filling the rest with common syllables, and
+// then solving the whole board (trie walk) so the game knows every findable word and can count / hint them.
+const TIME0 = 100, CLEAR_BONUS = 12, TIME_CAP = 150;
+const COMBO_WINDOW = 8, COMBO_STEP = 0.25, COMBO_MAX_MULT = 3;
+const BASE_PTS = [0, 0, 10, 30, 60, 100, 150];
+const MIN_LEN = 2, MAX_LEN = 6;
+const HINTS0 = 3, HINT_SHOW = 4, AUTO_HINT_AFTER = 10, FLIP_TIME = 0.5;
+
+// ---- dictionary: standard Korean nouns, space separated (easy = very common 2-syllable words, used for the first board) ----
+const DICT_EASY = '나무 바다 하늘 구름 바람 소리 사과 포도 딸기 수박 참외 감자 고기 우유 과자 사탕 토끼 거북 거위 오리 사자 여우 고래 기린 하마 악어 낙타 사슴 노루 까치 참새 제비 문어 상어 나비 매미 개미 모기 파리 학교 교실 친구 공책 연필 가방 책상 의자 시계 거울 우산 모자 신발 양말 바지 치마 장갑 단추 지갑 열쇠 안경 수건 비누 이불 베개 침대 창문 지붕 마당 부엌 거실 전화 사진 그림 노래 운동 놀이 인형 풍선 팽이 공기 그네 시소 기차 버스 택시 도로 다리 공항 항구 머리 얼굴 어깨 무릎 허리 엄마 아빠 언니 누나 동생 아기 아이 어른 이모 삼촌 고모 손톱 눈썹 입술 이마 주먹 의사 경찰 가수 화가 농부 어부 시장 가게 마트 병원 약국 은행 식당 공원 극장 서점 마음 생각 기억 웃음 눈물 소원 약속 비밀 동화 옛날 이름 나이 생일 선물 편지 소식 인사 하루 오늘 내일 어제 시간 방학 소풍 여행 보물 지도 등대 호수 연못 폭포 언덕 동굴 해변 번개 천둥 서리 이슬 안개 햇살 햇빛 달빛 별빛 우주 지구 노을 아침 저녁 새벽 계절 날씨 장마 태풍 얼음 낙엽 단풍 꽃잎 꽃밭 새싹 열매 씨앗 뿌리 줄기 가지 잔디 이끼 장미 국화 튤립 여름 가을 겨울';
+const DICT_MAIN = '자두 살구 레몬 키위 망고 석류 대추 호두 땅콩 당근 오이 호박 마늘 양파 배추 상추 버섯 고추 깻잎 미역 김치 라면 국수 떡국 만두 송편 갈비 계란 달걀 두부 치즈 버터 젤리 푸딩 쿠키 주스 피자 모래 바위 들판 갯벌 소나기 가슴 학생 가위 물감 도마 수저 쟁반 그릇 접시 냄비 부채 장독 대문 기와 한옥 온돌 한복 버선 장구 피리 나팔 방울 리듬 소라 전복 멍게 해삼 붕어 잉어 메기 가재 조개 늑대 표범 치타 타조 공작 낙지 꽃게 날개 부리 깃털 발톱 꼬리 둥지 먹이 농장 목장 마을 도시 시골 나라 세계 바퀴 계단 복도 달력 우비 외투 잠옷 장화 난로 양초 성냥 호떡 식혜 약과 빙수 풍뎅이 나방 여치 물방개 판다 기러기 백조 장승 해님 달님 복숭아 바나나 오렌지 토마토 옥수수 고구마 시금치 콩나물 떡볶이 김밥 비빔밥 불고기 삼겹살 인절미 초콜릿 케이크 햄버거 샌드위치 깍두기 설거지 오뚝이 도깨비 허수아비 무궁화 단풍잎 솔방울 밤송이 수정과 붕어빵 찐빵 팥빙수 군고구마 도토리 호랑이 고양이 강아지 송아지 망아지 병아리 올빼미 부엉이 비둘기 독수리 갈매기 두루미 앵무새 펭귄 오징어 해파리 돌고래 거북이 달팽이 개구리 올챙이 두꺼비 도마뱀 잠자리 메뚜기 사마귀 지렁이 청설모 너구리 오소리 족제비 두더지 다람쥐 코끼리 원숭이 멧돼지 미꾸라지 꾀꼬리 종달새 딱따구리 물고기 캥거루 코알라 고릴라 침팬지 북극곰 사슴벌레 소금쟁이 방아깨비 귀뚜라미 반딧불 하루살이 베짱이 고슴도치 호랑나비 무당벌레 무지개 눈사람 눈송이 눈싸움 물놀이 모래성 고드름 소나무 대나무 민들레 해바라기 개나리 진달래 코스모스 나팔꽃 나뭇잎 잎사귀 시냇물 샘물 은하수 보름달 초승달 반달 별똥별 운동장 도서관 선생님 칠판 지우개 색연필 도화지 색종이 선풍기 냉장고 청소기 세탁기 텔레비전 컴퓨터 자전거 자동차 비행기 지하철 신호등 횡단보도 정류장 기차역 놀이터 미끄럼틀 줄넘기 장난감 화장실 오토바이 할머니 할아버지 아주머니 아저씨 손가락 발가락 머리카락 목도리 손수건 운동화 주머니 호주머니 도시락 앞치마 간호사 소방관 소방차 요리사 동물원 수영장 박물관 미술관 영화관 놀이공원 문구점 체육관 유치원 우체국 빵집 꽃집 나침반 돛단배 이야기 항아리 가마솥 숟가락 젓가락 주전자 보따리 초가집 망원경 현미경 돋보기 사다리 망치 자물쇠 손전등 숨바꼭질 술래잡기 땅따먹기 제기차기 널뛰기 줄다리기 연날리기 팽이치기 공기놀이 소꿉놀이 윷놀이 가위바위보 달리기 아이스크림 피아노 꽹과리 운동회';
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function clampN(v, a, b) { return v < a ? a : v > b ? b : v; }
+function parseWords(s) { return s.split(/\s+/).filter(Boolean); }
+
+const EASY_LIST = parseWords(DICT_EASY);
+const ALL_LIST = (() => {
+  const seen = new Set(), out = [];
+  for (const w of EASY_LIST.concat(parseWords(DICT_MAIN))) if (!seen.has(w)) { seen.add(w); out.push(w); }
+  return out;
+})();
+const WORD_SET = new Set(ALL_LIST);
+const EASY_SET = new Set(EASY_LIST);
+const TRIE = (() => {
+  const root = Object.create(null);
+  for (const w of ALL_LIST) {
+    let nd = root;
+    for (const ch of w) nd = nd[ch] || (nd[ch] = Object.create(null));
+    nd.$ = w;
+  }
+  return root;
+})();
+// syllable frequency over the dictionary -> weights for filling the free cards
+const SYL = (() => {
+  const f = new Map();
+  for (const w of ALL_LIST) for (const ch of w) f.set(ch, (f.get(ch) || 0) + 1);
+  const list = [...f.keys()].sort(), w = list.map((c) => Math.min(f.get(c), 10));
+  let tot = 0; for (const x of w) tot += x;
+  return { list, w, tot };
+})();
+
+function stageCfg(s) {
+  if (s <= 1) return { n: 4, target: 5, plant: 8, minTotal: 14, goal: 26, easyOnly: true, min2: 10, maxPlantLen: 2 };
+  if (s === 2) return { n: 4, target: 7, plant: 8, minTotal: 14, goal: 26, easyOnly: false, min2: 0, maxPlantLen: 3 };
+  return { n: 5, target: Math.min(12, 5 + s), plant: 12, minTotal: 22, goal: 40, easyOnly: false, min2: 0, maxPlantLen: 4 };
+}
+
+const NB = {};
+function neighbours(n) {
+  if (NB[n]) return NB[n];
+  const out = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const l = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < n && cc >= 0 && cc < n) l.push(rr * n + cc);
+    }
+    out.push(l);
+  }
+  return (NB[n] = out);
+}
+function adjacent(n, a, b) {
+  if (a === b) return false;
+  return Math.abs(((a / n) | 0) - ((b / n) | 0)) <= 1 && Math.abs((a % n) - (b % n)) <= 1;
+}
+// a path is valid when every index is on the board, all distinct and each step goes to one of the 8 neighbours
+function validPath(n, path) {
+  if (!Array.isArray(path) || path.length < 1 || path.length > MAX_LEN) return false;
+  const seen = new Set();
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i];
+    if (!Number.isInteger(p) || p < 0 || p >= n * n || seen.has(p)) return false;
+    seen.add(p);
+    if (i > 0 && !adjacent(n, path[i - 1], p)) return false;
+  }
+  return true;
+}
+function wordOf(cells, path) { let s = ''; for (const i of path) s += cells[i]; return s; }
+
+// every dictionary word that can be spelled on the board -> first path found
+function solve(cells, n) {
+  const found = new Map(), nb = neighbours(n), used = new Array(n * n).fill(false), path = [];
+  function dfs(i, node) {
+    const nx = node[cells[i]];
+    if (!nx) return;
+    used[i] = true; path.push(i);
+    if (nx.$ && path.length >= MIN_LEN && !found.has(nx.$)) found.set(nx.$, path.slice());
+    if (path.length < MAX_LEN) { const l = nb[i]; for (let k = 0; k < l.length; k++) if (!used[l[k]]) dfs(l[k], nx); }
+    used[i] = false; path.pop();
+  }
+  for (let i = 0; i < n * n; i++) dfs(i, TRIE);
+  return found;
+}
+
+function shuffle(a, rng) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+  return a;
+}
+// put the word on the board as a random self-avoiding path; cards already holding the right syllable may be shared
+function plantWord(cells, n, word, rng) {
+  const ch = Array.from(word), nb = neighbours(n);
+  for (let att = 0; att < 40; att++) {
+    const start = Math.floor(rng() * n * n);
+    if (cells[start] && cells[start] !== ch[0]) continue;
+    const path = [start], used = new Set([start]);
+    const go = (k) => {
+      if (k === ch.length - 1) return true;
+      const l = shuffle(nb[path[k]].slice(), rng);
+      for (const j of l) {
+        if (used.has(j) || (cells[j] && cells[j] !== ch[k + 1])) continue;
+        used.add(j); path.push(j);
+        if (go(k + 1)) return true;
+        path.pop(); used.delete(j);
+      }
+      return false;
+    };
+    if (go(0)) { for (let k = 0; k < ch.length; k++) cells[path[k]] = ch[k]; return path; }
+  }
+  return null;
+}
+function pickSyl(rng) {
+  let r = rng() * SYL.tot;
+  for (let i = 0; i < SYL.list.length; i++) { r -= SYL.w[i]; if (r < 0) return SYL.list[i]; }
+  return SYL.list[SYL.list.length - 1];
+}
+// candidate words in planting order: a few longer ones first, then the whole pool shuffled
+function chooseWords(cfg, rng) {
+  const pool = (cfg.easyOnly ? EASY_LIST : ALL_LIST).filter((w) => w.length <= cfg.maxPlantLen);
+  const longer = shuffle(pool.filter((w) => w.length > 2), rng), rest = shuffle(pool.slice(), rng);
+  const nLong = cfg.easyOnly ? 0 : cfg.n >= 5 ? 4 : 2;
+  const out = [], have = new Set();
+  for (const w of longer.slice(0, nLong).concat(rest)) if (!have.has(w)) { have.add(w); out.push(w); }
+  return out;
+}
+function randomPath(n, len, rng) {
+  const nb = neighbours(n);
+  for (let att = 0; att < 12; att++) {
+    const path = [Math.floor(rng() * n * n)];
+    while (path.length < len) {
+      const l = nb[path[path.length - 1]].filter((j) => !path.includes(j));
+      if (!l.length) break;
+      path.push(l[Math.floor(rng() * l.length)]);
+    }
+    if (path.length === len) return path;
+  }
+  return null;
+}
+// local search: overwrite a random path with a random dictionary word, keep it when the board holds more findable words
+function climb(cells, n, pool, rng, goal, iters) {
+  let sol = solve(cells, n);
+  for (let it = 0; it < iters && sol.size < goal; it++) {
+    const w = pool[Math.floor(rng() * pool.length)], ch = Array.from(w), path = randomPath(n, ch.length, rng);
+    if (!path) continue;
+    const old = path.map((i) => cells[i]);
+    path.forEach((i, k) => { cells[i] = ch[k]; });
+    const s2 = solve(cells, n);
+    if (s2.size >= sol.size) sol = s2; else path.forEach((i, k) => { cells[i] = old[k]; });
+  }
+  return sol;
+}
+function genBoard(rng, stage) {
+  const cfg = stageCfg(stage), n = cfg.n;
+  let best = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const cells = new Array(n * n).fill('');
+    const cand = chooseWords(cfg, rng), planted = [];
+    // plant overlapping words (shared syllables let many fit), then fill the rest with common syllables
+    let tries = 0;
+    for (const w of cand) {
+      if (planted.length >= cfg.plant || tries++ > 80) break;
+      if (plantWord(cells, n, w, rng)) planted.push(w);
+      if (cells.every((c) => c)) break;
+    }
+    const cnt = new Map();
+    for (let i = 0; i < n * n; i++) if (!cells[i]) {
+      let s = pickSyl(rng);
+      for (let t = 0; t < 8 && (cnt.get(s) || 0) >= 2; t++) s = pickSyl(rng);
+      cnt.set(s, (cnt.get(s) || 0) + 1); cells[i] = s;
+    }
+    const pool = cfg.easyOnly ? EASY_LIST : cand.slice(0, 200);
+    const sol = climb(cells, n, pool, rng, cfg.goal, 700);
+    let two = 0; for (const w of sol.keys()) if (w.length === 2) two++;
+    const alive = planted.filter((w) => sol.has(w));
+    const board = { n, cells, planted: alive, words: sol, total: sol.size, two, stage, target: Math.min(cfg.target, sol.size), attempt };
+    if (sol.size >= cfg.minTotal && two >= cfg.min2) return board;
+    if (!best || sol.size > best.total) best = board;
+  }
+  return best;
+}
+
+function newGame(seed) {
+  const G = {
+    seed: seed | 0, rng: mulberry32((seed | 0) ^ 0x2f6a58b1), rngH: mulberry32((seed | 0) ^ 0x7a3c19d5),
+    t: 0, left: TIME0, phase: 'play', stage: 1, board: null, found: new Set(), foundList: [], stageFound: 0,
+    score: 0, combo: 0, comboT: 0, maxCombo: 0, words: 0, longest: '', clears: 0, fails: 0, dups: 0, bestWordPts: 0,
+    hintsLeft: HINTS0, hintCell: -1, hintT: 0, hintWord: '', idleT: 0, flipT: 0, bonusTotal: 0, ev: [], _tick: -1,
+  };
+  G.board = genBoard(G.rng, 1);
+  return G;
+}
+function remaining(G) { return G.board.total - G.found.size; }
+function mult(combo) { return Math.min(COMBO_MAX_MULT, 1 + COMBO_STEP * (combo - 1)); }
+function wordPts(len, combo) { return Math.round(BASE_PTS[Math.min(len, MAX_LEN)] * mult(combo)); }
+
+// result types: none (not accepting), short, bad, dup, ok
+function submit(G, path) {
+  if (G.phase !== 'play' || G.flipT > 0) return { type: 'none' };
+  const B = G.board;
+  if (!validPath(B.n, path)) return { type: 'none' };
+  if (path.length < MIN_LEN) return { type: 'short' };
+  const word = wordOf(B.cells, path);
+  if (G.found.has(word)) { G.dups++; G.ev.push({ k: 'dup', word, path }); return { type: 'dup', word }; }
+  if (!WORD_SET.has(word)) {
+    G.fails++; const had = G.combo; G.combo = 0; G.comboT = 0;
+    G.ev.push({ k: 'bad', word, path, had }); return { type: 'bad', word, had };
+  }
+  G.combo = G.comboT > 0 ? G.combo + 1 : 1; G.comboT = COMBO_WINDOW;
+  if (G.combo > G.maxCombo) G.maxCombo = G.combo;
+  const len = Array.from(word).length, pts = wordPts(len, G.combo);
+  G.score += pts; G.found.add(word); G.foundList.push(word); G.stageFound++; G.words++;
+  if (pts > G.bestWordPts) G.bestWordPts = pts;
+  if (len > Array.from(G.longest).length) G.longest = word;
+  G.idleT = 0; G.hintCell = -1; G.hintT = 0;
+  G.ev.push({ k: 'ok', word, path, pts, len, combo: G.combo, mult: mult(G.combo) });
+  const res = { type: 'ok', word, pts, len, combo: G.combo, clear: false };
+  if (G.stageFound >= B.target) {
+    const bonus = 50 * G.stage, add = Math.min(CLEAR_BONUS, Math.max(0, TIME_CAP - G.left));
+    G.score += bonus; G.bonusTotal += bonus; G.left += add; G.clears++;
+    G.ev.push({ k: 'clear', stage: G.stage, bonus, time: add, next: G.stage + 1 });
+    G.stage++; G.board = genBoard(G.rng, G.stage); G.found = new Set(); G.foundList = []; G.stageFound = 0;
+    G.flipT = FLIP_TIME; G.idleT = 0;
+    res.clear = true; res.bonus = bonus; res.time = add;
+  }
+  return res;
+}
+
+function step(G, dt) {
+  if (G.phase !== 'play') return;
+  if (G.flipT > 0) { G.flipT = Math.max(0, G.flipT - dt); return; }
+  G.t += dt; G.left -= dt; G.idleT += dt;
+  if (G.comboT > 0) { G.comboT -= dt; if (G.comboT <= 0) { G.comboT = 0; if (G.combo > 0) { G.ev.push({ k: 'comboEnd', combo: G.combo }); G.combo = 0; } } }
+  if (G.hintT > 0) { G.hintT -= dt; if (G.hintT <= 0) { G.hintT = 0; G.hintCell = -1; } }
+  if (G.stage <= 2 && G.idleT >= AUTO_HINT_AFTER && G.hintT <= 0) { showHint(G, false); G.idleT = 0; }
+  const sec = Math.ceil(G.left);
+  if (G.left > 0 && sec <= 10 && sec !== G._tick) { G._tick = sec; G.ev.push({ k: 'tick', sec }); }
+  if (G.left <= 0) { G.left = 0; G.phase = 'over'; G.ev.push({ k: 'over' }); }
+}
+
+// light up the first card of an unfound word (shortest first on the early boards)
+function showHint(G, cost) {
+  if (G.phase !== 'play' || G.flipT > 0) return null;
+  if (cost && G.hintsLeft <= 0) return null;
+  const un = [];
+  for (const [w, p] of G.board.words) if (!G.found.has(w)) un.push([w, p]);
+  if (!un.length) return null;
+  const minLen = G.stage <= 2 ? Math.min(...un.map((x) => x[0].length)) : 0;
+  const pool = G.stage <= 2 ? un.filter((x) => x[0].length === minLen) : un;
+  const pick = pool[Math.floor(G.rngH() * pool.length)];
+  G.hintCell = pick[1][0]; G.hintWord = pick[0]; G.hintT = HINT_SHOW;
+  if (cost) { G.hintsLeft--; G.idleT = 0; }
+  G.ev.push({ k: 'hint', cell: G.hintCell, len: Array.from(pick[0]).length, cost: !!cost });
+  return { cell: G.hintCell, len: Array.from(pick[0]).length, word: pick[0] };
+}
+function missedWords(G, k) {
+  const un = [];
+  for (const w of G.board.words.keys()) if (!G.found.has(w)) un.push(w);
+  un.sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  return un.slice(0, k);
+}
+// helpers for tests / bots
+function unfoundList(G) { const o = []; for (const [w, p] of G.board.words) if (!G.found.has(w)) o.push({ word: w, path: p }); return o; }
+function previewState(G, path) {
+  if (!path.length) return { word: '', valid: false, dup: false };
+  const word = wordOf(G.board.cells, path);
+  return { word, valid: path.length >= MIN_LEN && WORD_SET.has(word) && !G.found.has(word), dup: G.found.has(word) };
+}
+function gradeFor(words, stage) {
+  if (stage >= 6) return '낱말 박사님이에요!';
+  if (stage >= 4) return '낱말 달인이 됐어요!';
+  if (stage >= 3) return '낱말을 잘 찾아요!';
+  if (stage >= 2) return '한글 실력이 쑥쑥 늘어요!';
+  return words >= 4 ? '좋은 출발이었어요!' : '연습 끝! 다음엔 더 찾아봐요';
+}
+//#LOGIC-END
+
+
+// =====================================================================
+// VIEW: constants, helpers
+// =====================================================================
+const TAU = Math.PI * 2;
+const KEY_BEST = 'arcade.ttobak.best', KEY_MUTE = 'arcade.ttobak.muted';
+const QS = new URLSearchParams(location.search);
+const seedParam = QS.get('seed');
+const RUN_SEED = seedParam !== null && seedParam !== '' && isFinite(+seedParam) ? (+seedParam | 0) : null;
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const fine = (() => { try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) { return false; } })();
+const rv = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only (the game itself uses its own seeded stream)
+const clamp = clampN;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function readInt(k) { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function freshSeed() { return ((Math.random() * 2147483647) | 0) ^ ((performance.now() * 1000) | 0); }
+const $ = (id) => document.getElementById(id);
+const fmtN = (n) => Math.round(n).toLocaleString('ko-KR');
+const fmtTime = (sec) => { const s = Math.max(0, Math.ceil(sec - 1e-6)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ignore */ } }
+const FONT_D = '"Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif';
+const INK = '#2a3733';
+const STEP = 1 / 60;
+
+// =====================================================================
+// AUDIO (all synthesised)
+// =====================================================================
+const PENTA = [0, 2, 4, 7, 9];
+const Sound = {
+  ctx: null, master: null, noiseBuf: null,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.55;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 1);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  suspend() { try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (e) { /* ignore */ } },
+  unlock() { this.ensure(); },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.55, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  tone(type, f0, f1, dur, vol, delay, attack) {
+    if (!this.ok()) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type) {
+    if (!this.ok()) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  note(idx) { return 261.63 * Math.pow(2, (PENTA[((idx % 5) + 5) % 5] + 12 * Math.floor(idx / 5)) / 12); },
+  pick(k, valid) {                         // a card joins the path: a chalk tap that climbs the scale
+    const f = this.note(k + 3);
+    this.tone('triangle', f, f, 0.1, 0.13);
+    this.noise(0.03, 3200, 1.2, 0.05);
+    if (valid) this.tone('sine', f * 2, f * 2, 0.12, 0.05, 0.03);
+  },
+  back() { this.tone('sine', 360, 300, 0.06, 0.07); },
+  good(len, combo) {
+    const base = 4 + Math.min(combo, 6);
+    for (let i = 0; i < len; i++) { const f = this.note(base + i * 2); this.tone('triangle', f, f, 0.2, 0.17, i * 0.06); this.tone('sine', f * 2, f * 2, 0.12, 0.05, i * 0.06 + 0.01); }
+    this.noise(0.08, 4200, 1, 0.07);
+  },
+  bad() { this.tone('square', 190, 120, 0.2, 0.08); this.tone('sine', 140, 90, 0.22, 0.12); },
+  dup() { this.tone('sine', 520, 520, 0.07, 0.09); this.tone('sine', 520, 520, 0.07, 0.09, 0.1); },
+  clear() { [0, 4, 7, 12, 7, 12, 16].forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.22, 0.17, i * 0.08); this.tone('sine', f * 2, f * 2, 0.14, 0.05, i * 0.08); }); this.noise(0.5, 6000, 0.6, 0.06, 0.2, 'highpass'); },
+  hint() { this.tone('sine', 880, 1320, 0.16, 0.1); this.tone('sine', 1320, 1760, 0.14, 0.07, 0.1); },
+  tick(sec) { this.tone('square', sec <= 3 ? 1040 : 780, sec <= 3 ? 1040 : 780, 0.06, 0.05); },
+  over() { [0, -3, -7, -12].forEach((s, i) => this.tone('triangle', 440 * Math.pow(2, s / 12), 440 * Math.pow(2, s / 12) * 0.97, 0.3, 0.18, i * 0.16)); },
+  fanfare() { [0, 4, 7, 12, 7, 12, 16, 19].forEach((s, i) => this.tone('triangle', 659 * Math.pow(2, s / 12), 659 * Math.pow(2, s / 12), 0.2, 0.12, 0.45 + i * 0.08)); },
+  ui() { this.tone('sine', 880, 1100, 0.06, 0.08); },
+};
+
+// =====================================================================
+// DRAWING: the chalk stick 필이 (a capsule body, two dot eyes, a smile, two small feet; no arms) and the letter cards
+// =====================================================================
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, rx, ry, rot || 0, 0, TAU); }
+function rrect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r);
+  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h); c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
+}
+function star4(c, x, y, R, col) {
+  c.fillStyle = col; c.beginPath();
+  c.moveTo(x, y - R); c.quadraticCurveTo(x, y, x + R, y); c.quadraticCurveTo(x, y, x, y + R); c.quadraticCurveTo(x, y, x - R, y); c.quadraticCurveTo(x, y, x, y - R);
+  c.fill();
+}
+// h = body height; the stick is centred on (0, 0). mood: idle | happy | oops | cheer
+function drawChalk(c, h, mood, blink) {
+  const w = h * 0.62, lw = Math.max(2, h * 0.04), top = -h / 2, wrapY = h * 0.1;
+  // feet
+  c.fillStyle = '#e8d9b8'; c.strokeStyle = INK; c.lineWidth = lw * 0.8;
+  for (const sx of [-1, 1]) { ell(c, sx * w * 0.22, h / 2 + h * 0.015, w * 0.15, h * 0.055); c.fill(); c.stroke(); }
+  // body
+  c.save();
+  rrect(c, -w / 2, top, w, h, w * 0.5);
+  const g = c.createLinearGradient(-w / 2, 0, w / 2, 0); g.addColorStop(0, '#f1ead3'); g.addColorStop(0.35, '#fffdf4'); g.addColorStop(1, '#ebe3c8');
+  c.fillStyle = g; c.fill();
+  c.clip();
+  // paper wrapper on the lower part
+  c.fillStyle = '#ff7a59'; c.fillRect(-w, wrapY, w * 2, h);
+  c.fillStyle = 'rgba(255,255,255,0.9)'; c.fillRect(-w, wrapY + h * 0.12, w * 2, h * 0.045); c.fillRect(-w, wrapY + h * 0.24, w * 2, h * 0.045);
+  c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(-w / 2 + w * 0.08, top, w * 0.1, h);
+  c.restore();
+  rrect(c, -w / 2, top, w, h, w * 0.5); c.strokeStyle = INK; c.lineWidth = lw; c.stroke();
+  c.beginPath(); c.moveTo(-w / 2 + lw * 0.5, wrapY); c.lineTo(w / 2 - lw * 0.5, wrapY); c.lineWidth = lw * 0.8; c.stroke();
+  // face (on the white part)
+  const ey = -h * 0.2, ex = w * 0.22;
+  c.fillStyle = 'rgba(255,128,150,0.55)';
+  for (const sx of [-1, 1]) { ell(c, sx * w * 0.33, ey + h * 0.1, w * 0.09, h * 0.04); c.fill(); }
+  c.fillStyle = INK; c.strokeStyle = INK; c.lineCap = 'round'; c.lineWidth = lw * 0.9;
+  for (const sx of [-1, 1]) {
+    const x = sx * ex;
+    if (mood === 'happy' || mood === 'cheer') { c.beginPath(); c.arc(x, ey + h * 0.02, w * 0.075, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); }
+    else if (blink > 0.5) { c.beginPath(); c.moveTo(x - w * 0.07, ey); c.lineTo(x + w * 0.07, ey); c.stroke(); }
+    else {
+      const worry = mood === 'oops';
+      ell(c, x, ey, w * 0.065, h * 0.052); c.fill();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(x + w * 0.02, ey - h * 0.018, w * 0.022, 0, TAU); c.fill(); c.fillStyle = INK;
+      if (worry) { c.beginPath(); c.moveTo(x - sx * w * 0.07, ey - h * 0.115); c.lineTo(x + sx * w * 0.07, ey - h * 0.082); c.lineWidth = lw * 0.7; c.stroke(); c.lineWidth = lw * 0.9; }
+    }
+  }
+  const my = ey + h * 0.115;
+  c.strokeStyle = INK; c.lineWidth = lw * 0.9; c.beginPath();
+  if (mood === 'happy' || mood === 'cheer') { c.arc(0, my - h * 0.01, w * 0.14, 0.05, Math.PI - 0.05); c.closePath(); c.fillStyle = '#c9454f'; c.fill(); c.stroke(); }
+  else if (mood === 'oops') { ell(c, 0, my + h * 0.015, w * 0.06, h * 0.032); c.fillStyle = '#c9454f'; c.fill(); c.stroke(); }
+  else { c.arc(0, my - h * 0.02, w * 0.1, Math.PI * 0.15, Math.PI * 0.85); c.stroke(); }
+}
+// the stick on a little floor, with a gentle sway; t in seconds
+function drawChalkScene(cv, mood, t, tiles) {
+  const c = cv.getContext('2d'), w = cv.width, h = cv.height;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+  const H = h * 0.52, cx = w / 2, cy = h * 0.5;
+  const sway = reduceMotion ? 0 : Math.sin(t * 2.2) * 0.05, hop = reduceMotion ? 0 : Math.abs(Math.sin(t * 2.2)) * h * 0.012;
+  c.fillStyle = 'rgba(8,24,20,0.3)'; ell(c, cx, cy + H * 0.57, H * 0.34, H * 0.05); c.fill();
+  if (tiles) {
+    const T = w * 0.17, spots = [[0.17, 0.3, '또', -0.12], [0.84, 0.27, '박', 0.1], [0.14, 0.72, '낱', 0.08], [0.86, 0.7, '말', -0.1]];
+    for (const s of spots) { c.save(); c.translate(w * s[0], h * s[1] + (reduceMotion ? 0 : Math.sin(t * 1.6 + s[0] * 9) * 4)); c.rotate(s[3]); drawTile(c, -T / 2, -T / 2, T, s[2], { face: '#fffaf0', lip: '#d8c79b' }); c.restore(); }
+  }
+  c.save(); c.translate(cx, cy - hop); c.rotate(sway); drawChalk(c, H, mood, (t % 3.6) > 3.45 ? 1 : 0); c.restore();
+  star4(c, w * 0.3, h * 0.12, w * 0.035 * (0.6 + 0.4 * Math.sin(t * 3)), '#fff7c2'); star4(c, w * 0.72, h * 0.14, w * 0.03 * (1 - 0.4 * Math.sin(t * 3)), '#ffffff');
+}
+// one letter card. o: { face, lip, pressed, glyph }
+function drawTile(c, x, y, T, ch, o) {
+  const lip = Math.max(3, T * 0.07), r = T * 0.2, press = o.pressed ? lip * 0.7 : 0;
+  c.save();
+  c.fillStyle = 'rgba(8,24,20,0.35)'; rrect(c, x + 1, y + lip + 3, T, T, r); c.fill();
+  c.fillStyle = o.lip; rrect(c, x, y + lip - press, T, T, r); c.fill();
+  c.fillStyle = o.face; rrect(c, x, y + press, T, T, r); c.fill();
+  c.lineWidth = Math.max(2, T * 0.032); c.strokeStyle = INK; rrect(c, x, y + press, T, T, r); c.stroke();
+  c.fillStyle = 'rgba(255,255,255,0.45)'; rrect(c, x + T * 0.1, y + press + T * 0.07, T * 0.34, T * 0.06, T * 0.03); c.fill();
+  if (o.glyph !== false) {
+    c.font = Math.round(T * 0.6) + 'px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = o.ink || INK; c.fillText(ch, x + T / 2, y + press + T * 0.54);
+  }
+  c.restore();
+}
+
+// =====================================================================
+// STATE + DOM
+// =====================================================================
+const el = {
+  app: $('app'), cv: $('cv'), bg: $('bg'), probe: $('probe'), col: $('col'), live: $('live'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrOver: $('scrOver'),
+  btnPause: $('btnPause'), btnMute: $('btnMute'), btnMuteT: $('btnMuteT'), btnMuteP: $('btnMuteP'), btnMuteR: $('btnMuteR'),
+  btnStart: $('btnStart'), btnResume: $('btnResume'), btnPauseRetry: $('btnPauseRetry'), btnAgain: $('btnAgain'), btnHint: $('btnHint'), hintLbl: $('hintLbl'),
+  pillTime: $('pillTime'), hTime: $('hTime'), pillScore: $('pillScore'), hScore: $('hScore'), hBest: $('hBest'),
+  chipProg: $('chipProg'), progFill: $('progFill'), hStage: $('hStage'), hProg: $('hProg'), chipCombo: $('chipCombo'), comboFill: $('comboFill'), hCombo: $('hCombo'),
+  bubble: $('bubble'), bubbleTxt: $('bubbleTxt'), hRemain: $('hRemain'), curWord: $('curWord'), hWord: $('hWord'), foundBox: $('foundBox'),
+  banner: $('banner'), bannerTxt: $('bannerTxt'), bannerSub: $('bannerSub'), keys: $('keys'),
+  tBest: $('tBest'), rGrade: $('rGrade'), rTitle: $('rTitle'), rScore: $('rScore'), rBadge: $('rBadge'), rGoal: $('rGoal'),
+  rWords: $('rWords'), rStage: $('rStage'), rLong: $('rLong'), rCombo: $('rCombo'), rMissed: $('rMissed'), rSeed: $('rSeed'),
+  mascotT: $('mascotT'), mascotP: $('mascotP'), mascotR: $('mascotR'), demoT: $('demoT'),
+};
+const ctx = el.cv.getContext('2d');
+const V = {
+  G: null, seed: 0, phase: 'title', paused: false, clock: 0, acc: 0,
+  best: readInt(KEY_BEST), bestAtStart: 0, newRecord: false,
+  path: [], cur: 0, kb: false, gridN: 4, boardAge: 0, tileFx: [], shake: 0, flash: 0,
+  mood: 'idle', moodT: 0, bubbleT: 0, bubbleMsg: '', cwT: 0,
+  dispScore: 0, scoreShown: -1, floats: [], armT: 0, endT: 0, pillPop: false, lastMsgKind: '',
+  timeShown: '', progShown: '', remShown: -1, hintShown: '', comboShown: -1, wordShown: null,
+};
+const LAY = { W: 390, H: 844, dpr: 1, s: 1, ox: 0, oy: 0, sat: 0, sab: 0, sal: 0, sar: 0, colH: 844 };
+const In = { id: null, down: false, lx: 0, ly: 0 };
+const COL_W = 390;
+let bgMode = '';
+
+// =====================================================================
+// LAYOUT: the HUD column is 390 wide and scaled; the grid is fitted between the word line and the bottom controls
+// =====================================================================
+const CW_H = 52, FOUND_H = 62, HINT_H = 48;
+function hintTopY() { return LAY.colH - (el.keys.hidden ? 10 : 24) - HINT_H; }
+// curWord line + grid + found-words box form one group, centred in the space between the speech bubble and the hint button
+function gridGeom(n) {
+  n = n || V.gridN;
+  const areaTop = 198, areaBottom = hintTopY() - 8, areaH = areaBottom - areaTop;
+  const size = Math.max(160, Math.min(COL_W - 24, areaH - CW_H - FOUND_H - 20));
+  const groupH = CW_H + 6 + size + 10 + FOUND_H, gtop = areaTop + Math.max(0, (areaH - groupH) / 2);
+  const gap = n <= 4 ? 8 : 6, T = (size - gap * (n - 1)) / n;
+  return { n, T, gap, pitch: T + gap, x0: (COL_W - size) / 2, y0: gtop + CW_H + 6, total: size, cwTop: gtop, foundTop: gtop + CW_H + 6 + size + 10 };
+}
+function cellXY(i, g) { g = g || gridGeom(); return { x: g.x0 + (i % g.n) * g.pitch, y: g.y0 + Math.floor(i / g.n) * g.pitch }; }
+function cellCenter(i, g) { g = g || gridGeom(); const p = cellXY(i, g); return { x: p.x + g.T / 2, y: p.y + g.T / 2 }; }
+function layout() {
+  const probe = getComputedStyle(el.probe);
+  const sat = parseFloat(probe.paddingTop) || 0, sab = parseFloat(probe.paddingBottom) || 0, sal = parseFloat(probe.paddingLeft) || 0, sar = parseFloat(probe.paddingRight) || 0;
+  const vv = window.visualViewport;
+  const W = Math.max(1, Math.round(vv && vv.width ? vv.width : window.innerWidth)), H = Math.max(1, Math.round(vv && vv.height ? vv.height : window.innerHeight));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(2600000 / (W * H)));
+  const usable = H - sat - sab, uw = W - sal - sar;
+  const s = clamp(Math.min(uw / COL_W, usable / 720), 0.5, 1.5);
+  const ox = sal + (uw - COL_W * s) / 2, oy = sat, colH = usable / s;
+  Object.assign(LAY, { W, H, dpr, s, ox, oy, sat, sab, sal, sar, colH });
+  el.cv.width = Math.round(W * dpr); el.cv.height = Math.round(H * dpr);
+  el.bg.width = el.cv.width; el.bg.height = el.cv.height;
+  const st = el.col.style;
+  st.left = ox + 'px'; st.top = oy + 'px'; st.height = colH + 'px'; st.transform = 'scale(' + s + ')';
+  el.keys.hidden = !fine || colH < 700;
+  const g0 = gridGeom(4);
+  el.btnHint.style.top = hintTopY() + 'px';
+  el.curWord.style.top = g0.cwTop + 'px';
+  el.foundBox.style.top = g0.foundTop + 'px';
+  paintBg();
+  drawDemo();
+}
+
+// static layer (#bg): the chalkboard, faint chalk doodles and the wooden frame
+function paintBg() {
+  const W = LAY.W, H = LAY.H, dpr = LAY.dpr, c = el.bg.getContext('2d');
+  bgMode = V.phase === 'title' ? 'title' : 'play';
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const g = c.createRadialGradient(W / 2, H * 0.4, Math.min(W, H) * 0.1, W / 2, H * 0.5, Math.max(W, H) * 0.75);
+  g.addColorStop(0, '#2f6656'); g.addColorStop(1, '#1b3f36');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  let a = 777; const lcg = () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; };
+  // chalk dust smudges
+  for (let i = 0; i < 14; i++) {
+    const x = lcg() * W, y = lcg() * H, rx = 40 + lcg() * 120, ry = 14 + lcg() * 40;
+    c.fillStyle = 'rgba(255,255,255,' + (0.015 + lcg() * 0.025).toFixed(3) + ')'; c.beginPath(); c.ellipse(x, y, rx, ry, lcg() * 3, 0, TAU); c.fill();
+  }
+  // faint doodles: Hangul consonants and little stars
+  const jam = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅏ', 'ㅓ', 'ㅗ', 'ㅜ', 'ㅡ', 'ㅣ'];
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (let i = 0; i < 26; i++) {
+    const x = lcg() * W, y = lcg() * H, sz = 26 + lcg() * 34, rot = (lcg() - 0.5) * 0.9;
+    c.save(); c.translate(x, y); c.rotate(rot); c.font = Math.round(sz) + 'px ' + FONT_D; c.fillStyle = 'rgba(247,243,230,' + (0.045 + lcg() * 0.045).toFixed(3) + ')'; c.fillText(jam[Math.floor(lcg() * jam.length)], 0, 0); c.restore();
+  }
+  for (let i = 0; i < 16; i++) star4(c, lcg() * W, lcg() * H, 3 + lcg() * 5, 'rgba(247,243,230,' + (0.08 + lcg() * 0.08).toFixed(3) + ')');
+  // wooden frame
+  const f = 7;
+  const wg = c.createLinearGradient(0, 0, 0, H); wg.addColorStop(0, '#a9703f'); wg.addColorStop(0.5, '#8a5a33'); wg.addColorStop(1, '#6b4325');
+  c.fillStyle = wg; c.fillRect(0, 0, W, f); c.fillRect(0, H - f, W, f); c.fillRect(0, 0, f, H); c.fillRect(W - f, 0, f, H);
+  c.strokeStyle = 'rgba(30,16,6,0.7)'; c.lineWidth = 2; c.strokeRect(f, f, W - f * 2, H - f * 2);
+  c.strokeStyle = 'rgba(255,220,170,0.25)'; c.lineWidth = 1.5; c.strokeRect(1, 1, W - 2, H - 2);
+}
+
+// small canvas on the title: a tiny example of dragging 사 -> 과
+function drawDemo() {
+  const cv = el.demoT; if (!cv) return;
+  const c = cv.getContext('2d'), w = cv.width, h = cv.height;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+  const T = h * 0.7, gap = w * 0.03, y = (h - T) / 2 - 4, lbl = ['사', '과', '무', '나'];
+  const total = T * 4 + gap * 3, x0 = w * 0.02;
+  const sc = Math.min(1, (w * 0.62) / total);
+  c.save(); c.translate(x0, 0); c.scale(sc, sc);
+  for (let i = 0; i < 4; i++) {
+    const x = i * (T + gap), sel = i < 2;
+    drawTile(c, x, y, T, lbl[i], sel ? { face: '#ffd75e', lip: '#c9961a', pressed: true } : { face: '#fffaf0', lip: '#d8c79b' });
+  }
+  c.strokeStyle = 'rgba(255,122,89,0.85)'; c.lineWidth = T * 0.16; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(T / 2, y + T / 2 + 4); c.lineTo(T + gap + T / 2, y + T / 2 + 4); c.stroke();
+  c.font = Math.round(T * 0.6) + 'px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK;
+  for (let i = 0; i < 2; i++) c.fillText(lbl[i], i * (T + gap) + T / 2, y + T * 0.54 + 3);
+  c.restore();
+  c.font = Math.round(h * 0.42) + 'px ' + FONT_D; c.textAlign = 'left'; c.textBaseline = 'middle';
+  c.lineJoin = 'round'; c.lineWidth = h * 0.09; c.strokeStyle = INK; c.fillStyle = '#ffd75e';
+  const tx = w * 0.7; c.strokeText('= 사과!', tx - w * 0.02, h * 0.5); c.fillText('= 사과!', tx - w * 0.02, h * 0.5);
+}
+
+// =====================================================================
+// EFFECTS (logical column px)
+// =====================================================================
+const MAX_PART = 200;
+const parts = []; for (let i = 0; i < MAX_PART; i++) parts.push({ on: false, kind: 0, x: 0, y: 0, vx: 0, vy: 0, g: 0, life: 0, max: 1, size: 4, col: '#fff', rot: 0, vr: 0 });
+function spawn(kind, x, y, vx, vy, g, life, size, col) {
+  for (const p of parts) {
+    if (p.on) continue;
+    p.on = true; p.kind = kind; p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.g = g; p.life = life; p.max = life; p.size = size; p.col = col; p.rot = Math.random() * TAU; p.vr = rv(-8, 8);
+    return;
+  }
+}
+function puffAt(x, y, n, spd, col, size) {
+  if (reduceMotion) n = Math.ceil(n / 3);
+  for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = spd * rv(0.3, 1); spawn(0, x, y, Math.cos(a) * v, Math.sin(a) * v - spd * 0.2, 120, rv(0.35, 0.7), size * rv(0.6, 1.2), col); }
+}
+function sparkAt(x, y, n, spd, cols) {
+  if (reduceMotion) n = Math.ceil(n / 3);
+  for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = spd * rv(0.4, 1); spawn(3, x, y, Math.cos(a) * v, Math.sin(a) * v, 60, rv(0.5, 0.9), rv(4, 8), cols[i % cols.length]); }
+}
+function ringAt(x, y, r, col) { spawn(1, x, y, 0, 0, 0, 0.4, r, col); }
+function confetti(n) {
+  const cols = ['#ffd75e', '#8fd4ff', '#ff8fa3', '#ffffff', '#b9a6ff', '#6fe0a0'];
+  if (reduceMotion) n = Math.ceil(n / 4);
+  for (let i = 0; i < n; i++) spawn(2, rv(0, COL_W), rv(-60, -10), rv(-50, 50), rv(70, 240), 130, rv(2.2, 3.4), rv(6, 11), cols[i % cols.length]);
+}
+function addFloat(txt, x, y, col, size, life) { if (V.floats.length > 14) V.floats.shift(); V.floats.push({ txt, x: clamp(x, 62, COL_W - 62), y, t: 0, life: life || 0.95, col, size }); }
+function fxStep(dt) {
+  for (const p of parts) {
+    if (!p.on) continue;
+    p.life -= dt; if (p.life <= 0) { p.on = false; continue; }
+    p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    if (p.kind === 0) { p.vx *= 1 - 2.5 * dt; p.vy *= 1 - 2.5 * dt; }
+    if (p.kind === 2) p.vx += Math.sin(p.life * 5 + p.size) * 30 * dt;
+  }
+  for (let i = V.floats.length - 1; i >= 0; i--) { const f = V.floats[i]; f.t += dt; if (f.t >= f.life) V.floats.splice(i, 1); }
+  if (V.shake > 0) V.shake = Math.max(0, V.shake - dt * 22);
+  if (V.flash > 0) V.flash = Math.max(0, V.flash - dt * 1.6);
+  for (let i = 0; i < V.tileFx.length; i++) { const f = V.tileFx[i]; if (f) { f.t += dt; if (f.t > f.dur) V.tileFx[i] = null; } }
+}
+function fxRender(c) {
+  for (const p of parts) {
+    if (!p.on) continue;
+    const k = p.life / p.max;
+    if (p.kind === 1) {
+      c.globalAlpha = k; c.strokeStyle = p.col; c.lineWidth = 4 * k + 1;
+      c.beginPath(); c.arc(p.x, p.y, p.size * (1.5 - k * 0.7), 0, TAU); c.stroke();
+    } else if (p.kind === 0) {
+      c.globalAlpha = k * 0.85; c.fillStyle = p.col;
+      c.beginPath(); c.arc(p.x, p.y, p.size * (1.3 - k * 0.5), 0, TAU); c.fill();
+    } else if (p.kind === 3) {
+      c.globalAlpha = Math.min(1, k * 2); c.save(); c.translate(p.x, p.y); c.rotate(p.rot * 0.2); star4(c, 0, 0, p.size * (0.5 + k * 0.7), p.col); c.restore();
+    } else {
+      c.globalAlpha = Math.min(1, k * 3); c.fillStyle = p.col;
+      c.save(); c.translate(p.x, p.y); c.rotate(p.rot); c.fillRect(-p.size / 2, -p.size * 0.3, p.size, p.size * 0.6); c.restore();
+    }
+  }
+  c.globalAlpha = 1;
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+  for (const f of V.floats) {
+    const k = f.t / f.life, up = 42 * (1 - Math.pow(1 - k, 2));
+    c.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+    const sc = k < 0.15 ? 0.6 + k / 0.15 * 0.5 : 1.1 - Math.min(0.1, (k - 0.15) * 0.4);
+    c.font = Math.round(f.size * sc) + 'px ' + FONT_D;
+    c.lineWidth = Math.max(3, f.size * 0.26); c.strokeStyle = '#14302a'; c.strokeText(f.txt, f.x, f.y - up);
+    c.fillStyle = f.col; c.fillText(f.txt, f.x, f.y - up);
+  }
+  c.globalAlpha = 1;
+}
+
+// =====================================================================
+// WORLD RENDERING
+// =====================================================================
+const easeBack = (k) => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const TILE_PLAIN = { face: '#fffaf0', lip: '#d8c79b' };
+const TILE_SEL = { face: '#ffd75e', lip: '#c9961a', pressed: true };
+const TILE_GOOD = { face: '#a6ecc0', lip: '#4fb27d', pressed: true };
+const FX_COL = { ok: '111,224,160', bad: '255,107,94', dup: '143,212,255' };
+function previewOf() { const G = V.G; return G ? previewState(G, V.path) : { word: '', valid: false, dup: false }; }
+
+function drawGrid(c) {
+  const G = V.G, B = G.board, g = gridGeom(B.n), T = g.T;
+  const pv = previewOf();
+  for (let i = 0; i < B.cells.length; i++) {
+    const p = cellXY(i, g), age = V.boardAge - i * 0.022;
+    const k = reduceMotion ? 1 : clamp(age / 0.28, 0, 1);
+    if (k <= 0) continue;
+    const sc = reduceMotion ? 1 : easeBack(k);
+    const sel = V.path.indexOf(i) >= 0, fx = V.tileFx[i];
+    let ox = 0;
+    if (fx && fx.k === 'bad') ox = Math.sin(fx.t * 55) * 4 * (1 - fx.t / fx.dur);
+    c.save();
+    c.translate(p.x + T / 2 + ox, p.y + T / 2); c.scale(sc, sc); c.translate(-T / 2, -T / 2);
+    let o = sel ? (pv.valid ? TILE_GOOD : TILE_SEL) : TILE_PLAIN;
+    if (!sel && G.hintCell === i) o = { face: '#fff0a8', lip: '#d8c79b' };
+    drawTile(c, 0, 0, T, B.cells[i], o);
+    if (fx) {
+      const a = (1 - fx.t / fx.dur) * 0.6;
+      c.fillStyle = 'rgba(' + FX_COL[fx.k] + ',' + a.toFixed(3) + ')'; rrect(c, 0, 0, T, T, T * 0.2); c.fill();
+    }
+    if (G.hintCell === i && !sel) {
+      const pulse = 0.5 + 0.5 * Math.sin(V.clock * 9);
+      c.lineWidth = 4 + pulse * 2; c.strokeStyle = 'rgba(255,215,94,' + (0.6 + pulse * 0.4).toFixed(2) + ')';
+      rrect(c, -4 - pulse * 2, -4 - pulse * 2, T + 8 + pulse * 4, T + 8 + pulse * 4, T * 0.26); c.stroke();
+    }
+    if (V.kb && V.cur === i) {
+      c.setLineDash([7, 5]); c.lineWidth = 3.5; c.strokeStyle = '#ff8fa3';
+      rrect(c, -5, -5, T + 10, T + 10, T * 0.26); c.stroke(); c.setLineDash([]);
+    }
+    c.restore();
+  }
+  // path line over the cards, then the picked glyphs again on top so they stay readable
+  if (V.path.length >= 1) {
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    if (V.path.length >= 2) {
+      c.strokeStyle = pv.valid ? 'rgba(40,150,95,0.78)' : 'rgba(255,122,89,0.78)'; c.lineWidth = T * 0.14;
+      c.beginPath();
+      V.path.forEach((i, k) => { const q = cellCenter(i, g); if (k) c.lineTo(q.x, q.y + 2); else c.moveTo(q.x, q.y + 2); });
+      c.stroke();
+    }
+    const q0 = cellCenter(V.path[0], g);
+    c.fillStyle = pv.valid ? '#1f7a4c' : '#c4482b'; c.beginPath(); c.arc(q0.x, q0.y + 2, T * 0.085, 0, TAU); c.fill();
+    c.font = Math.round(T * 0.6) + 'px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const i of V.path) { const q = cellCenter(i, g); c.fillStyle = INK; c.fillText(B.cells[i], q.x, q.y + T * 0.04 + 2); }
+    c.restore();
+  }
+}
+function drawMascotHud(c) {
+  const t = V.clock, hop = V.moodT > 0 && (V.mood === 'happy' || V.mood === 'cheer') && !reduceMotion ? Math.abs(Math.sin(t * 14)) * 9 : 0;
+  const sway = reduceMotion ? 0 : Math.sin(t * 2.2) * 0.04, mood = V.moodT > 0 ? V.mood : 'idle';
+  c.save();
+  c.fillStyle = 'rgba(8,24,20,0.3)'; ell(c, 50, 197, 27, 4.5); c.fill();
+  c.translate(50, 150 - hop); c.rotate(sway); drawChalk(c, 84, mood, (t % 3.6) > 3.45 ? 1 : 0);
+  c.restore();
+}
+function render(dt) {
+  const c = ctx, W = LAY.W, H = LAY.H, dpr = LAY.dpr, s = LAY.s;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  if (V.phase === 'title' || !V.G) return;
+  V.boardAge += dt;
+  c.setTransform(dpr * s, 0, 0, dpr * s, dpr * LAY.ox, dpr * LAY.oy);
+  if (V.shake > 0 && !reduceMotion) c.translate(rv(-1, 1) * V.shake, rv(-1, 1) * V.shake);
+  V.gridN = V.G.board.n;
+  drawGrid(c);
+  fxRender(c);
+  drawMascotHud(c);
+  if (V.flash > 0) { c.fillStyle = 'rgba(255,240,170,' + (V.flash * 0.35).toFixed(3) + ')'; c.fillRect(-20, -20, COL_W + 40, LAY.colH + 40); }
+}
+
+// =====================================================================
+// UI
+// =====================================================================
+function uiMute() {
+  el.btnMute.classList.toggle('muted', Sound.muted);
+  el.btnMute.setAttribute('aria-label', Sound.muted ? '소리 켜기' : '소리 끄기');
+  const t = Sound.muted ? '소리 켜기' : '소리 끄기';
+  el.btnMuteT.textContent = t; el.btnMuteP.textContent = t; el.btnMuteR.textContent = t;
+}
+function uiBest() {
+  el.hBest.textContent = V.best > 0 ? fmtN(V.best) + '점' : '-';
+  el.tBest.textContent = V.best > 0 ? fmtN(V.best) + '점' : '아직 기록이 없어요';
+  el.tBest.classList.toggle('none', !(V.best > 0));
+}
+function setScore(v) {
+  const r = Math.round(v);
+  if (r === V.scoreShown) return;
+  V.scoreShown = r; el.hScore.textContent = fmtN(r);
+}
+function say(t) { el.live.textContent = t; }
+function setBubble(txt, kind, dur) {
+  if (el.bubbleTxt.textContent !== txt) el.bubbleTxt.textContent = txt;
+  el.bubble.classList.toggle('bad', kind === 'bad'); el.bubble.classList.toggle('good', kind === 'good');
+  if (kind) { el.bubble.classList.remove('bump'); void el.bubble.offsetWidth; el.bubble.classList.add('bump'); }
+  V.bubbleT = dur || 0; V.lastMsgKind = kind || '';
+}
+function defaultTip() {
+  const G = V.G; if (!G) return '';
+  if (G.stage === 1 && G.words === 0) return '옆 칸으로 쭉 이어 보세요. 손을 떼면 제출해요!';
+  if (G.left <= 10) return '조금만 더 힘내요!';
+  const r = remaining(G);
+  if (r <= 3) return '거의 다 찾았어요. 숨은 낱말이 ' + r + '개 남았어요.';
+  if (G.combo >= 3) return '연속 ' + G.combo + '번! 이대로 쭉 이어 가요.';
+  return '대각선도 이을 수 있어요. 막히면 힌트를 눌러요!';
+}
+function setCurWord(txt, cls, hold) {
+  el.hWord.textContent = txt;
+  el.curWord.className = cls || '';
+  V.cwT = hold || 0; V.wordShown = txt;
+}
+function refreshWord() {
+  const G = V.G; if (!G) return;
+  if (!V.path.length) {
+    if (V.cwT > 0) return;
+    setCurWord(V.kb ? 'Space로 글자를 골라요' : '글자를 이어 보세요', 'empty', 0);
+    return;
+  }
+  const pv = previewOf();
+  setCurWord(pv.word, pv.valid ? 'valid' : pv.dup ? 'dup' : '', 0);
+}
+function addFoundChip(word, len) {
+  const box = el.foundBox, emp = box.querySelector('.empty');
+  if (emp) emp.remove();
+  const i = document.createElement('i');
+  i.textContent = word; i.className = 'new' + (len >= 5 ? ' l5' : len === 4 ? ' l4' : len === 3 ? ' l3' : '');
+  box.insertBefore(i, box.firstChild);
+  while (box.children.length > 14) box.removeChild(box.lastChild);
+}
+function resetFoundBox() { el.foundBox.innerHTML = '<div class="empty">찾은 낱말이 여기에 모여요</div>'; }
+function showBanner(txt, sub, fast) {
+  el.bannerTxt.textContent = txt; el.bannerSub.textContent = sub || '';
+  el.banner.classList.remove('show', 'fast'); void el.banner.offsetWidth;
+  el.banner.classList.add('show'); if (fast) el.banner.classList.add('fast');
+}
+function commitBest() {
+  const G = V.G;
+  if (G && G.score > V.best) { V.best = G.score; store.set(KEY_BEST, String(V.best)); V.newRecord = V.bestAtStart < V.best; uiBest(); }
+}
+function setMood(m, t) { V.mood = m; V.moodT = t; }
+
+// ---- screens ----
+function showScreen(name) {
+  el.scrTitle.hidden = name !== 'title';
+  el.scrPause.hidden = name !== 'pause';
+  el.scrOver.hidden = name !== 'over';
+  el.col.hidden = name === 'title';
+}
+function startRun(seed) {
+  Sound.ensure();
+  V.seed = seed !== undefined ? seed | 0 : (RUN_SEED !== null ? RUN_SEED : freshSeed());
+  V.G = newGame(V.seed);
+  V.phase = 'play'; V.paused = false; V.newRecord = false; V.bestAtStart = V.best;
+  V.dispScore = 0; V.scoreShown = -1; V.endT = 0; V.path = []; V.cur = 0; V.kb = false; V.gridN = V.G.board.n; V.boardAge = 0; V.tileFx = [];
+  V.floats.length = 0; V.shake = 0; V.flash = 0; V.armT = 0; V.cwT = 0; V.mood = 'idle'; V.moodT = 0;
+  V.timeShown = ''; V.progShown = ''; V.remShown = -1; V.hintShown = ''; V.comboShown = -1;
+  for (const p of parts) p.on = false;
+  document.body.classList.remove('paused');
+  el.banner.classList.remove('show');
+  el.btnPauseRetry.textContent = '처음부터'; el.btnPauseRetry.classList.remove('arm');
+  resetFoundBox();
+  showScreen('play');
+  setScore(0); uiBest(); refreshWord();
+  setBubble('안녕! 나는 필이야. ' + defaultTip(), '', 6);
+  say('새 판이 시작됐어요');
+  releaseInput();
+}
+function toTitle() {
+  V.phase = 'title'; V.paused = false; document.body.classList.remove('paused');
+  releaseInput();
+  showScreen('title'); uiBest();
+}
+function pauseGame() {
+  if (V.phase !== 'play' || V.paused || !V.G) return;
+  releaseInput();
+  V.paused = true; document.body.classList.add('paused');
+  commitBest();
+  Sound.suspend();
+  showScreen('pause');
+  el.col.hidden = false;
+  el.btnPauseRetry.textContent = '처음부터'; el.btnPauseRetry.classList.remove('arm'); V.armT = 0;
+  try { el.btnResume.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+}
+function resumeGame() {
+  if (!V.paused) return;
+  V.paused = false; document.body.classList.remove('paused');
+  showScreen('play'); lastT = 0;
+  Sound.unlock();
+}
+function releaseInput() { In.down = false; In.id = null; V.path = []; V.kbActive = false; if (V.G) refreshWord(); }
+function showOver() {
+  const G = V.G;
+  V.phase = 'over';
+  commitBest();
+  el.rGrade.textContent = gradeFor(G.words, G.stage);
+  el.rTitle.textContent = '시간이 다 됐어요';
+  el.rScore.textContent = fmtN(G.score);
+  el.rBadge.hidden = !V.newRecord;
+  el.rGoal.innerHTML = V.newRecord ? '이번 판이 <b>내 최고 기록</b>이에요!' : (V.best > 0 ? '내 최고 기록은 <b>' + fmtN(V.best) + '점</b>이에요.' : '');
+  el.rWords.textContent = G.words + '개';
+  el.rStage.textContent = G.stage + '단계';
+  el.rLong.textContent = G.longest || '-';
+  el.rCombo.textContent = G.maxCombo > 1 ? G.maxCombo + '번' : '없음';
+  const miss = missedWords(G, 3);
+  el.rMissed.hidden = !miss.length;
+  el.rMissed.innerHTML = miss.length ? '이런 낱말도 숨어 있었어요: ' + miss.map((w) => '<b>' + w + '</b>').join(' ') : '';
+  el.rSeed.hidden = RUN_SEED === null; el.rSeed.textContent = '시드 ' + V.seed;
+  showScreen('over'); el.col.hidden = true;
+  try { el.btnAgain.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  say('끝났어요. ' + fmtN(G.score) + '점이에요');
+}
+
+// =====================================================================
+// GAME EVENTS -> effects + sound
+// =====================================================================
+const PRAISE2 = ['좋아요!', '잘 찾았어요!', '또박또박 잘 써요!', '딱 맞아요!'];
+const pickOf = (a) => a[Math.floor(Math.random() * a.length)];
+function pathCenters(path) { const g = gridGeom(V.gridN); return path.map((i) => cellCenter(i, g)); }
+function processEvents() {
+  const G = V.G;
+  const evs = G.ev.splice(0);
+  for (const e of evs) {
+    if (e.k === 'ok') {
+      const cs = pathCenters(e.path), mid = cs[Math.floor((cs.length - 1) / 2)], last = cs[cs.length - 1];
+      e.path.forEach((i) => { V.tileFx[i] = { k: 'ok', t: 0, dur: 0.55 }; });
+      for (const q of cs) puffAt(q.x, q.y, 3 + e.len, 45, '#f7f3e6', 3);
+      sparkAt(mid.x, mid.y, 4 + e.len * 2, 90, ['#ffffff', '#ffe58a', '#bfe9ff']);
+      addFloat('+' + fmtN(e.pts), last.x, last.y - 14, e.combo > 1 ? '#ffd75e' : '#ffffff', 24 + Math.min(e.len, 5) * 2.2);
+      if (e.combo > 1) addFloat('연속 ' + e.combo + '!', mid.x, mid.y - 44, '#ff8fa3', 22 + Math.min(e.combo, 6) * 1.5, 1.1);
+      Sound.good(e.len, e.combo);
+      if (e.combo >= 4 || e.len >= 4) buzz(25);
+      V.pillPop = true; V.comboPop = e.combo > 1;
+      setMood(e.len >= 3 || e.combo >= 3 ? 'cheer' : 'happy', 1.1);
+      let msg = pickOf(PRAISE2), kind = 'good';
+      if (e.len >= 5) msg = e.len + '글자나! 최고예요!';
+      else if (e.len === 4) msg = '네 글자 낱말이라니 놀라워요!';
+      else if (e.len === 3) msg = '세 글자 낱말이에요! 멋져요!';
+      if (e.combo >= 3) msg = '연속 ' + e.combo + '번! 대단해요. ×' + e.mult.toFixed(2).replace(/\.?0+$/, '');
+      setBubble(msg, kind, 2.4);
+      setCurWord(e.word, 'ok', 0.7);
+      addFoundChip(e.word, e.len);
+      say(e.word + ' ' + e.pts + '점');
+    } else if (e.k === 'bad') {
+      e.path.forEach((i) => { V.tileFx[i] = { k: 'bad', t: 0, dur: 0.5 }; });
+      V.shake = Math.max(V.shake, 2.2);
+      Sound.bad(); buzz(30);
+      setMood('oops', 1.2);
+      setBubble(e.had >= 2 ? '그런 낱말은 없어요. 연속이 끊겼어요.' : '그런 낱말은 없어요. 다시 해 봐요!', 'bad', 2.4);
+      setCurWord(e.word, 'bad', 0.6);
+    } else if (e.k === 'dup') {
+      e.path.forEach((i) => { V.tileFx[i] = { k: 'dup', t: 0, dur: 0.5 }; });
+      Sound.dup();
+      setMood('idle', 0);
+      setBubble('이미 찾은 낱말이에요. 다른 낱말을 찾아봐요!', 'bad', 2.2);
+      setCurWord(e.word, 'dup', 0.6);
+    } else if (e.k === 'clear') {
+      confetti(60); V.flash = 0.7; Sound.clear(); buzz([40, 30, 60]);
+      showBanner(e.stage + '단계 완료!', '시간 +' + e.time + '초 · 보너스 +' + e.bonus + '점', false);
+      V.gridN = G.board.n; V.boardAge = 0; V.tileFx = []; V.path = [];
+      resetFoundBox();
+      setMood('cheer', 1.8);
+      setBubble('새 칠판이에요! ' + (e.next) + '단계도 힘내요.', 'good', 3);
+      el.pillTime.classList.add('plus'); V.plusT = 0.8;
+      addFloat('+' + e.bonus, COL_W / 2, 330, '#ffd75e', 34, 1.3);
+      say(e.stage + '단계 완료');
+    } else if (e.k === 'hint') {
+      Sound.hint();
+      const q = cellCenter(e.cell, gridGeom(V.gridN));
+      sparkAt(q.x, q.y, 6, 70, ['#ffd75e', '#ffffff']); ringAt(q.x, q.y, 34, '#ffd75e');
+      setBubble(e.len + '글자 낱말이 있어요. 반짝이는 칸에서 시작해 봐요!', 'good', 3.4);
+    } else if (e.k === 'tick') {
+      Sound.tick(e.sec);
+      if (e.sec === 10) setBubble('앞으로 10초! 조금만 더 힘내요!', '', 3);
+    } else if (e.k === 'over') {
+      V.phase = 'ending'; V.endT = 0;
+      releaseInput(); commitBest();
+      V.shake = 3; Sound.over(); buzz(100);
+      setMood('oops', 3);
+      showBanner('시간 끝!', G.words + '개를 찾았어요', true);
+      say('시간이 다 됐어요');
+    }
+  }
+}
+function doSubmit() {
+  const G = V.G;
+  if (!G || V.phase !== 'play' || V.paused) return null;
+  const p = V.path.slice(); V.path = []; V.kbActive = false;
+  if (p.length < 2) { refreshWord(); return { type: 'short' }; }
+  const r = submit(G, p);
+  processEvents();
+  refreshWord();
+  return r;
+}
+function stepFixed(dt) {
+  V.clock += dt;
+  const G = V.G;
+  if (V.phase === 'play' && G && !V.paused) {
+    step(G, dt);
+    processEvents();
+    if (G.score > V.best) { V.best = G.score; store.set(KEY_BEST, String(V.best)); V.newRecord = V.bestAtStart < V.best; }
+  } else if (V.phase === 'ending') {
+    V.endT += dt;
+    if (V.endT >= 1.6) showOver();
+  }
+  if (V.moodT > 0) { V.moodT -= dt; if (V.moodT <= 0) V.mood = 'idle'; }
+  if (V.cwT > 0) { V.cwT -= dt; if (V.cwT <= 0 && !V.path.length) refreshWord(); }
+  if (V.bubbleT > 0) { V.bubbleT -= dt; if (V.bubbleT <= 0 && V.phase === 'play') setBubble(defaultTip(), '', 0); }
+  if (V.plusT > 0) { V.plusT -= dt; if (V.plusT <= 0) el.pillTime.classList.remove('plus'); }
+  if (V.armT > 0) { V.armT -= dt; if (V.armT <= 0) { el.btnPauseRetry.classList.remove('arm'); el.btnPauseRetry.textContent = '처음부터'; } }
+  fxStep(dt);
+}
+function updateHud(dt) {
+  const G = V.G; if (!G) return;
+  const target = G.score;
+  if (V.dispScore < target) V.dispScore = Math.min(target, V.dispScore + Math.max(1, (target - V.dispScore) * Math.min(1, dt * 12)));
+  else V.dispScore = target;
+  const before = V.scoreShown; setScore(V.dispScore);
+  if (before !== V.scoreShown && V.pillPop) { V.pillPop = false; el.pillScore.classList.remove('pop'); void el.pillScore.offsetWidth; el.pillScore.classList.add('pop'); }
+  if (V.best > 0) { const t = fmtN(V.best) + '점'; if (el.hBest.textContent !== t) el.hBest.textContent = t; }
+  const ts = fmtTime(G.left);
+  if (ts !== V.timeShown) { V.timeShown = ts; el.hTime.textContent = ts; el.pillTime.classList.toggle('low', G.left <= 10 && G.phase === 'play'); }
+  const ps = G.stage + '|' + G.stageFound + '|' + G.board.target;
+  if (ps !== V.progShown) {
+    V.progShown = ps; el.hStage.textContent = G.stage + '단계'; el.hProg.textContent = G.stageFound + '/' + G.board.target;
+    el.progFill.style.width = Math.min(100, G.stageFound / G.board.target * 100) + '%';
+  }
+  const rem = remaining(G);
+  if (rem !== V.remShown) { V.remShown = rem; el.hRemain.textContent = rem; }
+  const hl = G.hintsLeft > 0 ? '힌트 ' + G.hintsLeft + '번 남음' : '힌트를 다 썼어요';
+  if (hl !== V.hintShown) { V.hintShown = hl; el.hintLbl.textContent = hl; el.btnHint.disabled = G.hintsLeft <= 0; }
+  if (G.combo !== V.comboShown) {
+    V.comboShown = G.combo; el.hCombo.textContent = G.combo ? '×' + G.combo : '0'; el.chipCombo.classList.toggle('on', G.combo > 0);
+    if (V.comboPop && G.combo > 1) { V.comboPop = false; el.chipCombo.classList.remove('pop'); void el.chipCombo.offsetWidth; el.chipCombo.classList.add('pop'); }
+  }
+  el.comboFill.style.width = G.combo > 0 ? Math.max(0, G.comboT / COMBO_WINDOW * 100) + '%' : '0%';
+}
+
+// =====================================================================
+// INPUT
+// =====================================================================
+function toCol(e) { return { x: (e.clientX - LAY.ox) / LAY.s, y: (e.clientY - LAY.oy) / LAY.s }; }
+// index of the card whose centre is within rad * pitch of (x, y), else -1
+function cellAt(x, y, rad) {
+  const G = V.G; if (!G) return -1;
+  const g = gridGeom(G.board.n), cx = (x - g.x0) / g.pitch, cy = (y - g.y0) / g.pitch;
+  const c = Math.floor(cx), r = Math.floor(cy);
+  if (c < 0 || r < 0 || c >= g.n || r >= g.n) return -1;
+  const dx = (cx - c - g.T / g.pitch / 2) * g.pitch, dy = (cy - r - g.T / g.pitch / 2) * g.pitch;
+  return Math.hypot(dx, dy) <= rad * g.pitch ? r * g.n + c : -1;
+}
+function addToPath(j) {
+  const G = V.G, p = V.path, n = G.board.n;
+  if (!p.length || j === p[p.length - 1]) return false;
+  if (p.length >= 2 && j === p[p.length - 2]) { p.pop(); Sound.back(); refreshWord(); return true; }
+  if (p.indexOf(j) >= 0 || !adjacent(n, p[p.length - 1], j) || p.length >= MAX_LEN) return false;
+  p.push(j);
+  const pv = previewOf();
+  Sound.pick(p.length - 1, pv.valid); refreshWord();
+  return true;
+}
+function canPlay() { return V.phase === 'play' && !V.paused && V.G && V.G.phase === 'play' && V.G.flipT <= 0; }
+el.cv.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault();
+  Sound.ensure();
+  if (!canPlay()) return;
+  const p = toCol(e), i = cellAt(p.x, p.y, 0.62);
+  V.kb = false;
+  if (i < 0) return;
+  In.down = true; In.id = e.pointerId; In.lx = p.x; In.ly = p.y;
+  try { el.cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  V.path = [i]; V.kbActive = false; V.cwT = 0;
+  Sound.pick(0, false); refreshWord();
+});
+el.cv.addEventListener('pointermove', (e) => {
+  if (!In.down || e.pointerId !== In.id || !canPlay()) return;
+  const p = toCol(e), g = gridGeom(V.G.board.n);
+  const dx = p.x - In.lx, dy = p.y - In.ly, dist = Math.hypot(dx, dy), steps = Math.max(1, Math.ceil(dist / (g.pitch * 0.12)));
+  for (let k = 1; k <= steps; k++) {
+    const x = In.lx + dx * k / steps, y = In.ly + dy * k / steps, j = cellAt(x, y, 0.36);
+    if (j >= 0) addToPath(j);
+  }
+  In.lx = p.x; In.ly = p.y;
+});
+function endPointer(e, send) {
+  if (!In.down || e.pointerId !== In.id) return;
+  In.down = false; In.id = null;
+  if (!canPlay()) { V.path = []; refreshWord(); return; }
+  let cancel = !send;
+  if (send) {   // lifting the finger well outside the board cancels (guards against a stray touch)
+    const p = toCol(e), g = gridGeom(V.G.board.n), m = g.pitch * 0.6;
+    if (p.x < g.x0 - m || p.x > g.x0 + g.total + m || p.y < g.y0 - m || p.y > g.y0 + g.total + m) cancel = true;
+  }
+  if (cancel) {
+    if (V.path.length >= 2) setBubble('낱말 제출을 취소했어요.', '', 1.6);
+    V.path = []; refreshWord(); return;
+  }
+  doSubmit();
+}
+el.cv.addEventListener('pointerup', (e) => endPointer(e, true));
+el.cv.addEventListener('pointercancel', (e) => endPointer(e, false));
+
+function moveCursor(dr, dc) {
+  const n = V.G.board.n, r = clamp(Math.floor(V.cur / n) + dr, 0, n - 1), c = clamp((V.cur % n) + dc, 0, n - 1);
+  V.cur = r * n + c;
+}
+function kbSelect() {
+  const G = V.G, n = G.board.n, p = V.path, i = V.cur;
+  if (!p.length) { p.push(i); V.kbActive = true; V.cwT = 0; Sound.pick(0, false); refreshWord(); return; }
+  if (i === p[p.length - 1]) { doSubmit(); return; }
+  if (!addToPath(i)) { V.shake = 1.2; Sound.back(); setBubble('바로 옆 칸만 이을 수 있어요.', 'bad', 1.8); }
+}
+function doHint() {
+  const G = V.G;
+  if (!canPlay()) return;
+  if (G.hintsLeft <= 0) { setBubble('힌트를 다 썼어요. 스스로 찾아봐요!', 'bad', 2); return; }
+  showHint(G, true); processEvents();
+}
+window.addEventListener('keydown', (e) => {
+  const k = e.code, onBtn = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (k === 'KeyM') { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (V.phase === 'title') {
+    if ((k === 'Space' || k === 'Enter') && !onBtn) { e.preventDefault(); if (!e.repeat) startRun(); }
+    return;
+  }
+  if (V.paused) {
+    if (k === 'KeyP' || k === 'Escape' || (!onBtn && (k === 'Enter' || k === 'Space'))) { e.preventDefault(); if (!e.repeat) resumeGame(); }
+    return;
+  }
+  if (V.phase === 'over') {
+    if (k === 'KeyR' || ((k === 'Enter' || k === 'Space') && !onBtn)) { e.preventDefault(); if (!e.repeat) startRun(); }
+    return;
+  }
+  if (V.phase !== 'play') return;
+  if (k === 'KeyP') { e.preventDefault(); pauseGame(); return; }
+  if (k === 'KeyH') { e.preventDefault(); if (!e.repeat) doHint(); return; }
+  if (k === 'Escape') { e.preventDefault(); if (V.path.length) { V.path = []; refreshWord(); } else pauseGame(); return; }
+  if (!canPlay()) return;
+  const arrow = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0], KeyA: [0, -1], KeyD: [0, 1], KeyW: [-1, 0], KeyS: [1, 0] }[k];
+  if (arrow) { e.preventDefault(); if (document.activeElement && document.activeElement.blur && onBtn) document.activeElement.blur(); V.kb = true; moveCursor(arrow[0], arrow[1]); if (!V.path.length) refreshWord(); return; }
+  if (k === 'Space') { e.preventDefault(); if (!e.repeat) { V.kb = true; Sound.ensure(); kbSelect(); } return; }
+  if (k === 'Enter' && !onBtn) { e.preventDefault(); if (!e.repeat) { if (V.path.length >= 2) doSubmit(); else if (V.path.length === 1) { V.path = []; refreshWord(); } } return; }
+  if (k === 'Backspace') { e.preventDefault(); if (V.path.length) { V.path.pop(); Sound.back(); refreshWord(); } return; }
+});
+function toggleMute() { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); }
+el.btnStart.addEventListener('click', () => startRun());
+el.btnAgain.addEventListener('click', () => startRun());
+el.btnResume.addEventListener('click', () => resumeGame());
+el.btnPause.addEventListener('click', () => { el.btnPause.blur(); pauseGame(); });
+el.btnHint.addEventListener('click', () => { el.btnHint.blur(); doHint(); });
+el.btnPauseRetry.addEventListener('click', () => {
+  if (V.armT > 0) { startRun(); return; }
+  V.armT = 3; el.btnPauseRetry.textContent = '정말 처음부터?'; el.btnPauseRetry.classList.add('arm');
+});
+for (const b of [el.btnMute, el.btnMuteT, el.btnMuteP, el.btnMuteR]) b.addEventListener('click', toggleMute);
+for (const b of document.querySelectorAll('button, a.btn, a.back')) b.addEventListener('pointerdown', (e) => e.stopPropagation());
+document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseInput(); pauseGame(); } });
+window.addEventListener('blur', () => { releaseInput(); pauseGame(); });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, a.btn')) {
+  a.addEventListener('click', (e) => {
+    try {
+      if (document.referrer && new URL(document.referrer).origin === location.origin && /index\.html$|\/$/.test(new URL(document.referrer).pathname)) { e.preventDefault(); history.back(); }
+    } catch (err) { /* follow link */ }
+  });
+}
+window.addEventListener('resize', () => layout());
+window.addEventListener('orientationchange', () => setTimeout(layout, 150));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', () => layout());
+
+// =====================================================================
+// LOOP
+// =====================================================================
+let lastT = 0;
+function runSteps(dt) {
+  V.acc += dt;
+  let n = 0;
+  while (V.acc >= STEP && n < 5) { stepFixed(STEP); V.acc -= STEP; n++; }
+  if (V.acc > STEP) V.acc = 0;
+  return n;
+}
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const dt = lastT ? Math.min(0.1, (ts - lastT) / 1000) : 0;
+  lastT = ts;
+  if (!V.paused) runSteps(dt);
+  if (V.phase === 'play' || V.phase === 'ending') updateHud(dt);
+  render(V.paused ? 0 : dt);
+  const t = V.clock;
+  if (!el.scrTitle.hidden) drawChalkScene(el.mascotT, 'idle', t, true);
+  if (!el.scrPause.hidden) drawChalkScene(el.mascotP, 'idle', t, false);
+  if (!el.scrOver.hidden && V.G) drawChalkScene(el.mascotR, V.newRecord || V.G.stage >= 3 ? 'cheer' : V.G.words >= 5 ? 'happy' : 'oops', t, false);
+}
+
+// =====================================================================
+// TEST HOOKS: window.__game (the real UI plus helpers for bots) and window.__ttobak (the pure logic)
+// =====================================================================
+const LOGIC = {
+  TIME0, CLEAR_BONUS, TIME_CAP, COMBO_WINDOW, BASE_PTS, MAX_LEN, stageCfg, mulberry32, genBoard, newGame, submit, step, showHint,
+  validPath, adjacent, solve, wordOf, wordPts, mult, remaining, unfoundList, missedWords, previewState, neighbours,
+  ALL_LIST, EASY_LIST, WORD_SET, EASY_SET,
+};
+const hook = {
+  logic: LOGIC,
+  state() {
+    const G = V.G;
+    return {
+      phase: V.phase, paused: V.paused, gPhase: G ? G.phase : '', score: G ? G.score : 0, left: G ? G.left : 0, stage: G ? G.stage : 0,
+      combo: G ? G.combo : 0, maxCombo: G ? G.maxCombo : 0, words: G ? G.words : 0, hintsLeft: G ? G.hintsLeft : 0, hintCell: G ? G.hintCell : -1,
+      stageFound: G ? G.stageFound : 0, target: G ? G.board.target : 0, remaining: G ? remaining(G) : 0, total: G ? G.board.total : 0,
+      n: G ? G.board.n : 0, cells: G ? G.board.cells.slice() : [], foundList: G ? G.foundList.slice() : [], path: V.path.slice(), cur: V.cur,
+      best: V.best, bestAtStart: V.bestAtStart, newRecord: V.newRecord, seed: V.seed, muted: Sound.muted, audio: Sound.ctx ? Sound.ctx.state : 'none',
+      bubble: el.bubbleTxt.textContent, word: el.hWord.textContent, floats: V.floats.length, parts: parts.filter((p) => p.on).length, flipT: G ? G.flipT : 0, fails: G ? G.fails : 0,
+    };
+  },
+  geometry() {
+    const rc = (n) => { const r = n.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width, r.height]; };
+    const n = V.G ? V.G.board.n : V.gridN, g = gridGeom(n), s = LAY.s;
+    const cells = []; for (let i = 0; i < n * n; i++) { const q = cellCenter(i, g); cells.push([LAY.ox + q.x * s, LAY.oy + q.y * s]); }
+    return {
+      W: LAY.W, H: LAY.H, s, colH: LAY.colH, ox: LAY.ox, oy: LAY.oy, n, tile: g.T * s, pitch: g.pitch * s, cells,
+      grid: [LAY.ox + g.x0 * s, LAY.oy + g.y0 * s, g.total * s, g.total * s],
+      buttons: { pause: rc(el.btnPause), mute: rc(el.btnMute), start: rc(el.btnStart), resume: rc(el.btnResume), again: rc(el.btnAgain), retry: rc(el.btnPauseRetry), hint: rc(el.btnHint) },
+    };
+  },
+  start(seed) { startRun(seed); }, title() { toTitle(); }, pause() { pauseGame(); }, resume() { resumeGame(); },
+  submitPath(path) { if (!canPlay()) return null; V.path = path.slice(); return doSubmit(); },
+  hint() { doHint(); },
+  words() { return V.G ? unfoundList(V.G) : []; },
+  setBest(v) { V.best = v | 0; store.set(KEY_BEST, String(V.best)); uiBest(); },
+  layout() { layout(); return Object.assign({}, LAY); },
+  tick(dt) { if (!V.paused) runSteps(dt); render(dt); if (V.phase === 'play' || V.phase === 'ending') updateHud(dt); },
+  ff(sec) { const n = Math.ceil(sec / STEP); for (let i = 0; i < n && !V.paused && V.phase !== 'over'; i++) stepFixed(STEP); updateHud(1); },
+  raw: { V, LAY, In, Sound, el, ctx, parts, G: () => V.G, showOver, render, layout, processEvents, gridGeom },
+};
+window.__ttobak = LOGIC; window.__game = hook;
+
+// =====================================================================
+// BOOT
+// =====================================================================
+V.bestAtStart = V.best;
+uiMute(); uiBest(); layout();
+V.G = null;
+showScreen('title');
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('16px "Gowun Dodum"')]), t]).then(() => { paintBg(); drawDemo(); }).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

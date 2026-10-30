@@ -139,6 +139,9 @@ button { font-family: var(--font-d); cursor: pointer; }
 }
 .res-title { margin: 4px 0 0; font-size: 30px; font-weight: normal; font-family: var(--font-d); color: var(--text); letter-spacing: 1px; }
 .pause-line { margin: 4px 0 12px; font-family: var(--font-b); font-size: 15px; color: var(--dim); line-height: 1.5; }
+/* 카드가 화면보다 길어도 시작 버튼은 화면 아래에 늘 붙어 있어요 */
+.dock { position: sticky; bottom: calc(-14px - env(safe-area-inset-bottom, 0px)); z-index: 3; margin: 0 -16px; padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 10px); background: #5a1238; }
+#scrTitle .card { overflow: clip; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .row2 .btn.sub { font-size: 16px; min-height: 46px; margin-top: 10px; padding: 0 4px; }
 .stamp-end { margin: 2px 0 0; font-family: var(--font-d); font-size: 32px; color: var(--gold); letter-spacing: 0.5px; line-height: 1.15; text-shadow: 0 2px 0 var(--ink); }
@@ -190,6 +193,8 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px 1px; border-radiu
   .mascot.small { display: none; }
   .how { margin: 6px 0 8px; gap: 5px; } .how li { grid-template-columns: 96px 1fr; padding: 4px; } .how canvas { width: 96px; height: 64px; } .how p { font-size: 13px; }
   .btn { min-height: 46px; font-size: 24px; }
+  .dock { display: flex; gap: 10px; padding-top: 6px; }
+  .dock .btn, .dock .btn.alt { flex: 1; margin-top: 0; min-height: 46px; font-size: 20px; }
   .keyhint { display: none !important; }
   .res-big { font-size: 40px; margin-top: 0; line-height: 1; }
   .res-title, .stamp-end { font-size: 22px; margin: 0; }
@@ -199,6 +204,11 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px 1px; border-radiu
 @media (prefers-reduced-motion: reduce) {
   .logo span, .badge, .badge svg, .card { animation: none; }
 }
+
+/* 방법 보기 창: 내용이 길어도 확인 버튼은 화면 아래에 늘 붙어 있어요 */
+#scrHow .card { overflow: clip; }
+#scrHow .dock { margin: 0; position: sticky; bottom: calc(-14px - env(safe-area-inset-bottom, 0px)); z-index: 3; padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 10px); background: rgb(90,18,56); box-shadow: 0 0 0 100vmax rgb(90,18,56); clip-path: inset(0 -100vmax 0 -100vmax); }
+#scrHow .dock .btn { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -235,8 +245,10 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px 1px; border-radiu
           <button type="button" role="radio" data-v="0">없음</button><button type="button" role="radio" data-v="1">보통</button><button type="button" role="radio" data-v="2">많이</button>
         </div></div>
       <p class="help-line" id="helpHandi">느린 친구를 조금 도와줘요</p>
-      <button class="btn" id="btnSolo" type="button">컴퓨터와 한 판</button>
-      <button class="btn alt" id="btnDuo" type="button">둘이서 한 폰으로</button>
+      <div class="dock">
+        <button class="btn" id="btnSolo" type="button">컴퓨터와 한 판</button>
+        <button class="btn alt" id="btnDuo" type="button">둘이서 한 폰으로</button>
+      </div>
       <div class="row2">
         <button class="btn sub" id="btnHow" type="button">하는 법</button>
         <button class="btn sub" id="btnMuteT" type="button">소리 끄기</button>
@@ -256,7 +268,9 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px 1px; border-radiu
         <li><canvas id="how3" width="264" height="176" aria-hidden="true"></canvas><p><em>4</em>4점 먼저 얻으면 한 판, 판을 먼저 따면 이겨요. <b>앞서는 친구는 조금 더 빨라야</b> 인정돼요.</p></li>
       </ol>
       <p class="keyhint" style="margin:0 0 10px">한 폰에 둘이 하면 <b style="color:var(--p1)">내 쪽</b>을 탭하고, 키보드는 <kbd>F</kbd> / <kbd>J</kbd>예요.</p>
-      <button class="btn" id="btnHowOk" type="button">알겠어요</button>
+      <div class="dock">
+        <button class="btn" id="btnHowOk" type="button">알겠어요</button>
+      </div>
     </div>
   </section>
 
@@ -265,6 +279,64 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 6px 1px; border-radiu
   <section class="overlay" id="scrOver" hidden></section>
 </div>
 
+<script>
+/* touch-compat: 일부 전자칠판/WebView는 포인터 이벤트 없이 터치(또는 마우스) 이벤트만 보내요.
+   진짜 pointerdown 이 앞서지 않은 터치/마우스 입력만 포인터 이벤트로 다시 내보내서, 아래 게임 코드가 그대로 받게 해요. */
+(function () {
+  if (window.__ptrCompat) return; window.__ptrCompat = 1;
+  var now = function () { return window.performance && performance.now ? performance.now() : Date.now(); };
+  var FRESH = 250, pd = -1e9, pm = -1e9, lastTouch = -1e9, tch = {}, md = null;
+  function fire(type, src, x, y, id, ptype, primary, btn, btns, target) {
+    if (!target || !target.dispatchEvent) return;
+    var init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: src.screenX || x, screenY: src.screenY || y,
+      pointerId: id, pointerType: ptype, isPrimary: primary, button: btn, buttons: btns, pressure: btns ? 0.5 : 0, width: 1, height: 1,
+      ctrlKey: !!src.ctrlKey, shiftKey: !!src.shiftKey, altKey: !!src.altKey, metaKey: !!src.metaKey };
+    var ev;
+    try { ev = new PointerEvent(type, init); }
+    catch (err) {
+      try { ev = new MouseEvent(type, init); } catch (e2) { return; }
+      try { Object.defineProperties(ev, { pointerId: { value: id }, pointerType: { value: ptype }, isPrimary: { value: primary } }); } catch (e3) { /* ignore */ }
+    }
+    try { target.dispatchEvent(ev); } catch (e4) { /* a game handler threw; keep the shim alive */ }
+  }
+  addEventListener('pointerdown', function (e) { if (e.isTrusted) pd = now(); }, true);
+  addEventListener('pointermove', function (e) { if (e.isTrusted) pm = now(); }, true);
+  function eachTouch(e, fn) { var l = e.changedTouches || []; for (var i = 0; i < l.length; i++) fn(l[i]); }
+  addEventListener('touchstart', function (e) {
+    var t0 = now(); var real = t0 - pd < FRESH; lastTouch = t0;
+    eachTouch(e, function (t) {
+      if (real) { tch[t.identifier] = 0; return; }
+      var first = true; for (var k in tch) if (tch[k]) first = false;
+      var id = 1000 + t.identifier; tch[t.identifier] = { id: id, target: t.target };
+      fire('pointerdown', t, t.clientX, t.clientY, id, 'touch', first, 0, 1, t.target);
+    });
+  }, true);
+  addEventListener('touchmove', function (e) {
+    lastTouch = now();
+    eachTouch(e, function (t) { var s = tch[t.identifier]; if (s) fire('pointermove', t, t.clientX, t.clientY, s.id, 'touch', true, -1, 1, s.target); });
+  }, true);
+  function touchEnd(type) {
+    return function (e) {
+      lastTouch = now();
+      eachTouch(e, function (t) { var s = tch[t.identifier]; delete tch[t.identifier]; if (s) fire(type, t, t.clientX, t.clientY, s.id, 'touch', true, 0, 0, s.target); });
+    };
+  }
+  addEventListener('touchend', touchEnd('pointerup'), true);
+  addEventListener('touchcancel', touchEnd('pointercancel'), true);
+  addEventListener('mousedown', function (e) {
+    if (!e.isTrusted || now() - pd < FRESH || now() - lastTouch < 1000) return;
+    md = { target: e.target }; fire('pointerdown', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, e.buttons || 1, e.target);
+  }, true);
+  addEventListener('mousemove', function (e) {
+    if (!e.isTrusted || now() - pm < FRESH || now() - lastTouch < 1000) return;
+    fire('pointermove', e, e.clientX, e.clientY, 1, 'mouse', true, -1, e.buttons, md ? md.target : e.target);
+  }, true);
+  addEventListener('mouseup', function (e) {
+    if (!e.isTrusted || !md) return;
+    var t = md.target; md = null; fire('pointerup', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, 0, t);
+  }, true);
+})();
+</script>
 <script>
 'use strict';
 (() => {
@@ -1638,7 +1710,7 @@ el.cv.addEventListener('pointerdown', (e) => {
   Sound.ensure();
   if (!inPlay()) return;
   const mouse = e.pointerType === 'mouse';
-  if (mouse && e.button !== 0) return;
+  if (mouse && e.button > 0) return;
   if (ptrs.size >= VIEW.MAX_PTR && !ptrs.has(e.pointerId)) return;
   const rec = { pad: -1, stale: false, t0: nowMs() };
   ptrs.set(e.pointerId, rec);

@@ -75,6 +75,7 @@ button { font-family: var(--font-b); cursor: pointer; }
 .icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
 .icon-btn svg { width: 22px; height: 22px; display: block; }
 .icon-btn.hide { visibility: hidden; }
+.tb-g { display: flex; gap: 8px; }
 .timer {
   flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 4px;
   background: #041c1a; border: 2px solid rgba(198, 242, 61, 0.55); border-radius: 16px;
@@ -324,6 +325,11 @@ button { font-family: var(--font-b); cursor: pointer; }
   .logo span, .badge, .mascot .lens, .mascot .eye { animation: none; }
   .card { animation: none; }
 }
+
+/* 큰 버튼 고정: 카드가 화면보다 길면 카드 안쪽이 스크롤되고, 시작·다시 하기 버튼은 화면 아래에 늘 붙어 있어요 */
+.card { overflow: clip; }
+.card .dock { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); z-index: 3; padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 10px); background: rgb(6,37,35); box-shadow: 0 0 0 100vmax rgb(6,37,35); clip-path: inset(0 -100vmax 0 -100vmax); }
+.card .dock .btn { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -333,9 +339,15 @@ button { font-family: var(--font-b); cursor: pointer; }
   <div id="play">
     <div class="side">
       <div class="topbar">
-        <button class="icon-btn hide" id="btnRetry" type="button" aria-label="처음부터 다시 하기"></button>
+        <div class="tb-g">
+          <button class="icon-btn hide" id="btnRetry" type="button" aria-label="처음부터 다시 하기"></button>
+          <button class="icon-btn hide" id="btnPause" type="button" aria-label="잠깐 멈춤"></button>
+        </div>
         <div class="timer idle" id="timerBox"><b id="hTime">0.00</b><small>초</small></div>
-        <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기"></button>
+        <div class="tb-g">
+          <span class="icon-btn hide" aria-hidden="true"></span>
+          <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기"></button>
+        </div>
       </div>
       <div class="inforow">
         <div class="next" id="nextBox">다음 숫자 <b id="hNext">1</b></div>
@@ -383,7 +395,9 @@ button { font-family: var(--font-b); cursor: pointer; }
         <p><span class="k">기록</span><span>마지막 숫자를 누르면 끝! 시간이 짧을수록 좋아요</span></p>
       </div>
       <p class="best-line" id="tBestLine">최고 기록 <b id="tBest">-</b></p>
-      <button class="btn" id="btnStart" type="button">찾기 시작</button>
+      <div class="dock">
+        <button class="btn" id="btnStart" type="button">찾기 시작</button>
+      </div>
       <p class="keyhint">스페이스 시작 · ← → 모드 · R 다시 · M 소리</p>
     </div>
   </div>
@@ -418,14 +432,74 @@ button { font-family: var(--font-b); cursor: pointer; }
         <div>틀린 횟수<b id="rMiss">0</b></div>
         <div>한 칸 평균<b id="rAvg">0.00</b></div>
       </div>
-      <button class="btn" id="btnAgain" type="button">다시 하기</button>
-      <button class="btn sub" id="btnMenu" type="button">모드 바꾸기</button>
+      <div class="dock">
+        <button class="btn" id="btnAgain" type="button">다시 하기</button>
+        <button class="btn sub" id="btnMenu" type="button">모드 바꾸기</button>
+      </div>
       <p class="keyhint">스페이스바로도 다시 할 수 있어요</p>
       </div>
     </div>
   </div>
 </div>
 
+<script>
+/* touch-compat: 일부 전자칠판/WebView는 포인터 이벤트 없이 터치(또는 마우스) 이벤트만 보내요.
+   진짜 pointerdown 이 앞서지 않은 터치/마우스 입력만 포인터 이벤트로 다시 내보내서, 아래 게임 코드가 그대로 받게 해요. */
+(function () {
+  if (window.__ptrCompat) return; window.__ptrCompat = 1;
+  var now = function () { return window.performance && performance.now ? performance.now() : Date.now(); };
+  var FRESH = 250, pd = -1e9, pm = -1e9, lastTouch = -1e9, tch = {}, md = null;
+  function fire(type, src, x, y, id, ptype, primary, btn, btns, target) {
+    if (!target || !target.dispatchEvent) return;
+    var init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: src.screenX || x, screenY: src.screenY || y,
+      pointerId: id, pointerType: ptype, isPrimary: primary, button: btn, buttons: btns, pressure: btns ? 0.5 : 0, width: 1, height: 1,
+      ctrlKey: !!src.ctrlKey, shiftKey: !!src.shiftKey, altKey: !!src.altKey, metaKey: !!src.metaKey };
+    var ev;
+    try { ev = new PointerEvent(type, init); }
+    catch (err) {
+      try { ev = new MouseEvent(type, init); } catch (e2) { return; }
+      try { Object.defineProperties(ev, { pointerId: { value: id }, pointerType: { value: ptype }, isPrimary: { value: primary } }); } catch (e3) { /* ignore */ }
+    }
+    try { target.dispatchEvent(ev); } catch (e4) { /* a game handler threw; keep the shim alive */ }
+  }
+  addEventListener('pointerdown', function (e) { if (e.isTrusted) pd = now(); }, true);
+  addEventListener('pointermove', function (e) { if (e.isTrusted) pm = now(); }, true);
+  function eachTouch(e, fn) { var l = e.changedTouches || []; for (var i = 0; i < l.length; i++) fn(l[i]); }
+  addEventListener('touchstart', function (e) {
+    var t0 = now(); var real = t0 - pd < FRESH; lastTouch = t0;
+    eachTouch(e, function (t) {
+      if (real) { tch[t.identifier] = 0; return; }
+      var first = true; for (var k in tch) if (tch[k]) first = false;
+      var id = 1000 + t.identifier; tch[t.identifier] = { id: id, target: t.target };
+      fire('pointerdown', t, t.clientX, t.clientY, id, 'touch', first, 0, 1, t.target);
+    });
+  }, true);
+  addEventListener('touchmove', function (e) {
+    lastTouch = now();
+    eachTouch(e, function (t) { var s = tch[t.identifier]; if (s) fire('pointermove', t, t.clientX, t.clientY, s.id, 'touch', true, -1, 1, s.target); });
+  }, true);
+  function touchEnd(type) {
+    return function (e) {
+      lastTouch = now();
+      eachTouch(e, function (t) { var s = tch[t.identifier]; delete tch[t.identifier]; if (s) fire(type, t, t.clientX, t.clientY, s.id, 'touch', true, 0, 0, s.target); });
+    };
+  }
+  addEventListener('touchend', touchEnd('pointerup'), true);
+  addEventListener('touchcancel', touchEnd('pointercancel'), true);
+  addEventListener('mousedown', function (e) {
+    if (!e.isTrusted || now() - pd < FRESH || now() - lastTouch < 1000) return;
+    md = { target: e.target }; fire('pointerdown', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, e.buttons || 1, e.target);
+  }, true);
+  addEventListener('mousemove', function (e) {
+    if (!e.isTrusted || now() - pm < FRESH || now() - lastTouch < 1000) return;
+    fire('pointermove', e, e.clientX, e.clientY, 1, 'mouse', true, -1, e.buttons, md ? md.target : e.target);
+  }, true);
+  addEventListener('mouseup', function (e) {
+    if (!e.isTrusted || !md) return;
+    var t = md.target; md = null; fire('pointerup', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, 0, t);
+  }, true);
+})();
+</script>
 <script>
 'use strict';
 (() => {
@@ -662,14 +736,16 @@ const el = {
   tBest: $('tBest'), mode4: $('mode4'), mode5: $('mode5'),
   rTitle: $('rTitle'), rMode: $('rMode'), rTime: $('rTime'), rBadge: $('rBadge'), rBars: $('rBars'), rSlow: $('rSlow'),
   rBest: $('rBest'), rMiss: $('rMiss'), rAvg: $('rAvg'),
-  btnMute: $('btnMute'), btnRetry: $('btnRetry'),
+  btnMute: $('btnMute'), btnRetry: $('btnRetry'), btnPause: $('btnPause'),
 };
 const ICON = {
   retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>',
   on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
   off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1.4"/><rect x="13.8" y="5" width="4.2" height="14" rx="1.4"/></svg>',
 };
 el.btnRetry.innerHTML = ICON.retry;
+el.btnPause.innerHTML = ICON.pause;
 function uiMute() {
   el.btnMute.innerHTML = Sound.muted ? ICON.off : ICON.on;
   el.btnMute.setAttribute('aria-label', Sound.muted ? '소리 켜기' : '소리 끄기');
@@ -706,6 +782,7 @@ function setScreen(name) {
   el.scrPause.classList.toggle('hidden', name !== 'pause');
   el.scrOver.classList.toggle('hidden', name !== 'over');
   el.btnRetry.classList.toggle('hide', name !== 'play');
+  el.btnPause.classList.toggle('hide', name !== 'play');
 }
 
 // ---- board ----------------------------------------------------------
@@ -928,7 +1005,7 @@ function setMode(m) {
 // INPUT
 // =====================================================================
 el.board.addEventListener('pointerdown', (e) => {
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.pointerType === 'mouse' && e.button > 0) return;
   e.preventDefault();
   Sound.ensure();
   const t = e.target.closest('.tile');
@@ -971,6 +1048,7 @@ $('btnMenu').addEventListener('click', () => { Sound.ensure(); Sound.ui(); toTit
 $('btnResume').addEventListener('click', () => resumeGame());
 $('btnPauseRestart').addEventListener('click', () => startRound());
 el.btnRetry.addEventListener('click', () => { if (S.phase !== 'title') startRound(); });
+el.btnPause.addEventListener('click', () => pauseGame());
 el.mode4.addEventListener('click', () => { Sound.ensure(); setMode(4); });
 el.mode5.addEventListener('click', () => { Sound.ensure(); setMode(5); });
 el.btnMute.addEventListener('click', () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); });

@@ -197,6 +197,10 @@ button { font-family: var(--font-ui); cursor: pointer; border: 0; }
 @media (prefers-reduced-motion: reduce) {
   .newrec, .dist.pop b { animation: none; }
 }
+/* 큰 버튼 고정: 카드가 화면보다 길면 카드 안쪽이 스크롤되고, 시작·다시 하기 버튼은 화면 아래에 늘 붙어 있어요 */
+.card { overflow: clip; }
+.card .dock { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom, 0px)); z-index: 3; padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 10px); background: rgb(28,20,38); box-shadow: 0 0 0 100vmax rgb(28,20,38); clip-path: inset(0 -100vmax 0 -100vmax); }
+.card .dock .btn { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -231,7 +235,9 @@ button { font-family: var(--font-ui); cursor: pointer; border: 0; }
         <div><span class="tag">키보드</span><span><em>스페이스바</em>로 똑같이 해요. 일시정지는 Esc나 P예요.</span></div>
         <div><span class="tag">요령</span><span>앞으로 올라갈 때 놓으면 멀리 날아요. 구멍엔 줄이 안 걸리고, 파도에 닿으면 끝이에요.</span></div>
       </div>
-      <div class="btns"><button class="btn" id="btnStart">시작하기</button></div>
+      <div class="dock">
+        <div class="btns"><button class="btn" id="btnStart">시작하기</button></div>
+      </div>
       <div class="bestline">최고 기록 <b id="titleBest">0</b>m</div>
     </div>
   </section>
@@ -255,11 +261,71 @@ button { font-family: var(--font-ui); cursor: pointer; border: 0; }
       <div class="res-num"><span id="resDist">0</span><small>m</small></div>
       <div class="newrec" id="resNew" hidden>새 기록이에요!</div>
       <div class="res-best">최고 기록 <b id="resBest">0</b>m</div>
-      <div class="btns"><button class="btn" id="btnRetry">다시 하기</button></div>
+      <div class="dock">
+        <div class="btns"><button class="btn" id="btnRetry">다시 하기</button></div>
+      </div>
     </div>
   </section>
 </div>
 
+<script>
+/* touch-compat: 일부 전자칠판/WebView는 포인터 이벤트 없이 터치(또는 마우스) 이벤트만 보내요.
+   진짜 pointerdown 이 앞서지 않은 터치/마우스 입력만 포인터 이벤트로 다시 내보내서, 아래 게임 코드가 그대로 받게 해요. */
+(function () {
+  if (window.__ptrCompat) return; window.__ptrCompat = 1;
+  var now = function () { return window.performance && performance.now ? performance.now() : Date.now(); };
+  var FRESH = 250, pd = -1e9, pm = -1e9, lastTouch = -1e9, tch = {}, md = null;
+  function fire(type, src, x, y, id, ptype, primary, btn, btns, target) {
+    if (!target || !target.dispatchEvent) return;
+    var init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: src.screenX || x, screenY: src.screenY || y,
+      pointerId: id, pointerType: ptype, isPrimary: primary, button: btn, buttons: btns, pressure: btns ? 0.5 : 0, width: 1, height: 1,
+      ctrlKey: !!src.ctrlKey, shiftKey: !!src.shiftKey, altKey: !!src.altKey, metaKey: !!src.metaKey };
+    var ev;
+    try { ev = new PointerEvent(type, init); }
+    catch (err) {
+      try { ev = new MouseEvent(type, init); } catch (e2) { return; }
+      try { Object.defineProperties(ev, { pointerId: { value: id }, pointerType: { value: ptype }, isPrimary: { value: primary } }); } catch (e3) { /* ignore */ }
+    }
+    try { target.dispatchEvent(ev); } catch (e4) { /* a game handler threw; keep the shim alive */ }
+  }
+  addEventListener('pointerdown', function (e) { if (e.isTrusted) pd = now(); }, true);
+  addEventListener('pointermove', function (e) { if (e.isTrusted) pm = now(); }, true);
+  function eachTouch(e, fn) { var l = e.changedTouches || []; for (var i = 0; i < l.length; i++) fn(l[i]); }
+  addEventListener('touchstart', function (e) {
+    var t0 = now(); var real = t0 - pd < FRESH; lastTouch = t0;
+    eachTouch(e, function (t) {
+      if (real) { tch[t.identifier] = 0; return; }
+      var first = true; for (var k in tch) if (tch[k]) first = false;
+      var id = 1000 + t.identifier; tch[t.identifier] = { id: id, target: t.target };
+      fire('pointerdown', t, t.clientX, t.clientY, id, 'touch', first, 0, 1, t.target);
+    });
+  }, true);
+  addEventListener('touchmove', function (e) {
+    lastTouch = now();
+    eachTouch(e, function (t) { var s = tch[t.identifier]; if (s) fire('pointermove', t, t.clientX, t.clientY, s.id, 'touch', true, -1, 1, s.target); });
+  }, true);
+  function touchEnd(type) {
+    return function (e) {
+      lastTouch = now();
+      eachTouch(e, function (t) { var s = tch[t.identifier]; delete tch[t.identifier]; if (s) fire(type, t, t.clientX, t.clientY, s.id, 'touch', true, 0, 0, s.target); });
+    };
+  }
+  addEventListener('touchend', touchEnd('pointerup'), true);
+  addEventListener('touchcancel', touchEnd('pointercancel'), true);
+  addEventListener('mousedown', function (e) {
+    if (!e.isTrusted || now() - pd < FRESH || now() - lastTouch < 1000) return;
+    md = { target: e.target }; fire('pointerdown', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, e.buttons || 1, e.target);
+  }, true);
+  addEventListener('mousemove', function (e) {
+    if (!e.isTrusted || now() - pm < FRESH || now() - lastTouch < 1000) return;
+    fire('pointermove', e, e.clientX, e.clientY, 1, 'mouse', true, -1, e.buttons, md ? md.target : e.target);
+  }, true);
+  addEventListener('mouseup', function (e) {
+    if (!e.isTrusted || !md) return;
+    var t = md.target; md = null; fire('pointerup', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, 0, t);
+  }, true);
+})();
+</script>
 <script>
 'use strict';
 (() => {
@@ -1480,7 +1546,7 @@ function frame(ts) {
 function isUiTarget(t) { return t && t.closest && t.closest('button, a, .overlay'); }
 app.addEventListener('pointerdown', (e) => {
   if (isUiTarget(e.target)) return;
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.pointerType === 'mouse' && e.button > 0) return;
   e.preventDefault();
   if (S.mode === 'play') { ensureAudio(); action(); }
 });

@@ -249,6 +249,11 @@ button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent
   #flash.show { animation: flashr 2.4s linear forwards; }
   @keyframes flashr { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 }
+
+/* 시작 버튼 고정: 안내가 화면보다 길면 패널 안쪽이 스크롤되고, 시작 버튼은 패널 아래에 늘 붙어 있어요 */
+.panel { --pb: 22px; }
+@media (max-height: 700px) { .panel { --pb: 16px; } }
+.panel .dock { position: sticky; bottom: calc(-1 * var(--pb)); z-index: 3; padding: 10px 0 12px; background: rgb(10, 27, 30); box-shadow: 0 0 0 100vmax rgb(10, 27, 30); clip-path: inset(0 -100vmax 0 -100vmax); }
 </style>
 </head>
 <body>
@@ -306,7 +311,7 @@ button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent
     </ul>
     <div class="label">몇 명이서 할까요?</div>
     <div class="chips" id="chips"></div>
-    <button class="btn" id="btnStart">시작하기</button>
+    <div class="dock"><button class="btn" id="btnStart">시작하기</button></div>
     <p class="small" id="titleBest"></p>
   </div>
 </div>
@@ -330,13 +335,71 @@ button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent
     <div class="rec" id="resRec"></div>
     <div class="title-small">이번 모임 패배 기록</div>
     <div class="tally" id="tally"></div>
-    <div class="btns">
+    <div class="btns dock">
       <button class="btn" id="btnAgain">다시 하기</button>
       <button class="btn ghost" id="btnPlayers">인원 바꾸기</button>
     </div>
   </div>
 </div>
 
+<script>
+/* touch-compat: 일부 전자칠판/WebView는 포인터 이벤트 없이 터치(또는 마우스) 이벤트만 보내요.
+   진짜 pointerdown 이 앞서지 않은 터치/마우스 입력만 포인터 이벤트로 다시 내보내서, 아래 게임 코드가 그대로 받게 해요. */
+(function () {
+  if (window.__ptrCompat) return; window.__ptrCompat = 1;
+  var now = function () { return window.performance && performance.now ? performance.now() : Date.now(); };
+  var FRESH = 250, pd = -1e9, pm = -1e9, lastTouch = -1e9, tch = {}, md = null;
+  function fire(type, src, x, y, id, ptype, primary, btn, btns, target) {
+    if (!target || !target.dispatchEvent) return;
+    var init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: src.screenX || x, screenY: src.screenY || y,
+      pointerId: id, pointerType: ptype, isPrimary: primary, button: btn, buttons: btns, pressure: btns ? 0.5 : 0, width: 1, height: 1,
+      ctrlKey: !!src.ctrlKey, shiftKey: !!src.shiftKey, altKey: !!src.altKey, metaKey: !!src.metaKey };
+    var ev;
+    try { ev = new PointerEvent(type, init); }
+    catch (err) {
+      try { ev = new MouseEvent(type, init); } catch (e2) { return; }
+      try { Object.defineProperties(ev, { pointerId: { value: id }, pointerType: { value: ptype }, isPrimary: { value: primary } }); } catch (e3) { /* ignore */ }
+    }
+    try { target.dispatchEvent(ev); } catch (e4) { /* a game handler threw; keep the shim alive */ }
+  }
+  addEventListener('pointerdown', function (e) { if (e.isTrusted) pd = now(); }, true);
+  addEventListener('pointermove', function (e) { if (e.isTrusted) pm = now(); }, true);
+  function eachTouch(e, fn) { var l = e.changedTouches || []; for (var i = 0; i < l.length; i++) fn(l[i]); }
+  addEventListener('touchstart', function (e) {
+    var t0 = now(); var real = t0 - pd < FRESH; lastTouch = t0;
+    eachTouch(e, function (t) {
+      if (real) { tch[t.identifier] = 0; return; }
+      var first = true; for (var k in tch) if (tch[k]) first = false;
+      var id = 1000 + t.identifier; tch[t.identifier] = { id: id, target: t.target };
+      fire('pointerdown', t, t.clientX, t.clientY, id, 'touch', first, 0, 1, t.target);
+    });
+  }, true);
+  addEventListener('touchmove', function (e) {
+    lastTouch = now();
+    eachTouch(e, function (t) { var s = tch[t.identifier]; if (s) fire('pointermove', t, t.clientX, t.clientY, s.id, 'touch', true, -1, 1, s.target); });
+  }, true);
+  function touchEnd(type) {
+    return function (e) {
+      lastTouch = now();
+      eachTouch(e, function (t) { var s = tch[t.identifier]; delete tch[t.identifier]; if (s) fire(type, t, t.clientX, t.clientY, s.id, 'touch', true, 0, 0, s.target); });
+    };
+  }
+  addEventListener('touchend', touchEnd('pointerup'), true);
+  addEventListener('touchcancel', touchEnd('pointercancel'), true);
+  addEventListener('mousedown', function (e) {
+    if (!e.isTrusted || now() - pd < FRESH || now() - lastTouch < 1000) return;
+    md = { target: e.target }; fire('pointerdown', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, e.buttons || 1, e.target);
+  }, true);
+  addEventListener('mousemove', function (e) {
+    if (!e.isTrusted || now() - pm < FRESH || now() - lastTouch < 1000) return;
+    fire('pointermove', e, e.clientX, e.clientY, 1, 'mouse', true, -1, e.buttons, md ? md.target : e.target);
+  }, true);
+  addEventListener('mouseup', function (e) {
+    if (!e.isTrusted || !md) return;
+    var t = md.target; md = null; fire('pointerup', e, e.clientX, e.clientY, 1, 'mouse', true, e.button, 0, t);
+  }, true);
+})();
+</script>
 <script>
 // three.js r160's UMD build prints a one-time deprecation notice for the non-module build; it is
 // the only UMD build available under the page's CSP, so that single notice is filtered.

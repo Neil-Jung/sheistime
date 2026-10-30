@@ -1,0 +1,2204 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>영차영차</title>
+<meta name="theme-color" content="#0b3a52">
+<meta name="description" content="동물 친구들과 박자를 맞춰 나룻배를 영차영차! 바위와 통나무와 소용돌이를 피해 폭포까지 저어요. 혼자서도, 한 화면에서 최대 넷이서 동시에 할 수 있어요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* Visual world: a green valley river seen from above. Four animal friends (duck, frog, hippo, panda) row one wooden boat,
+   each with an oar in their own colour: yellow, green, pink, sky blue. */
+:root {
+  --night: #0b3a52;
+  --panel: rgba(8, 38, 56, 0.95);
+  --hud-bg: rgba(6, 34, 52, 0.72);
+  --ink: #082433;
+  --paper: #f6fbf2;
+  --paper-dim: #a9d0d8;
+  --p1: #ffcf3a;
+  --p2: #6fdc7a;
+  --p3: #ff8fc4;
+  --p4: #5ec8ff;
+  --gold: #ffd166;
+  --good: #7be0a1;
+  --danger: #ff6b6b;
+  --font-d: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --font-b: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: var(--night); color: var(--paper);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--night); }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+
+/* ---------- HUD (the two buttons are placed by layout() in JS; everything else is drawn on the canvas) ---------- */
+#hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+#hud[hidden] { display: none; }
+#hud > * { position: absolute; }
+.icon-btn {
+  width: 46px; height: 46px; border-radius: 15px; padding: 0;
+  border: 2px solid rgba(246, 251, 242, 0.75); background: var(--hud-bg); color: var(--paper);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(var(--sat) + 62px) calc(var(--sar) + 14px) calc(var(--sab) + 14px) calc(var(--sal) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(5, 28, 42, 0.5);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.overlay[hidden] { display: none; }
+#scrPause { justify-content: center; background: rgba(4, 22, 34, 0.88); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(440px, 100%); margin: auto;
+  background: var(--panel); color: var(--paper);
+  border: 2px solid rgba(246, 251, 242, 0.85); border-radius: 24px;
+  box-shadow: 0 8px 0 rgba(2, 14, 24, 0.9);
+  padding: 20px 18px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 7px; z-index: 2;
+  background: linear-gradient(90deg, var(--p1) 0 25%, var(--p2) 25% 50%, var(--p3) 50% 75%, var(--p4) 75% 100%);
+}
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.mascot { display: block; width: 240px; height: 112px; margin: 0 auto 4px; }
+.tag {
+  display: inline-block; font-size: 13px; letter-spacing: 1px; color: var(--ink); background: var(--paper);
+  padding: 3px 10px 2px; border-radius: 6px; transform: rotate(-2deg); font-weight: 700;
+}
+.logo {
+  margin: 6px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 60px; line-height: 1.05; letter-spacing: 1px;
+  white-space: nowrap;
+}
+.logo span {
+  display: inline-block; animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 2.8s ease-in-out infinite;
+  text-shadow: 0 5px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
+.logo span:nth-child(1) { color: var(--p1); }
+.logo span:nth-child(2) { color: var(--p2); animation-delay: 0.1s, 0.4s; }
+.logo span:nth-child(3) { color: var(--p3); animation-delay: 0.2s, 0.8s; }
+.logo span:nth-child(4) { color: var(--p4); animation-delay: 0.3s, 1.2s; }
+@keyframes logoIn { from { transform: translateY(-34px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.hook { margin: 8px 0 10px; font-size: 16.5px; color: var(--paper); line-height: 1.45; }
+.hook small { display: block; margin-top: 3px; font-size: 14px; color: var(--paper-dim); }
+.howto {
+  background: rgba(246, 251, 242, 0.06); border: 1px solid rgba(246, 251, 242, 0.22); border-radius: 14px;
+  padding: 6px 12px; text-align: left; font-size: 14.5px; line-height: 1.4; color: var(--paper);
+}
+.howto p { margin: 6px 0; display: flex; gap: 9px; align-items: baseline; }
+.howto .k { flex: none; min-width: 72px; text-align: center; font-size: 12.5px; color: var(--p1); border: 1px solid rgba(255, 207, 58, 0.55); border-radius: 7px; padding: 1px 5px; }
+.best-line { margin: 10px 0 4px; font-size: 15px; color: var(--paper-dim); }
+.best-line b { color: var(--gold); font-weight: normal; font-family: var(--font-d); font-size: 21px; }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; border-radius: 16px;
+  border: 2px solid var(--ink); background: var(--p1); color: var(--ink);
+  font-family: var(--font-d); font-size: 25px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 #c99a12; touch-action: manipulation;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a12; }
+.btn.sub {
+  background: transparent; color: var(--paper); border: 2px solid rgba(246, 251, 242, 0.55);
+  box-shadow: none; font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0;
+}
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, .mode:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--paper-dim); }
+.back {
+  position: absolute; left: calc(var(--sal) + 10px); top: calc(var(--sat) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--paper); border: 2px solid rgba(246, 251, 242, 0.8); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.res-title { margin: 4px 0 0; font-size: 27px; font-weight: normal; font-family: var(--font-d); color: var(--paper); letter-spacing: 1px; line-height: 1.2; }
+.pause-line { margin: 10px 0 14px; font-size: 16.5px; color: var(--paper-dim); line-height: 1.45; }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 64px; line-height: 1.1; color: var(--gold); text-shadow: 0 4px 0 var(--ink), 0 0 24px rgba(255, 209, 102, 0.35); }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 24px; color: var(--paper); margin-left: 4px; text-shadow: none; }
+.badge {
+  display: inline-block; margin-top: 6px; padding: 4px 14px 5px; border-radius: 12px;
+  background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 18px; border: 2px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge[hidden] { display: none; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.stats { margin: 12px 0 4px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.stats div { background: rgba(246, 251, 242, 0.06); border: 1px solid rgba(246, 251, 242, 0.22); border-radius: 12px; padding: 7px 2px 6px; font-size: 12.5px; color: var(--paper-dim); }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 21px; color: var(--paper); margin-top: 3px; }
+
+/* cards with a scrolling info area and an actions dock that never leaves the screen */
+.card.fit { display: flex; flex-direction: column; flex: 0 1 auto; max-height: 100%; min-height: 0; padding: 0; }
+.card.fit .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 20px 18px 6px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.card.fit .actions { flex: none; padding: 8px 18px 14px; background: linear-gradient(to bottom, rgba(8, 38, 56, 0), var(--panel) 10px); position: relative; }
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 12px 0 0; }
+.mode {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 78px; padding: 8px 2px;
+  border-radius: 16px; border: 3px solid rgba(246, 251, 242, 0.28); background: rgba(246, 251, 242, 0.06); color: var(--paper-dim);
+  touch-action: manipulation; font-family: var(--font-b);
+}
+.mode .mi { display: flex; gap: 3px; align-items: center; height: 20px; }
+.mode .mi i { display: block; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--ink); }
+.mode .mi i:nth-child(1) { background: var(--p1); }
+.mode .mi i:nth-child(2) { background: var(--p2); }
+.mode .mi i:nth-child(3) { background: var(--p3); }
+.mode .mi i:nth-child(4) { background: var(--p4); }
+.mode b { font-family: var(--font-d); font-weight: normal; font-size: 20px; line-height: 1.1; padding-top: 3px; color: var(--paper); white-space: nowrap; }
+.mode small { font-size: 11.5px; line-height: 1.2; white-space: nowrap; }
+.mode.on { border-color: var(--p1); background: rgba(255, 207, 58, 0.16); color: var(--paper); box-shadow: 0 0 0 3px rgba(255, 207, 58, 0.25); }
+.mode.on::after {
+  content: '\2713'; position: absolute; right: 4px; top: 3px; width: 17px; height: 17px; border-radius: 50%; background: var(--p1); color: var(--ink);
+  font-size: 11px; font-weight: 700; display: grid; place-items: center;
+}
+.mode:active { transform: translateY(2px); }
+.mode-line { margin: 10px 0 0; font-size: 14px; color: var(--paper-dim); line-height: 1.4; min-height: 2.9em; }
+@media (max-width: 520px) { .mode-line { min-height: 4.2em; } }
+.btn-row { display: flex; gap: 10px; margin-top: 10px; }
+.btn-row .btn.sub { margin-top: 0; flex: 1 1 0; min-width: 0; font-size: 16px; }
+
+@media (max-width: 380px) { .logo { font-size: 52px; } .mode b { font-size: 18px; } .mode small { font-size: 10.5px; } }
+@media (max-height: 760px) {
+  .mascot { display: none; }
+  .logo { font-size: 52px; }
+  .res-big { font-size: 54px; }
+  .card { padding-top: 18px; }
+}
+@media (min-width: 600px) and (min-height: 700px) {
+  .overlay { padding-top: calc(var(--sat) + 14px); }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding: calc(var(--sat) + 8px) calc(var(--sar) + 124px) calc(var(--sab) + 8px) calc(var(--sal) + 124px); }
+  .card { padding: 12px 16px 10px; width: min(660px, 100%); }
+  .pause-line { margin: 4px 0 6px; font-size: 14.5px; }
+  .badge { margin-top: 2px; font-size: 15px; padding: 2px 12px 3px; }
+  #rBestLine { display: none; }
+  .tag { display: none; }
+  .logo { font-size: 38px; margin-top: 0; }
+  .hook { margin: 4px 0 6px; font-size: 14px; }
+  .hook small { display: none; }
+  .howto { display: none; }
+  .card.fit .scroll { padding: 14px 16px 4px; }
+  .card.fit .actions { padding: 6px 16px 10px; }
+  .modes { margin-top: 8px; }
+  .mode { min-height: 56px; padding: 4px 6px; flex-direction: row; flex-wrap: wrap; column-gap: 7px; }
+  .mode small { display: none; }
+  .mode.on::after { display: none; }
+  .mode .mi { height: 18px; }
+  .mode b { font-size: 19px; }
+  .mode-line { margin-top: 6px; min-height: 0; font-size: 12.5px; }
+  .best-line { margin: 4px 0 4px; }
+  .btn { min-height: 48px; font-size: 21px; }
+  .keyhint { display: none; }
+  .res-title { font-size: 22px; }
+  .res-big { font-size: 42px; }
+  .stats { margin: 6px 0 2px; }
+  .stats b { font-size: 18px; }
+  .btn.sub { min-height: 42px; margin-top: 6px; font-size: 15px; }
+  .back { min-height: 40px; }
+}
+@media (max-height: 540px) and (orientation: landscape) and (max-width: 760px) {
+  .overlay { padding-left: calc(var(--sal) + 14px); padding-right: calc(var(--sar) + 14px); padding-top: calc(var(--sat) + 50px); }
+  .best-line { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card { animation: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="강 위의 나룻배"></canvas>
+  <div id="probe"></div>
+
+  <div id="hud" hidden>
+    <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+    </button>
+    <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+    </button>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card fit">
+      <div class="scroll">
+        <canvas class="mascot" id="mascot" width="480" height="224" aria-hidden="true"></canvas>
+        <span class="tag">함께 젓는 나룻배</span>
+        <h1 class="logo" aria-label="영차영차"><span>영</span><span>차</span><span>영</span><span>차</span></h1>
+        <p class="hook" id="tHook">북소리에 맞춰 내 노 칸을 톡! 톡! 모두 같이 저으면 배가 쭉쭉 나가요.<small>한쪽만 저으면 배가 휘어요. 바위와 통나무를 피해 폭포까지 가요!</small></p>
+        <div class="modes" role="radiogroup" aria-label="몇 명이 할까요">
+          <button class="mode on" id="btnM1" type="button" role="radio" aria-checked="true"><span class="mi"><i></i></span><b>혼자서</b><small>두 손으로</small></button>
+          <button class="mode" id="btnM2" type="button" role="radio" aria-checked="false"><span class="mi"><i></i><i></i></span><b>둘이서</b><small>양쪽 노</small></button>
+          <button class="mode" id="btnM3" type="button" role="radio" aria-checked="false"><span class="mi"><i></i><i></i><i></i></span><b>셋이서</b><small>가운데 노</small></button>
+          <button class="mode" id="btnM4" type="button" role="radio" aria-checked="false"><span class="mi"><i></i><i></i><i></i><i></i></span><b>넷이서</b><small>노 네 개</small></button>
+        </div>
+        <p class="mode-line" id="modeLine"></p>
+        <p class="best-line" id="bestLine">최고 기록 <b id="tBest">-</b></p>
+        <div class="howto" style="margin-top:10px">
+          <p><span class="k">박자에 톡</span><span>북소리에 맞춰 내 칸을 누르면 힘이 제일 세요</span></p>
+          <p><span class="k">같이 저어요</span><span>모두 한 박자에 저으면 호흡이 쌓여 점점 빨라져요</span></p>
+          <p><span class="k">한쪽만 쉬어요</span><span>왼쪽 노만 저으면 배가 오른쪽으로 돌아요</span></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnStart" type="button">출발하기</button>
+        <p class="keyhint" id="keyHint">스페이스 시작 · ← → 또는 1~4 인원 · M 소리</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card fit">
+      <div class="scroll">
+        <h2 class="res-title">잠깐 쉬어요</h2>
+        <p class="pause-line">배도 강물도 멈춰 있어요.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnResume" type="button">계속하기</button>
+        <div class="btn-row">
+          <button class="btn sub" id="btnPauseRestart" type="button">처음부터 다시</button>
+          <button class="btn sub" id="btnPauseTitle" type="button">인원 고르기</button>
+        </div>
+        <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+        <p class="keyhint">스페이스·P로 계속하고, R로 처음부터 할 수 있어요</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card fit">
+      <div class="scroll">
+        <h2 class="res-title" id="rTitle">배가 가라앉았어요</h2>
+        <div class="res-big"><span id="rDist">0</span><small>m</small></div>
+        <div class="badge" id="rBadge" hidden>새 기록이에요!</div>
+        <p class="pause-line" id="rLine"></p>
+        <div class="stats">
+          <div>가장 긴 호흡<b id="rCombo">0</b></div>
+          <div>박자 맞춘 비율<b id="rSync">0%</b></div>
+          <div>걸린 시간<b id="rTime">0:00</b></div>
+        </div>
+        <p class="best-line" id="rBestLine">혼자서 최고 <b id="rBest">-</b></p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnAgain" type="button">다시 젓기</button>
+        <div class="btn-row">
+          <button class="btn sub" id="btnOverTitle" type="button">인원 고르기</button>
+        </div>
+        <p class="keyhint">스페이스바로도 다시 할 수 있어요</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+(() => {
+//#LOGIC-START
+// ---------------------------------------------------------------------
+// Pure game logic: no DOM, no audio, no wall-clock. A run is stepped with a fixed timestep (STEP),
+// so it is deterministic for a given seed and testable from Node.
+// World: x = sideways (right is +), y = downstream (up on the screen), 10 units = 1 m.
+// Heading h = 0 points straight downstream, h > 0 turns to the right (clockwise on screen).
+// The boat is carried by the current F and also moves on its own "rowing velocity" (rx, ry):
+// every stroke adds forward speed along the heading and a yaw kick that turns the boat AWAY from the oar's side.
+// ---------------------------------------------------------------------
+const STEP = 1 / 120;
+const UNIT = 10;
+const MAX_HP = 3;
+const BOATS = [null, { w: 40, l: 88 }, { w: 44, l: 100 }, { w: 48, l: 112 }, { w: 52, l: 126 }];   // by number of players
+const KF = 1.05, KS = 4.0, KW = 3.2, KA = 2.4, KAPPA = 0.8;   // drag along / across the boat, yaw damping, yaw pull toward the current
+const THRUST = 54, TURN = 0.95;                   // speed (u/s) and yaw (rad/s) of one perfect stroke of the whole crew
+const INV_T = 1.8, SINK_T = 1.7;
+const BEAT_FIRST = 1.0;
+const W_PERFECT = 0.075, W_GOOD = 0.14, W_OK = 0.22, GROUP_CLOSE = 0.24;   // timing windows around the drum beat (s)
+const GAP_PEN = [0, 0, 0.06, 0.03, 0.25];            // a bigger crew fills the boat more, so the gaps get a little tighter
+const FALL0 = 560, FALL_STEP = 700;               // waterfalls at 560 m, 1260 m, ...
+const ZONE_NAMES = ['잔잔한 강', '바위 여울', '통나무 골짜기', '소용돌이 굽이', '폭포 앞 급류', '푸른 웅덩이'];
+const ZONE_TIPS = ['북소리에 맞춰 같이 저어요', '바위 사이로 빠져나가요', '통나무를 피해 가요', '소용돌이를 조심해요', '물살이 아주 빨라요!', '숨 돌리고 배를 고쳐요'];
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function lerp(a, b, k) { return a + (b - a) * k; }
+function smooth(k) { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); }
+function hash2(a, b) {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function gauss(rng) { let u = 0; while (!u) u = rng(); const v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(Math.PI * 2 * v); }
+
+// ---- who rows what: pad index = oar index. side -1 = left oar, 0 = stern oar (straight push only), 1 = right oar ----
+function oarsFor(n) {
+  if (n === 1) return [{ side: -1, owner: 0 }, { side: 1, owner: 0 }];
+  if (n === 2) return [{ side: -1, owner: 0 }, { side: 1, owner: 1 }];
+  if (n === 3) return [{ side: -1, owner: 0 }, { side: 0, owner: 1 }, { side: 1, owner: 2 }];
+  return [{ side: -1, owner: 0 }, { side: -1, owner: 1 }, { side: 1, owner: 2 }, { side: 1, owner: 3 }];
+}
+
+// ---- river sections (by metres) ----
+function zoneAt(m) {
+  if (m < FALL0) { if (m < 80) return 0; if (m < 200) return 1; if (m < 330) return 2; if (m < 450) return 3; return 4; }
+  const u = (m - FALL0) % FALL_STEP;
+  if (u < 60) return 5;
+  if (u < 230) return 1;
+  if (u < 400) return 2;
+  if (u < 600) return 3;
+  return 4;
+}
+function nextFallM(m) { return m < FALL0 ? FALL0 : FALL0 + FALL_STEP * (Math.floor((m - FALL0) / FALL_STEP) + 1); }
+function prevFallM(m) { return m < FALL0 ? -1 : FALL0 + FALL_STEP * Math.floor((m - FALL0) / FALL_STEP); }
+// difficulty: 0 on the calm start, climbs fast (about 0.45 at 300 m), ~0.9 at 900 m, then a slow extra climb
+function diffAt(y) {
+  const m = Math.max(0, y) / UNIT;
+  return 1 - Math.exp(-Math.max(0, m - 80) / 380) + 0.22 * clamp((m - 900) / 1500, 0, 1);
+}
+
+// ---- river shape ----
+function cxAt(C, y) {
+  if (y <= 0) return 0;
+  const D = Math.min(diffAt(y), 1), ramp = smooth(y / 900);
+  return ramp * ((6 + 18 * D) * Math.sin(y * 0.0018 + C.p1) + (2 + 3 * D) * Math.sin(y * 0.0046 + C.p2));
+}
+function cxSlope(C, y) {
+  if (y <= 0) return 0;
+  const D = Math.min(diffAt(y), 1), ramp = smooth(y / 900);
+  return ramp * ((6 + 18 * D) * 0.0018 * Math.cos(y * 0.0018 + C.p1) + (2 + 3 * D) * 0.0046 * Math.cos(y * 0.0046 + C.p2));
+}
+function riverW(C, y) {
+  y = Math.max(0, y);
+  const D = Math.min(diffAt(y), 1);
+  const base = lerp(340, 262, D) * Math.pow(C.B.w / 44, 0.75);
+  return base * (1 + 0.22 * (1 - smooth(y / 1000))) * (1 + 0.04 * Math.sin(y * 0.0031 + C.p3));
+}
+// how much faster the water runs here (1 = normal): lead-in before each waterfall, the drop itself, and short rapids
+function rapidMul(C, y) {
+  const m = Math.max(0, y) / UNIT;
+  const nf = nextFallM(m), pf = prevFallM(m), dn = nf - m;
+  let mul = 1;
+  if (dn < 100) mul = 1 + 0.55 * smooth(1 - dn / 100);
+  if (pf >= 0) { const dp = m - pf; if (dp < 12) mul = 1.9; else if (dp < 30) mul = Math.max(mul, lerp(1.9, 1, (dp - 12) / 18)); }
+  if (m > 200 && dn > 115 && !(pf >= 0 && m - pf < 70)) {
+    const bi = Math.floor(m / 150), u = m - bi * 150, D = Math.min(diffAt(y), 1);
+    if (hash2(C.seed, bi) < 0.22 + 0.35 * D) mul = Math.max(mul, 1 + (0.2 + 0.22 * D) * smooth((u - 20) / 18) * smooth((120 - u) / 18));
+  }
+  return mul;
+}
+
+// ---- course: obstacle rows, generated lazily but only ever from the seed ----
+// Every row keeps one corridor free (centre c, half width g measured to the obstacle surfaces) and the corridor moves at most
+// 'slope' sideways per unit of distance from row to row, so a way through always exists.
+function newCourse(seed, n) {
+  const rng = mulberry32((seed ^ 0x5bd1e995) >>> 0);
+  const B = BOATS[n];
+  const C = { seed, n, B, rng, rb: B.w * 0.46, p1: rng() * 6.283, p2: rng() * 6.283, p3: rng() * 6.283, rows: [], buoys: [], gy: 950, prev: { y: 400, c: 0, dir: 0 }, rowN: 0, buoyAcc: 0, buoyGap: 3200 };
+  return C;
+}
+function rowIndexAt(C, y) {   // first row with row.y >= y
+  const rows = C.rows;
+  let lo = 0, hi = rows.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (rows[mid].y < y) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function genRow(C) {
+  const rng = C.rng, n = C.n, rb = C.rb;
+  const y = C.gy, m = y / UNIT;
+  const nf = nextFallM(m), pf = prevFallM(m);
+  if (nf - m < 9) {   // no rows right before a waterfall or in the pool behind it; a buoy waits in the pool
+    const py = (nf + 30) * UNIT;
+    C.buoys.push({ x: cxAt(C, py), y: py, got: false });
+    C.gy = (nf + 66) * UNIT; C.prev = { y: C.gy - 450, c: cxAt(C, C.gy), dir: 0 }; C.buoyAcc = 0;
+    return;
+  }
+  if (pf >= 0 && m - pf < 66) { C.gy = (pf + 66) * UNIT; return; }
+  const D = diffAt(y), dd = Math.min(D, 1), over = Math.max(0, D - 1) / 0.22, z = zoneAt(m), later = m >= FALL0 ? 1 : 0;
+  const prev = C.prev, rc = cxAt(C, y), w = riverW(C, y), xl = rc - w / 2, xr = rc + w / 2;
+  const row = { y, c: 0, g: 0, D, z, i: C.rowN, obs: [] };
+  const addRock = (x, yy, r) => row.obs.push({ k: 0, x, y: yy, r, sd: (rng() * 1e6) | 0 });
+  let sp;
+  if (C.rowN < 2) {   // the first two rows are a single rock each; the way round it is 70 units to one side
+    const s0 = rng() < 0.5 ? -1 : 1, first = C.rowN === 0;
+    const rx = first ? rc + s0 * (30 + rng() * 15) : prev.c + s0 * (10 + rng() * 20);
+    addRock(rx, y, 22);
+    row.c = clamp(rx - s0 * 70, xl + 60, xr - 60); row.g = 48;
+    sp = first ? 560 : 500;
+  } else {
+    const fgap = lerp(3.3, 2.75, dd) - 0.12 * over - GAP_PEN[n];
+    const g = rb * fgap, dy = y - prev.y, shiftMax = lerp(0.105, 0.17, dd) * dy;
+    const lo = xl + g + 12, hi = xr - g - 12;
+    let dir = rng() < 0.62 ? -prev.dir : prev.dir;
+    if (!dir) dir = rng() < 0.5 ? -1 : 1;
+    if (prev.c <= lo + 10) dir = 1; else if (prev.c >= hi - 10) dir = -1;
+    let c = prev.c + dir * shiftMax * (0.5 + 0.5 * rng());
+    c = clamp(clamp(c, prev.c - shiftMax, prev.c + shiftMax), lo, hi);
+    row.c = c; row.g = g;
+    const leftSpan = (c - g) - xl, rightSpan = xr - (c + g);
+    // logs hang from a bank toward the corridor
+    let pLog = (z === 2 ? 0.7 : z === 3 ? 0.2 : z === 4 ? 0.3 : 0) + 0.15 * later;
+    let logSide = rng() < pLog ? (rng() < 0.5 ? -1 : 1) : 0;
+    if ((logSide < 0 && leftSpan < 64) || (logSide > 0 && rightSpan < 64)) logSide = 0;
+    // a whirlpool beside the corridor
+    const pWhirl = (z === 3 ? 0.8 : z === 4 ? 0.12 : 0.1 * later * (z === 1 || z === 2 ? 1 : 0)) + (z === 3 ? 0 : 0.08 * later);
+    let whirlSide = 0, whirl = null;
+    if (rng() < pWhirl) {
+      const R = 58 + rng() * 22 + 8 * dd, off = g + 0.55 * R + 4;
+      const side0 = rng() < 0.5 ? -1 : 1;
+      for (const s of [side0, -side0]) {
+        const wx = c + s * off;
+        if (wx - 0.4 * R >= xl && wx + 0.4 * R <= xr && s !== logSide) { whirlSide = s; whirl = { k: 2, x: wx, y: y + (rng() - 0.5) * 40, R, core: R * 0.3, dir: rng() < 0.5 ? -1 : 1 }; break; }
+      }
+      if (whirl) row.obs.push(whirl);
+    }
+    const gateR = {};
+    for (const s of [-1, 1]) {
+      const span = s < 0 ? leftSpan : rightSpan;
+      if (s === logSide) {
+        const rl = 8.5, x2 = c + s * (g + 9 + 0.9 * rl), y2 = y + (rng() < 0.5 ? -1 : 1) * (18 + 22 * rng());
+        const x1 = (s < 0 ? xl : xr) - s * rng() * 0.2 * span, y1 = y - (y2 - y) * 0.6;
+        if (Math.hypot(x2 - x1, y2 - y1) >= 42) { row.obs.push({ k: 1, x: x1, y: y1, x2, y2, r: rl, sd: (rng() * 1e6) | 0 }); gateR[s] = 0; continue; }
+      }
+      const rg = 15 + rng() * (11 + 3 * dd), gx = c + s * (g + 0.9 * rg);
+      if (span > 2 * rg + 6 && (s < 0 ? gx - rg >= xl - 4 : gx + rg <= xr + 4)) { addRock(gx, y + (rng() - 0.5) * 24, rg); gateR[s] = rg; } else gateR[s] = 0;
+    }
+    // extra rocks on the sides, more of them in the rapids and as the river gets harder
+    const pEx = z === 1 ? 0.25 + 0.35 * dd : z === 2 ? 0.2 + 0.2 * dd : z === 3 ? 0.2 + 0.25 * dd : z === 4 ? 0.65 + 0.3 * dd : 0.3;
+    for (const s of [-1, 1]) {
+      if (s === whirlSide) continue;
+      const tries = z === 4 ? 2 : 1;
+      for (let t = 0; t < tries; t++) {
+        if (rng() >= (t ? pEx * 0.5 : pEx)) continue;
+        const r = 10 + rng() * (8 + 4 * dd), reach = g + 2 * (gateR[s] || 0) + r * 0.9 + 6;
+        const a = s < 0 ? xl + r + 6 : c + s * reach, b = s < 0 ? c - reach : xr - r - 6;
+        if (b - a < 6) continue;
+        addRock(a + rng() * (b - a), y + (rng() - 0.5) * 0.5 * 300 * (t ? -1 : 1), r);
+      }
+    }
+    sp = (lerp(600, 380, dd) - 45 * over) * (1 - 0.05 * (n - 1)) * (z === 4 ? 0.88 : 1) * (0.92 + 0.16 * rng());
+    // a buoy for fixing the boat: just behind a gate
+    C.buoyAcc += dy;
+    if (m > 140 && C.buoyAcc > C.buoyGap) {
+      C.buoyAcc = 0; C.buoyGap = 3000 + rng() * 1200 + 800 * dd;
+      C.buoys.push({ x: c + (rng() - 0.5) * g * 1.0, y: y + 80, got: false });
+    }
+  }
+  const nd = row.c - prev.c;
+  C.prev = { y, c: row.c, dir: Math.abs(nd) < 3 ? 0 : nd > 0 ? 1 : -1 };
+  C.rows.push(row); C.rowN++;
+  C.gy = y + sp;
+}
+function ensureCourse(C, yEnd) { while (C.gy < yEnd) genRow(C); }
+
+// ---- how big a gap is left at (x, y) for a boat circle of radius rad? (used by the course checker and the bots) ----
+function blockedAt(C, x, y, rad, sx) {
+  const rc = cxAt(C, y), hw = riverW(C, y) / 2;
+  if (x - rad < rc - hw || x + rad > rc + hw) return true;
+  const ri = rowIndexAt(C, y);
+  for (let j = Math.max(0, ri - 3); j < Math.min(C.rows.length, ri + 3); j++) {
+    for (const o of C.rows[j].obs) {
+      if (o.k === 0) { if (Math.hypot(x - o.x, y - o.y) < o.r * 0.9 + rad) return true; }
+      else if (o.k === 1) { if (segDist(x, y, o.x, o.y, o.x2, o.y2) < o.r * 0.9 + rad) return true; }
+      else if (o.k === 2) { if (Math.hypot(x - o.x, y - o.y) < o.core + rad) return true; }
+    }
+  }
+  return false;
+}
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const k = l2 > 0 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+  return Math.hypot(px - (ax + dx * k), py - (ay + dy * k));
+}
+// Is there a way through? Sweep the course in slices and spread "reachable" sideways by at most slope * dy per slice.
+function verifyCourse(C, yEnd, opt) {
+  opt = opt || {};
+  const slope = opt.slope || 0.25, DX = 2, DY = 8, pad = opt.pad == null ? 1 : opt.pad, rad = C.rb + pad;
+  ensureCourse(C, yEnd + 600);
+  const X0 = -420, NX = 420;   // x from -420 to +420
+  let reach = new Uint8Array(NX), next = new Uint8Array(NX);
+  const free = new Uint8Array(NX);
+  const x0i = Math.round((0 - X0) / DX);
+  reach[x0i] = 1;
+  let minWidth = 1e9, worst = null;
+  const step = Math.max(1, Math.round(slope * DY / DX));
+  for (let y = DY; y <= yEnd; y += DY) {
+    // gather obstacles close to this slice
+    const rc = cxAt(C, y), hw = riverW(C, y) / 2, ri = rowIndexAt(C, y);
+    const list = [];
+    for (let j = Math.max(0, ri - 3); j < Math.min(C.rows.length, ri + 3); j++) for (const o of C.rows[j].obs) {
+      if (o.k === 2) { if (Math.abs(y - o.y) < o.core + rad) list.push(o); }
+      else if (o.k === 0) { if (Math.abs(y - o.y) < o.r + rad) list.push(o); }
+      else if (Math.min(o.y, o.y2) - o.r - rad < y && y < Math.max(o.y, o.y2) + o.r + rad) list.push(o);
+    }
+    let any = 0;
+    for (let i = 0; i < NX; i++) {
+      const x = X0 + i * DX;
+      let f = x - rad >= rc - hw && x + rad <= rc + hw ? 1 : 0;
+      if (f) for (let q = 0; q < list.length; q++) {
+        const o = list[q];
+        if (o.k === 0) { if (Math.hypot(x - o.x, y - o.y) < o.r * 0.9 + rad) { f = 0; break; } }
+        else if (o.k === 1) { if (segDist(x, y, o.x, o.y, o.x2, o.y2) < o.r * 0.9 + rad) { f = 0; break; } }
+        else if (Math.hypot(x - o.x, y - o.y) < o.core + rad) { f = 0; break; }
+      }
+      free[i] = f;
+    }
+    next.fill(0);
+    for (let i = 0; i < NX; i++) {
+      if (!free[i]) continue;
+      for (let d = -step; d <= step; d++) { const j = i + d; if (j >= 0 && j < NX && reach[j]) { next[i] = 1; any = 1; break; } }
+    }
+    if (!any) return { ok: false, y, m: y / UNIT };
+    const t = reach; reach = next; next = t;
+    if (list.length) { let run = 0, best = 0; for (let i = 0; i < NX; i++) { if (free[i]) { run++; if (run > best) best = run; } else run = 0; } if (best * DX < minWidth) { minWidth = best * DX; worst = y; } }
+  }
+  return { ok: true, minWidth, worst };
+}
+
+// ---- the current ----
+function flowAt(G, x, y, out) {
+  const C = G.C, Dd = Math.min(diffAt(y), 1.2), mul = rapidMul(C, y);
+  const vc = (52 + 46 * Dd + 14 * clamp(G.t / 100, 0, 1)) * mul;
+  let fx = vc * cxSlope(C, y) * 0.7, fy = vc;
+  const tur = (mul - 1) * 38 + Dd * 6;
+  if (tur > 0.5) fx += tur * Math.sin(y * 0.021 + G.t * 1.7 + C.p1) * (0.65 + 0.35 * Math.sin(x * 0.045 + G.t * 0.9 + C.p2));
+  const ri = rowIndexAt(C, y), rows = C.rows;
+  for (let j = Math.max(0, ri - 2); j < Math.min(rows.length, ri + 3); j++) {
+    const obs = rows[j].obs;
+    for (let q = 0; q < obs.length; q++) {
+      const o = obs[q];
+      if (o.k !== 2) continue;
+      const dx = x - o.x, dy = y - o.y, r = Math.hypot(dx, dy);
+      if (r < o.R && r > 0.5) {
+        const k = 1 - r / o.R, tg = 95 * k * o.dir, inn = 38 * k;
+        fx += (-dy / r) * tg - (dx / r) * inn; fy += (dx / r) * tg - (dy / r) * inn;
+      }
+    }
+  }
+  out.x = fx; out.y = fy; out.vc = vc; out.mul = mul;
+  return out;
+}
+
+// ---- game ----
+function newGame(o) {
+  o = o || {};
+  const seed = o.seed == null ? 1 : o.seed | 0;
+  const n = clamp(o.n | 0 || 1, 1, 4);
+  const C = newCourse(seed, n);
+  ensureCourse(C, 2600);
+  const oars = oarsFor(n).map((a) => ({ side: a.side, owner: a.owner, last: -9, q: 0, off: 0, cnt: 0 }));
+  const G = {
+    seed, n, C, spec: BOATS[n], oars, t: 0, phase: 'play', sinkT: 0,
+    boat: { x: 0, y: 0, h: 0, w: 0, rx: 0, ry: 0 }, fl: { x: 0, y: 44, vc: 44, mul: 1 }, speed: 0,
+    hp: MAX_HP, inv: 0, combo: 0, maxCombo: 0, engaged: false, idleBeats: 0, lastStroke: 0, lastNudge: -9, lastBump: -9,
+    lastBeat: BEAT_FIRST - 0.66, nextBeat: BEAT_FIRST, beatIdx: 0, groups: [],
+    strokes: 0, perfects: 0, syncs: 0, partials: 0, beatsTotal: 0, crashes: 0, pickups: 0, falls: 0,
+    maxY: 0, zone: 0, ev: [], cir: [{ x: 0, y: 0, r: 0 }, { x: 0, y: 0, r: 0 }, { x: 0, y: 0, r: 0 }],
+  };
+  return G;
+}
+function distM(G) { return Math.floor(Math.max(0, G.maxY) / UNIT); }
+function comboMult(G) { return 1 + 0.06 * Math.min(G.combo, 10); }
+
+function tap(G, oi) {
+  if (G.phase !== 'play') return null;
+  const o = G.oars[oi]; if (!o) return null;
+  const t = G.t, B = G.boat;
+  const dLast = t - G.lastBeat, dNext = G.nextBeat - t;
+  let off, idx, bt;
+  if (dLast <= dNext) { off = dLast; idx = G.beatIdx; bt = G.lastBeat; } else { off = -dNext; idx = G.beatIdx + 1; bt = G.nextBeat; }
+  const a = Math.abs(off);
+  let p, q;
+  if (a <= W_PERFECT) { p = 1; q = 3; } else if (a <= W_GOOD) { p = 0.85; q = 2; } else if (a <= W_OK) { p = 0.62; q = 1; } else { p = 0.38; q = 0; }
+  const gap = t - o.last;
+  let rush = false;
+  if (gap < 0.45) { p *= (gap / 0.45) * (gap / 0.45); if (gap < 0.3) { q = 0; rush = true; } }
+  o.last = t; o.q = q; o.off = off; o.cnt++;
+  G.lastStroke = t; G.engaged = true; G.idleBeats = 0; G.strokes++;
+  if (q === 3) G.perfects++;
+  if (q >= 1) {
+    let g = null;
+    for (let i = 0; i < G.groups.length; i++) if (G.groups[i].idx === idx) { g = G.groups[i]; break; }
+    if (!g) { g = { idx, time: bt, mask: 0, perfect: true }; G.groups.push(g); }
+    g.mask |= 1 << oi; if (q < 3) g.perfect = false;
+  }
+  const Nn = G.oars.length, dv = THRUST * p * comboMult(G) / Nn;
+  B.rx += Math.sin(B.h) * dv; B.ry += Math.cos(B.h) * dv;
+  if (o.side !== 0) B.w += -o.side * TURN * p * (Nn === 3 ? 0.78 : 2 / Nn) * (q === 0 ? 1.35 : 1);   // a sloppy stroke twists the boat more
+  G.ev.push({ t: 'stroke', i: oi, q, off, p, rush });
+  return { q, off, p, rush };
+}
+function finalizeGroup(G, g) {
+  const need = G.n === 1 ? 1 : G.oars.length;
+  let cnt = 0;
+  for (let i = 0; i < G.oars.length; i++) if (g.mask & (1 << i)) cnt++;
+  G.beatsTotal++;
+  if (cnt >= need) { G.combo++; G.syncs++; if (G.combo > G.maxCombo) G.maxCombo = G.combo; G.ev.push({ t: 'sync', n: G.combo, perfect: g.perfect }); }
+  else if (cnt > 0) { G.partials++; G.ev.push({ t: 'partial', mask: g.mask, cnt }); }
+}
+function hurt(G, kind, nx, ny, px, py) {
+  const B = G.boat;
+  G.hp--; G.crashes++; G.inv = G.t + INV_T; G.combo = 0;
+  const sp = kind === 2 ? 110 : 60;
+  B.rx = nx * sp * 0.6; B.ry = Math.max(ny * sp * 0.6, 8) * 0.5;
+  B.w += (nx >= 0 ? 1 : -1) * 1.1;
+  G.ev.push({ t: 'crash', kind, x: px, y: py, hp: G.hp });
+  if (G.hp <= 0) { G.hp = 0; G.phase = 'sink'; G.sinkT = 0; G.ev.push({ t: 'sink' }); }
+}
+function collide(G) {
+  const B = G.boat, C = G.C, spec = G.spec, L = spec.l, hw = spec.w / 2;
+  const sh = Math.sin(B.h), ch = Math.cos(B.h), cir = G.cir;
+  const offs = [0.3 * L, 0, -0.3 * L], rads = [0.7 * hw, 0.95 * hw, 0.85 * hw];
+  for (let i = 0; i < 3; i++) { cir[i].x = B.x + sh * offs[i]; cir[i].y = B.y + ch * offs[i]; cir[i].r = rads[i]; }
+  // banks (solid, harmless)
+  for (let i = 0; i < 3; i++) {
+    const c = cir[i], rc = cxAt(C, c.y), half = riverW(C, c.y) / 2;
+    let push = 0;
+    if (c.x - c.r < rc - half) push = (rc - half) - (c.x - c.r); else if (c.x + c.r > rc + half) push = (rc + half) - (c.x + c.r);
+    if (push) {
+      B.x += push; c.x += push;
+      if ((push > 0 && B.rx < 0) || (push < 0 && B.rx > 0)) B.rx *= -0.3;
+      B.rx *= 0.97; B.ry *= 0.97; B.w += push > 0 ? 0.04 : -0.04;
+      if (G.t - G.lastBump > 0.5) { G.lastBump = G.t; G.ev.push({ t: 'bump', x: c.x, y: c.y, side: push > 0 ? -1 : 1 }); }
+    }
+  }
+  // buoys
+  const bs = C.buoys;
+  for (let i = 0; i < bs.length; i++) {
+    const b = bs[i];
+    if (b.got || b.y < B.y - 200) continue;
+    if (b.y > B.y + 200) break;
+    for (let q = 0; q < 3; q++) {
+      if (Math.hypot(cir[q].x - b.x, cir[q].y - b.y) < cir[q].r + 22) {
+        b.got = true; G.pickups++;
+        const healed = G.hp < MAX_HP; if (healed) G.hp++;
+        G.ev.push({ t: 'pickup', x: b.x, y: b.y, healed, hp: G.hp });
+        break;
+      }
+    }
+  }
+  if (G.inv > G.t) return;   // the boat slips through things while it blinks
+  const ri = rowIndexAt(C, B.y), rows = C.rows;
+  for (let j = Math.max(0, ri - 2); j < Math.min(rows.length, ri + 3); j++) {
+    const obs = rows[j].obs;
+    for (let q = 0; q < obs.length; q++) {
+      const o = obs[q];
+      for (let i = 0; i < 3; i++) {
+        const c = cir[i];
+        let d, nx, ny, lim, ox, oy;
+        if (o.k === 0) { ox = o.x; oy = o.y; d = Math.hypot(c.x - ox, c.y - oy); lim = o.r * 0.9 + c.r; }
+        else if (o.k === 1) {
+          const dx = o.x2 - o.x, dy = o.y2 - o.y, l2 = dx * dx + dy * dy, k = clamp(((c.x - o.x) * dx + (c.y - o.y) * dy) / l2, 0, 1);
+          ox = o.x + dx * k; oy = o.y + dy * k; d = Math.hypot(c.x - ox, c.y - oy); lim = o.r * 0.9 + c.r;
+        } else { ox = o.x; oy = o.y; d = Math.hypot(c.x - ox, c.y - oy); lim = o.core + c.r; }
+        if (d < lim) {
+          nx = d > 0.01 ? (c.x - ox) / d : 1; ny = d > 0.01 ? (c.y - oy) / d : 0;
+          hurt(G, o.k, nx, ny, ox, oy);
+          return;
+        }
+      }
+    }
+  }
+}
+function step(G) {
+  if (G.phase === 'over') return;
+  const dt = STEP;
+  G.t += dt;
+  const t = G.t, B = G.boat, C = G.C;
+  ensureCourse(C, B.y + 2300);
+  // drum beats
+  while (t >= G.nextBeat) {
+    G.lastBeat = G.nextBeat; G.beatIdx++;
+    G.nextBeat = G.lastBeat + lerp(0.66, 0.52, Math.min(diffAt(B.y), 1));
+    G.ev.push({ t: 'beat', i: G.beatIdx });
+    if (G.engaged && t - G.lastStroke > (G.nextBeat - G.lastBeat) * 1.2) { if (++G.idleBeats === 3 && G.combo > 0) { G.combo = 0; G.ev.push({ t: 'idle' }); } }
+    else if (!G.engaged) G.idleBeats = 0;
+  }
+  for (let i = 0; i < G.groups.length; i++) {
+    const g = G.groups[i];
+    if (t >= g.time + GROUP_CLOSE) { finalizeGroup(G, g); G.groups.splice(i, 1); i--; }
+  }
+  if (G.phase === 'sink') {
+    G.sinkT += dt; B.h += 2.2 * dt; B.y += G.fl.vc * 0.3 * dt;
+    if (G.sinkT >= SINK_T) { G.phase = 'over'; G.ev.push({ t: 'over' }); }
+    return;
+  }
+  // heading
+  const F = flowAt(G, B.x, B.y, G.fl);
+  const hflow = clamp(Math.atan2(F.x, F.y), -0.9, 0.9);
+  B.w += (-B.w * KW - KA * (B.h - hflow)) * dt;
+  B.w = clamp(B.w, -3.2, 3.2);
+  B.h = clamp(B.h + B.w * dt, -1.4, 1.4);
+  // rowing velocity: keeps going along the heading, loses speed to the water, slides sideways very little
+  const sh = Math.sin(B.h), ch = Math.cos(B.h);
+  let vf = B.rx * sh + B.ry * ch, vs = B.rx * ch - B.ry * sh;
+  vf -= vf * KF * dt; vs -= vs * KS * dt;
+  B.rx = vf * sh + vs * ch; B.ry = vf * ch - vs * sh;
+  // the boat drives where it points: the ground track is the flow plus rowing, bent toward the heading by KAPPA
+  let vx = F.x + B.rx, vy = F.y + B.ry;
+  const spd = Math.hypot(vx, vy);
+  if (spd > 1) {
+    let dx = (1 - KAPPA) * vx / spd + KAPPA * sh, dy = (1 - KAPPA) * vy / spd + KAPPA * ch;
+    const dl = Math.hypot(dx, dy) || 1;
+    vx = dx / dl * spd; vy = dy / dl * spd;
+  }
+  B.x += vx * dt; B.y += vy * dt;
+  G.speed = spd;
+  collide(G);
+  if (B.y > G.maxY) G.maxY = B.y;
+  const m = G.maxY / UNIT, z = zoneAt(m);
+  if (z !== G.zone) { G.zone = z; G.ev.push({ t: 'zone', i: z, m }); }
+  const pf = prevFallM(m);
+  if (pf >= 0 && pf >= FALL0 + FALL_STEP * G.falls) { G.falls++; G.ev.push({ t: 'fall', k: G.falls }); }
+  if (G.engaged && t - G.lastStroke > 3.4 && t - G.lastNudge > 5) { G.lastNudge = t; G.ev.push({ t: 'nudge' }); }
+}
+
+// ---- what a sensible crew would do now (also drives the tutorial hints) ----
+// returns -1 (steer left), 0 (straight), 1 (steer right). Stroking the LEFT oar steers right.
+function steerFor(G, s, tx, dist) {
+  // aim for a sideways speed that closes the gap in about 1.3 s, turn the boat to that heading, and brake the turn early
+  const spd = Math.max(60, G.speed), dx = tx - s.x;
+  const vd = clamp(dx / 1.3, -0.4 * spd, 0.4 * spd);
+  const hd = Math.asin(clamp(vd / (0.8 * spd), -0.9, 0.9));
+  const e = hd - (s.h + 0.35 * s.w);
+  return e > 0.08 ? 1 : e < -0.08 ? -1 : 0;
+}
+function hintCmd(G) {
+  const C = G.C, B = G.boat, ri = rowIndexAt(C, B.y - 70);
+  const r = C.rows[ri];
+  if (!r || r.y - B.y > 520) return { cmd: 0, row: null };
+  return { cmd: steerFor(G, B, r.c, r.y - B.y), row: r };
+}
+
+// ---- stand-in "people": bots that tap on the drum with human-like timing errors, lapses and reaction delay ----
+const SKILLS = {
+  weak:   { rt: 0.45, sigma: 0.11, bias: 0.04, miss: 0.14, lapse: 0.05, look: 440, perr: 18, mis: 0.16 },
+  casual: { rt: 0.32, sigma: 0.075, bias: 0.02, miss: 0.07, lapse: 0.03, look: 520, perr: 11, mis: 0.10 },
+  good:   { rt: 0.22, sigma: 0.045, bias: 0.01, miss: 0.03, lapse: 0.01, look: 600, perr: 6, mis: 0.05 },
+};
+function makeCrew(G, skill, salt) {
+  const sk = typeof skill === 'string' ? (SKILLS[skill] || SKILLS.casual) : skill;
+  const rng = mulberry32((Math.imul(G.seed, 2654435761) + (salt | 0) * 97 + 12345) >>> 0);
+  const persons = [];
+  for (let p = 0; p < G.n; p++) persons.push({ pads: [] });
+  G.oars.forEach((o, i) => persons[o.owner].pads.push(i));
+  return { sk, rng, persons, hist: [], hn: 0, planIdx: -1, queue: [], lapse: 0, noise: new Map() };
+}
+function noiseFor(cr, i, sd) {
+  let v = cr.noise.get(i);
+  if (v === undefined) { v = gauss(cr.rng) * sd; cr.noise.set(i, v); if (cr.noise.size > 400) cr.noise.delete(cr.noise.keys().next().value); }
+  return v;
+}
+function crewCmd(G, cr) {
+  const sk = cr.sk, C = G.C, want = G.t - sk.rt;
+  let s = null;
+  for (let i = cr.hist.length - 1; i >= 0; i--) if (cr.hist[i].t <= want) { s = cr.hist[i]; break; }
+  if (!s) s = cr.hist.length ? cr.hist[0] : G.boat;
+  const ri = rowIndexAt(C, s.y - 70), rows = C.rows;
+  let tx, dist;
+  if (ri < rows.length && rows[ri].y - s.y < sk.look) {
+    const r0 = rows[ri];
+    tx = r0.c + noiseFor(cr, r0.i, sk.perr); dist = Math.max(r0.y - s.y, 40);
+    const r1 = rows[ri + 1];
+    if (r1 && dist < 170 && r1.y - s.y < sk.look) tx = lerp(tx, r1.c + noiseFor(cr, r1.i, sk.perr), 0.4 * clamp((170 - dist) / 120, 0, 1));
+  } else { const rc = cxAt(C, s.y + 150), hw = riverW(C, s.y + 150) * 0.3; tx = clamp(s.x, rc - hw, rc + hw); dist = 300; }   // nothing in sight: keep straight, stay off the banks
+  return steerFor(G, s, tx, dist);
+}
+function planBeat(G, cr) {
+  const sk = cr.sk, rng = cr.rng, tb = G.nextBeat;
+  if (cr.lapse > 0) cr.lapse--; else if (rng() < sk.lapse) cr.lapse = rng() < 0.5 ? 1 : 2;
+  const cmd = cr.lapse > 0 ? 0 : crewCmd(G, cr);
+  for (const pr of cr.persons) {
+    const pcmd = G.n > 1 && rng() < sk.mis ? 0 : cmd, ep = gauss(rng) * sk.sigma;
+    for (const oi of pr.pads) {
+      const side = G.oars[oi].side;
+      if (!(side === 0 || (side < 0 && pcmd >= 0) || (side > 0 && pcmd <= 0))) continue;
+      if (rng() < sk.miss) continue;
+      cr.queue.push({ t: tb + sk.bias + ep + (pr.pads.length > 1 ? gauss(rng) * 0.025 : 0), oi });
+    }
+  }
+}
+function crewStep(G, cr) {
+  if (G.phase !== 'play') return;
+  const B = G.boat;
+  if ((++cr.hn & 3) === 0) { cr.hist.push({ t: G.t, x: B.x, y: B.y, h: B.h, w: B.w }); if (cr.hist.length > 48) cr.hist.shift(); }
+  if (cr.planIdx !== G.beatIdx + 1 && G.t >= G.nextBeat - 0.34) { cr.planIdx = G.beatIdx + 1; planBeat(G, cr); }
+  for (let i = cr.queue.length - 1; i >= 0; i--) if (G.t >= cr.queue[i].t) { tap(G, cr.queue[i].oi); cr.queue.splice(i, 1); }
+}
+function simulate(o) {
+  const G = newGame({ seed: o.seed, n: o.n });
+  const cr = o.skill === 'idle' ? null : makeCrew(G, o.skill || 'casual', o.salt);
+  const tmax = o.tmax || 400, trace = o.trace;
+  let nextTrace = 0;
+  while (G.phase !== 'over' && G.t < tmax) {
+    if (cr) crewStep(G, cr);
+    step(G);
+    if (G.ev.length) { if (o.onEvent) for (const e of G.ev) o.onEvent(e, G); G.ev.length = 0; }
+    if (trace && G.t >= nextTrace) { nextTrace += trace; trace && o.onTrace && o.onTrace(G); }
+  }
+  return { G, m: distM(G), t: G.t, over: G.phase === 'over', crashes: G.crashes, hp: G.hp, maxCombo: G.maxCombo, pickups: G.pickups, syncRate: G.beatsTotal ? G.syncs / G.beatsTotal : 0 };
+}
+//#LOGIC-END
+
+// =====================================================================
+// VIEW: everything from here on touches the DOM, the canvas or the audio
+// =====================================================================
+const KEY_BEST = 'arcade.row.best';       // best distance (m) when playing alone: a plain number. 2-4 players: best2 / best3 / best4
+const KEY_MUTE = 'arcade.row.muted';
+const KEY_MODE = 'arcade.row.mode';       // 1..4 players
+const KEY_HINT = 'arcade.row.hints';      // how many runs have shown the coaching hints
+const TAU = Math.PI * 2;
+const FONT_D = '"Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+const FONT_B = '"Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+const INK = '#082433', PAPER = '#f6fbf2', GOLD = '#ffd166';
+const PCOL = ['#ffcf3a', '#6fdc7a', '#ff8fc4', '#5ec8ff'];       // player colours: duck, frog, hippo, panda
+const PDEEP = ['#c99a12', '#3fa84c', '#d85a9a', '#2f96d0'];
+const NAMES = ['동실이', '개굴이', '풍덩이', '판판이'];
+const ROLE = {
+  1: ['왼쪽 노', '오른쪽 노'], 2: ['왼쪽 노', '오른쪽 노'], 3: ['왼쪽 노', '가운데 노', '오른쪽 노'], 4: ['왼쪽 앞 노', '왼쪽 뒤 노', '오른쪽 앞 노', '오른쪽 뒤 노'],
+};
+const KEYSETS = {
+  1: [['KeyA', 'KeyQ', 'ArrowLeft'], ['KeyD', 'KeyW', 'ArrowRight']],
+  2: [['KeyA', 'KeyQ'], ['KeyL', 'ArrowLeft', 'ArrowRight', 'Semicolon']],
+  3: [['KeyA', 'KeyQ'], ['Space', 'KeyG'], ['KeyL', 'ArrowLeft', 'ArrowRight']],
+  4: [['KeyA', 'KeyQ'], ['KeyS', 'KeyW'], ['KeyK', 'ArrowLeft'], ['KeyL', 'ArrowRight']],
+};
+const KEYLBL = { 1: ['A', 'D'], 2: ['A', 'L'], 3: ['A', '␣', 'L'], 4: ['A', 'S', 'K', 'L'] };
+const MODE_LINES = {
+  1: '두 손으로 왼쪽·오른쪽 노를 번갈아, 또는 함께 저어요. 키보드는 A·D 또는 Q·W, ← →.',
+  2: '한 명은 왼쪽 노, 한 명은 오른쪽 노! 같은 박자에 저어야 곧게 나가요. 키보드는 A / L.',
+  3: '왼쪽·가운데·오른쪽 노를 한 명씩! 가운데 노는 앞으로 쭉 밀어 줘요. 키보드는 A / 스페이스 / L.',
+  4: '노 네 개를 한 명씩! 왼쪽 둘, 오른쪽 둘이 짝을 맞춰요. 키보드는 A S / K L.',
+};
+const ZONE_BANNER = ['출발! 잔잔한 강이에요', '바위 여울', '통나무 골짜기', '소용돌이 굽이', '폭포 앞 급류', '푸른 웅덩이'];
+
+const QS = new URLSearchParams(location.search);
+const seedParam = QS.get('seed');
+const BASE_SEED = seedParam !== null && seedParam !== '' ? (+seedParam | 0) : null;
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+const bestKey = (n) => (n === 1 ? KEY_BEST : KEY_BEST + n);
+function readBest(n) { const v = parseInt(store.get(bestKey(n), ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function buzz(p) { try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ } }
+function fmtTime(sec) { const s = Math.max(0, Math.floor(sec)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+const vr = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only: never touches the simulation
+function padColor(G, i) { return G.n === 1 ? (i === 0 ? PCOL[0] : '#ff9a3a') : PCOL[G.oars[i].owner]; }
+function padDeep(G, i) { return G.n === 1 ? (i === 0 ? PDEEP[0] : '#d46a10') : PDEEP[G.oars[i].owner]; }
+
+// =====================================================================
+// AUDIO (all synthesized)
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0, amb: null,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.5;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 2);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.5, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  tone(type, f0, f1, dur, vol, delay, attack, pri) {
+    if (!this.ok() || (!pri && this.voices >= 8)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.005));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type, pri) {
+    if (!this.ok() || (!pri && this.voices >= 8)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(t, Math.random() * 0.9); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  // a soft river bed whose loudness follows the boat's speed
+  ambient(on, k) {
+    if (!this.ctx) return;
+    try {
+      if (!this.amb && on) {
+        const c = this.ctx, s = c.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true;
+        const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; f.Q.value = 0.4;
+        const g = c.createGain(); g.gain.value = 0;
+        s.connect(f); f.connect(g); g.connect(this.master); s.start();
+        this.amb = { s, f, g };
+      }
+      if (this.amb) {
+        const v = on ? 0.03 + 0.06 * k : 0;
+        this.amb.g.gain.setTargetAtTime(v, this.ctx.currentTime, 0.12);
+        this.amb.f.frequency.setTargetAtTime(500 + 900 * k, this.ctx.currentTime, 0.2);
+      }
+    } catch (e) { /* ignore */ }
+  },
+  beat(i) { this.tone('sine', i % 4 === 0 ? 150 : 120, 62, 0.16, i % 4 === 0 ? 0.2 : 0.13); this.noise(0.03, 300, 0.7, 0.035); },
+  stroke(q, side) {   // splash of the oar; a bright tick when it lands on the beat
+    const k = q / 3, rv = 1 + (Math.random() - 0.5) * 0.12;
+    this.noise(0.14 + 0.06 * k, (900 + 500 * k) * rv, 0.9, 0.06 + 0.09 * k);
+    if (q >= 2) this.tone('triangle', (q === 3 ? 880 : 740) * rv * (side > 0 ? 1.06 : 1), (q === 3 ? 1100 : 820) * rv, 0.08, 0.05 + 0.03 * k);
+    else if (q === 0) this.tone('sine', 190, 120, 0.07, 0.05);
+  },
+  sync(n, perfect) {   // all oars together: a rising chime that climbs with the streak
+    const base = 523 * Math.pow(2, Math.min(n, 12) / 12 * 0.5);
+    [0, 7].forEach((s, i) => { const f = base * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.16, perfect ? 0.1 : 0.07, i * 0.05, 0.005, true); });
+    if (perfect) this.noise(0.25, 5200, 0.7, 0.025, 0.04, 'highpass');
+  },
+  partial() { this.tone('sine', 260, 230, 0.08, 0.04); },
+  crash(kind) {
+    this.noise(0.3, kind === 1 ? 500 : 300, 0.6, 0.3, 0, 'lowpass', true);
+    this.tone('sine', 130, 48, 0.3, 0.3, 0, 0.004, true);
+    if (kind === 1) this.tone('square', 170, 110, 0.12, 0.05, 0.02, 0.004, true);
+  },
+  bump() { this.noise(0.1, 420, 0.8, 0.1); this.tone('sine', 150, 90, 0.1, 0.1); },
+  pickup() { [0, 4, 7, 12].forEach((s, i) => { const f = 659 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.16, 0.1, i * 0.06, 0.005, true); }); },
+  zone() { [0, 7, 12].forEach((s, i) => { const f = 440 * Math.pow(2, s / 12); this.tone('square', f, f, 0.13, 0.04, i * 0.08, 0.005, true); }); },
+  fall() { this.noise(1.1, 1400, 0.5, 0.2, 0, 'bandpass', true); this.tone('sine', 700, 120, 0.9, 0.1, 0, 0.01, true); },
+  cheer(p) { const f = 440 + 60 * (p % 4); this.tone('triangle', f, f * 1.25, 0.1, 0.06, 0, 0.005, true); this.tone('triangle', f * 1.25, f * 1.5, 0.12, 0.06, 0.09, 0.005, true); },
+  sink() { [0, -3, -7, -12].forEach((s, i) => { const f = 523 * Math.pow(2, s / 12); this.tone('sawtooth', f, f * 0.96, 0.22, 0.06, i * 0.15, 0.01, true); }); this.noise(0.7, 600, 0.5, 0.12, 0.1, 'lowpass', true); },
+  win() { [0, 4, 7, 12, 7, 12, 16].forEach((s, i) => { const f = 659 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.2, 0.11, i * 0.09, 0.005, true); }); },
+  ui() { this.tone('sine', 880, 1100, 0.06, 0.08, 0, 0.005, true); },
+};
+
+// =====================================================================
+// CHARACTERS: 동실이 (duck), 개굴이 (frog), 풍덩이 (hippo), 판판이 (panda). Round heads, dot eyes, no joints:
+// the paws are plain circles that sit on the oar handles.
+// =====================================================================
+function pathCircle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, TAU); }
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(0.01, rx), Math.max(0.01, ry), rot || 0, 0, TAU); }
+function stroked(c, w) { c.lineWidth = w; c.strokeStyle = INK; c.lineJoin = 'round'; c.lineCap = 'round'; c.stroke(); }
+function rrect(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+// one eye. side: -1 left, +1 right. expr: idle | push | wow | hit | happy | sad. R is the head radius.
+function drawEye(c, x, y, R, side, o, big) {
+  const e = o.expr, k = big || 1;
+  c.fillStyle = INK; c.strokeStyle = INK; c.lineCap = 'round'; c.lineJoin = 'round';
+  if (e === 'happy') {
+    c.lineWidth = Math.max(1.4, R * 0.085); c.beginPath(); c.arc(x, y + R * 0.07, R * 0.13 * k, Math.PI * 1.08, Math.PI * 1.92); c.stroke();
+  } else if (e === 'hit') {
+    c.lineWidth = Math.max(1.4, R * 0.085); c.beginPath();
+    c.moveTo(x - side * R * 0.12 * k, y - R * 0.11 * k); c.lineTo(x + side * R * 0.1 * k, y); c.lineTo(x - side * R * 0.12 * k, y + R * 0.11 * k); c.stroke();
+  } else if (o.blink) {
+    c.lineWidth = Math.max(1.4, R * 0.07); c.beginPath(); c.moveTo(x - R * 0.11 * k, y + R * 0.03); c.lineTo(x + R * 0.11 * k, y + R * 0.03); c.stroke();
+  } else {
+    const grow = e === 'wow' ? 1.3 : 1, rx = R * 0.1 * k * grow, ry = R * 0.125 * k * grow;
+    const ex = x + (o.lx || 0) * R * 0.04, ey = y + (o.ly || 0) * R * 0.03;
+    ell(c, ex, ey, rx, ry); c.fill();
+    c.fillStyle = '#fff'; pathCircle(c, ex - rx * 0.35, ey - ry * 0.4, Math.max(0.7, R * 0.036 * k * grow)); c.fill();
+    c.strokeStyle = INK; c.lineWidth = Math.max(1.3, R * 0.065);
+    if (e === 'push') { c.beginPath(); c.moveTo(x - side * R * 0.14 * k, y - R * 0.24 * k); c.lineTo(x + side * R * 0.13 * k, y - R * 0.3 * k); c.stroke(); }   // determined: the inner end (toward the nose) is the low one
+    else if (e === 'sad') { c.beginPath(); c.moveTo(x - side * R * 0.15 * k, y - R * 0.34 * k); c.lineTo(x + side * R * 0.14 * k, y - R * 0.2 * k); c.stroke(); }   // sad: inner end high
+    else if (e === 'wow') { c.beginPath(); c.arc(x, y - R * 0.3 * k, R * 0.13 * k, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+  }
+}
+function drawMouth(c, x, y, R, expr) {
+  c.strokeStyle = INK; c.fillStyle = INK; c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = Math.max(1.3, R * 0.065);
+  if (expr === 'happy') {
+    c.beginPath(); c.moveTo(x - R * 0.2, y); c.quadraticCurveTo(x, y + R * 0.08, x + R * 0.2, y); c.quadraticCurveTo(x + R * 0.18, y + R * 0.3, x, y + R * 0.3); c.quadraticCurveTo(x - R * 0.18, y + R * 0.3, x - R * 0.2, y); c.closePath();
+    c.fillStyle = '#6b1f33'; c.fill(); stroked(c, Math.max(1.3, R * 0.06));
+    c.save(); c.clip(); c.fillStyle = '#ff8fa8'; ell(c, x, y + R * 0.3, R * 0.12, R * 0.09); c.fill(); c.restore();
+  } else if (expr === 'sad') {
+    c.beginPath(); c.moveTo(x - R * 0.13, y + R * 0.1); c.quadraticCurveTo(x, y - R * 0.03, x + R * 0.13, y + R * 0.1); c.stroke();
+  } else if (expr === 'wow' || expr === 'hit') {
+    ell(c, x, y + R * 0.06, R * 0.075, R * (expr === 'hit' ? 0.07 : 0.1)); c.fill();
+  } else if (expr === 'push') {   // teeth together, little "ㅁ"
+    rrect(c, x - R * 0.12, y - R * 0.01, R * 0.24, R * 0.13, R * 0.04); c.fillStyle = '#fff'; c.fill(); stroked(c, Math.max(1.2, R * 0.055));
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + R * 0.12); c.lineWidth = Math.max(1, R * 0.04); c.stroke();
+  } else {   // idle: a little "w"
+    c.beginPath(); c.arc(x - R * 0.07, y, R * 0.07, 0.15, Math.PI - 0.15); c.stroke(); c.beginPath(); c.arc(x + R * 0.07, y, R * 0.07, 0.15, Math.PI - 0.15); c.stroke();
+  }
+}
+function blush(c, x, y, R, a) { c.fillStyle = 'rgba(255,110,130,' + (a || 0.45) + ')'; ell(c, x, y, R * 0.14, R * 0.085); c.fill(); }
+// kind 0 duck, 1 frog, 2 hippo, 3 panda.  o: { expr, lx, ly, blink }.  Head radius R, centred on (x, y).
+function drawHead(c, kind, x, y, R, o) {
+  c.save();
+  const lw = Math.max(1.4, R * 0.07);
+  if (kind === 0) {   // duck: yellow round head, tuft, orange beak
+    for (const sd of [-1, 0, 1]) { c.beginPath(); c.moveTo(x + sd * R * 0.12 - R * 0.1, y - R * 0.9); c.quadraticCurveTo(x + sd * R * 0.3, y - R * (1.35 - Math.abs(sd) * 0.15), x + sd * R * 0.12 + R * 0.12, y - R * 0.88); c.closePath(); c.fillStyle = '#ffd64a'; c.fill(); stroked(c, lw * 0.9); }
+    pathCircle(c, x, y, R); c.fillStyle = '#ffd64a'; c.fill();
+    c.save(); pathCircle(c, x, y, R); c.clip(); c.fillStyle = '#f4be2a'; pathCircle(c, x + R * 0.25, y + R * 0.4, R * 1.05); c.fill(); c.restore();
+    pathCircle(c, x, y, R); stroked(c, lw);
+    blush(c, x - R * 0.66, y + R * 0.18, R); blush(c, x + R * 0.66, y + R * 0.18, R);
+    drawEye(c, x - R * 0.38, y - R * 0.1, R, -1, o); drawEye(c, x + R * 0.38, y - R * 0.1, R, 1, o);
+    // beak: two halves, open for happy / wow
+    const open = o.expr === 'happy' ? 0.2 : o.expr === 'wow' || o.expr === 'hit' ? 0.17 : o.expr === 'push' ? 0.06 : 0;
+    ell(c, x, y + R * 0.4 + R * open * 0.5, R * 0.34, R * (0.14 + open * 0.55)); c.fillStyle = '#7a2d1f'; if (open > 0.05) { c.fill(); }
+    ell(c, x, y + R * 0.3, R * 0.36, R * 0.17); c.fillStyle = '#ff9a2e'; c.fill(); stroked(c, lw * 0.9);
+    if (open > 0.05) { ell(c, x, y + R * 0.38 + R * open, R * 0.3, R * 0.13); c.fillStyle = '#ff9a2e'; c.fill(); stroked(c, lw * 0.9); }
+    else { c.beginPath(); c.moveTo(x - R * 0.26, y + R * 0.33); c.quadraticCurveTo(x, y + R * 0.4, x + R * 0.26, y + R * 0.33); c.lineWidth = lw * 0.7; c.strokeStyle = INK; c.stroke(); }
+    ell(c, x - R * 0.12, y + R * 0.26, R * 0.04, R * 0.025); c.fillStyle = INK; c.fill(); ell(c, x + R * 0.12, y + R * 0.26, R * 0.04, R * 0.025); c.fill();
+  } else if (kind === 1) {   // frog: wide green head, eyes in bumps on top, wide mouth
+    for (const sd of [-1, 1]) {
+      pathCircle(c, x + sd * R * 0.52, y - R * 0.66, R * 0.34); c.fillStyle = '#7fe070'; c.fill(); stroked(c, lw);
+      pathCircle(c, x + sd * R * 0.52, y - R * 0.66, R * 0.24); c.fillStyle = '#fff'; c.fill();
+    }
+    ell(c, x, y, R * 1.06, R * 0.92); c.fillStyle = '#7fe070'; c.fill();
+    c.save(); ell(c, x, y, R * 1.06, R * 0.92); c.clip(); c.fillStyle = '#6acb5c'; pathCircle(c, x + R * 0.3, y + R * 0.5, R * 1.1); c.fill(); c.fillStyle = '#d8f7a8'; ell(c, x, y + R * 0.62, R * 0.7, R * 0.4); c.fill(); c.restore();
+    ell(c, x, y, R * 1.06, R * 0.92); stroked(c, lw);
+    // eyes sit inside the bumps
+    for (const sd of [-1, 1]) {
+      const ex = x + sd * R * 0.52, ey = y - R * 0.66, er = R * 0.24;
+      if (o.expr === 'happy') { c.lineWidth = lw * 1.1; c.beginPath(); c.arc(ex, ey + er * 0.35, er * 0.6, Math.PI * 1.1, Math.PI * 1.9); c.strokeStyle = INK; c.stroke(); }
+      else if (o.expr === 'hit') { c.lineWidth = lw; c.strokeStyle = INK; c.beginPath(); c.moveTo(ex - sd * er * 0.5, ey - er * 0.4); c.lineTo(ex + sd * er * 0.4, ey); c.lineTo(ex - sd * er * 0.5, ey + er * 0.4); c.stroke(); }
+      else if (o.blink) { c.lineWidth = lw; c.strokeStyle = INK; c.beginPath(); c.moveTo(ex - er * 0.55, ey + er * 0.1); c.lineTo(ex + er * 0.55, ey + er * 0.1); c.stroke(); }
+      else {
+        const pr = er * (o.expr === 'wow' ? 0.4 : 0.55);
+        pathCircle(c, ex + (o.lx || 0) * er * 0.15, ey + (o.ly || 0) * er * 0.15 + er * 0.05, pr); c.fillStyle = INK; c.fill();
+        pathCircle(c, ex + (o.lx || 0) * er * 0.15 - pr * 0.3, ey + (o.ly || 0) * er * 0.15 - pr * 0.2, pr * 0.3); c.fillStyle = '#fff'; c.fill();
+        if (o.expr === 'push') { c.strokeStyle = INK; c.lineWidth = lw; c.beginPath(); c.moveTo(ex - sd * er * 0.9, ey - er * 0.62); c.lineTo(ex + sd * er * 0.7, ey - er * 0.85); c.stroke(); }
+        else if (o.expr === 'sad') { c.strokeStyle = INK; c.lineWidth = lw; c.beginPath(); c.moveTo(ex - sd * er * 0.95, ey - er * 0.9); c.lineTo(ex + sd * er * 0.7, ey - er * 0.35); c.stroke(); }
+      }
+    }
+    blush(c, x - R * 0.7, y + R * 0.18, R); blush(c, x + R * 0.7, y + R * 0.18, R);
+    ell(c, x - R * 0.1, y - R * 0.05, R * 0.03, R * 0.02); c.fillStyle = INK; c.fill(); ell(c, x + R * 0.1, y - R * 0.05, R * 0.03, R * 0.02); c.fill();
+    // mouth
+    const ex2 = o.expr;
+    if (ex2 === 'happy') { c.beginPath(); c.moveTo(x - R * 0.45, y + R * 0.22); c.quadraticCurveTo(x, y + R * 0.78, x + R * 0.45, y + R * 0.22); c.closePath(); c.fillStyle = '#6b1f33'; c.fill(); stroked(c, lw); c.save(); c.clip(); c.fillStyle = '#ff8fa8'; ell(c, x, y + R * 0.62, R * 0.2, R * 0.12); c.fill(); c.restore(); }
+    else if (ex2 === 'wow' || ex2 === 'hit') { ell(c, x, y + R * 0.38, R * 0.12, R * 0.14); c.fillStyle = '#6b1f33'; c.fill(); stroked(c, lw * 0.9); }
+    else if (ex2 === 'sad') { c.beginPath(); c.moveTo(x - R * 0.32, y + R * 0.42); c.quadraticCurveTo(x, y + R * 0.28, x + R * 0.32, y + R * 0.42); c.lineWidth = lw; c.strokeStyle = INK; c.stroke(); }
+    else if (ex2 === 'push') { c.beginPath(); c.moveTo(x - R * 0.34, y + R * 0.34); c.lineTo(x + R * 0.34, y + R * 0.34); c.lineWidth = lw; c.strokeStyle = INK; c.stroke(); rrect(c, x - R * 0.14, y + R * 0.3, R * 0.28, R * 0.12, R * 0.03); c.fillStyle = '#fff'; c.fill(); stroked(c, lw * 0.7); }
+    else { c.beginPath(); c.moveTo(x - R * 0.4, y + R * 0.3); c.quadraticCurveTo(x, y + R * 0.55, x + R * 0.4, y + R * 0.3); c.lineWidth = lw; c.strokeStyle = INK; c.stroke(); }
+  } else if (kind === 2) {   // hippo: lilac-pink round head, small ears, big snout with nostrils
+    for (const sd of [-1, 1]) { pathCircle(c, x + sd * R * 0.66, y - R * 0.78, R * 0.22); c.fillStyle = '#f5a9d2'; c.fill(); stroked(c, lw); pathCircle(c, x + sd * R * 0.66, y - R * 0.78, R * 0.11); c.fillStyle = '#d97aae'; c.fill(); }
+    pathCircle(c, x, y, R); c.fillStyle = '#f5a9d2'; c.fill();
+    c.save(); pathCircle(c, x, y, R); c.clip(); c.fillStyle = '#eb92c2'; pathCircle(c, x + R * 0.25, y + R * 0.4, R * 1.05); c.fill(); c.restore();
+    pathCircle(c, x, y, R); stroked(c, lw);
+    ell(c, x, y + R * 0.42, R * 0.72, R * 0.5); c.fillStyle = '#ffd2ea'; c.fill(); stroked(c, lw * 0.9);
+    ell(c, x - R * 0.24, y + R * 0.3, R * 0.07, R * 0.05); c.fillStyle = '#b25b8c'; c.fill(); ell(c, x + R * 0.24, y + R * 0.3, R * 0.07, R * 0.05); c.fill();
+    drawEye(c, x - R * 0.44, y - R * 0.16, R, -1, o); drawEye(c, x + R * 0.44, y - R * 0.16, R, 1, o);
+    blush(c, x - R * 0.74, y + R * 0.05, R, 0.4); blush(c, x + R * 0.74, y + R * 0.05, R, 0.4);
+    drawMouth(c, x, y + R * 0.5, R * 0.9, o.expr);
+  } else {   // panda: white head, black ears and eye patches
+    for (const sd of [-1, 1]) { pathCircle(c, x + sd * R * 0.7, y - R * 0.74, R * 0.3); c.fillStyle = '#26303a'; c.fill(); stroked(c, lw * 0.8); }
+    pathCircle(c, x, y, R); c.fillStyle = '#fbfcfd'; c.fill();
+    c.save(); pathCircle(c, x, y, R); c.clip(); c.fillStyle = '#e3e9ee'; pathCircle(c, x + R * 0.25, y + R * 0.4, R * 1.05); c.fill(); c.restore();
+    pathCircle(c, x, y, R); stroked(c, lw);
+    for (const sd of [-1, 1]) { ell(c, x + sd * R * 0.4, y - R * 0.04, R * 0.24, R * 0.3, sd * 0.45); c.fillStyle = '#26303a'; c.fill(); }
+    // eyes sit on the patches: pale ring so the dark pupils read
+    for (const sd of [-1, 1]) {
+      const ex = x + sd * R * 0.4, ey = y - R * 0.05;
+      if (o.expr === 'happy') { c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, R * 0.085); c.beginPath(); c.arc(ex, ey + R * 0.06, R * 0.12, Math.PI * 1.08, Math.PI * 1.92); c.stroke(); }
+      else if (o.expr === 'hit') { c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, R * 0.08); c.beginPath(); c.moveTo(ex - sd * R * 0.12, ey - R * 0.1); c.lineTo(ex + sd * R * 0.1, ey); c.lineTo(ex - sd * R * 0.12, ey + R * 0.1); c.stroke(); }
+      else if (o.blink) { c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.4, R * 0.07); c.beginPath(); c.moveTo(ex - R * 0.1, ey + R * 0.03); c.lineTo(ex + R * 0.1, ey + R * 0.03); c.stroke(); }
+      else {
+        const gr = o.expr === 'wow' ? 1.25 : 1;
+        ell(c, ex + (o.lx || 0) * R * 0.03, ey + (o.ly || 0) * R * 0.03, R * 0.1 * gr, R * 0.12 * gr); c.fillStyle = '#fff'; c.fill();
+        pathCircle(c, ex + (o.lx || 0) * R * 0.04, ey + (o.ly || 0) * R * 0.04 + R * 0.01, R * 0.065 * gr); c.fillStyle = INK; c.fill();
+        pathCircle(c, ex - R * 0.03, ey - R * 0.03, R * 0.022 * gr); c.fillStyle = '#fff'; c.fill();
+        if (o.expr === 'sad') { c.strokeStyle = '#26303a'; c.lineWidth = Math.max(1.5, R * 0.075); c.beginPath(); c.moveTo(ex - sd * R * 0.2, ey - R * 0.48); c.lineTo(ex + sd * R * 0.17, ey - R * 0.3); c.stroke(); }
+        else if (o.expr === 'wow') { c.strokeStyle = '#26303a'; c.lineWidth = Math.max(1.5, R * 0.075); c.beginPath(); c.arc(ex, ey - R * 0.3, R * 0.14, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+      }
+    }
+    ell(c, x, y + R * 0.24, R * 0.13, R * 0.08); c.fillStyle = '#26303a'; c.fill();
+    blush(c, x - R * 0.7, y + R * 0.3, R, 0.5); blush(c, x + R * 0.7, y + R * 0.3, R, 0.5);
+    drawMouth(c, x, y + R * 0.42, R * 0.9, o.expr);
+  }
+  c.restore();
+}
+function drawTear(c, x, y, R, k) {
+  const ty = y + R * 0.1 + k * R * 0.4;
+  c.fillStyle = 'rgba(140,215,255,0.95)'; c.beginPath(); c.moveTo(x + R * 0.4, ty - R * 0.1); c.quadraticCurveTo(x + R * 0.5, ty + R * 0.08, x + R * 0.4, ty + R * 0.14); c.quadraticCurveTo(x + R * 0.3, ty + R * 0.08, x + R * 0.4, ty - R * 0.1); c.fill();
+}
+const BODY = ['#ffd64a', '#7fe070', '#f5a9d2', '#fbfcfd'], BODYD = ['#f4be2a', '#6acb5c', '#eb92c2', '#e3e9ee'], PAW = ['#ffd64a', '#7fe070', '#f5a9d2', '#26303a'];
+// bust for the pads and the title: head plus a little body below it
+function drawBust(c, kind, x, y, R, o) {
+  c.save();
+  const by = y + R * 1.2;
+  ell(c, x, by, R * 1.0, R * 0.85); c.fillStyle = BODY[kind]; c.fill(); stroked(c, Math.max(1.4, R * 0.07));
+  ell(c, x, by + R * 0.12, R * 0.55, R * 0.5); c.fillStyle = kind === 3 ? '#e3e9ee' : kind === 1 ? '#d8f7a8' : kind === 2 ? '#ffd2ea' : '#fff0a8'; c.fill();
+  c.restore();
+  drawHead(c, kind, x, y, R, o);
+  if (o.expr === 'sad' && o.tear) drawTear(c, x, y, R, o.tear);
+}
+
+// ---- the boat (local coordinates: x right, y down, bow at the top, centred on the boat) ----
+function seatsFor(n, spec) {   // per oar: pivot/seat position + the rower's seat. Returns array indexed by oar.
+  const W = spec.w, L = spec.l;
+  if (n === 1) return [{ side: -1, sx: 0, sy: L * 0.04, owner: 0 }, { side: 1, sx: 0, sy: L * 0.04, owner: 0 }];
+  if (n === 2) return [{ side: -1, sx: -W * 0.15, sy: -L * 0.1, owner: 0 }, { side: 1, sx: W * 0.15, sy: L * 0.14, owner: 1 }];
+  if (n === 3) return [{ side: -1, sx: -W * 0.15, sy: -L * 0.16, owner: 0 }, { side: 0, sx: 0, sy: L * 0.27, owner: 1 }, { side: 1, sx: W * 0.15, sy: L * 0.04, owner: 2 }];
+  return [{ side: -1, sx: -W * 0.15, sy: -L * 0.27, owner: 0 }, { side: -1, sx: -W * 0.15, sy: L * 0.09, owner: 1 }, { side: 1, sx: W * 0.15, sy: -L * 0.09, owner: 2 }, { side: 1, sx: W * 0.15, sy: L * 0.27, owner: 3 }];
+}
+function hullPath(c, W, L) {
+  c.beginPath(); c.moveTo(0, -L * 0.5);
+  c.quadraticCurveTo(W * 0.52, -L * 0.28, W * 0.5, L * 0.08); c.quadraticCurveTo(W * 0.5, L * 0.42, W * 0.3, L * 0.5);
+  c.lineTo(-W * 0.3, L * 0.5); c.quadraticCurveTo(-W * 0.5, L * 0.42, -W * 0.5, L * 0.08); c.quadraticCurveTo(-W * 0.52, -L * 0.28, 0, -L * 0.5); c.closePath();
+}
+// oar swing 0..1 -> angle (rad) from "straight out": negative = blade toward the bow (catch), positive = toward the stern (finish)
+function oarAngle(age) {
+  if (age < 0.2) { const u = age / 0.2; return -0.5 + 1.1 * (1 - (1 - u) * (1 - u)); }
+  if (age < 0.6) { const u = (age - 0.2) / 0.4; return 0.6 - 1.1 * u * u * (3 - 2 * u); }
+  return -0.5;
+}
+// o: { n, spec, ages[], faces[] (per owner: {expr, blink, lx, ly}), cols[] per oar, deep[] per oar, pulse (0..1 drum), sway }
+function drawBoat(c, o) {
+  const spec = o.spec, W = spec.w, L = spec.l, n = o.n, seats = seatsFor(n, spec);
+  c.save();
+  // shadow on the water
+  c.save(); c.translate(W * 0.08, L * 0.03); hullPath(c, W * 1.02, L * 1.02); c.fillStyle = 'rgba(6,40,60,0.28)'; c.fill(); c.restore();
+  // hull
+  hullPath(c, W, L); c.fillStyle = '#c98a4b'; c.fill();
+  c.save(); hullPath(c, W, L); c.clip();
+  c.fillStyle = '#b87a3d'; c.fillRect(-W * 0.5, -L * 0.5, W * 0.18, L);
+  c.strokeStyle = 'rgba(90,50,20,0.35)'; c.lineWidth = 1.2;
+  for (let i = -3; i <= 3; i++) { c.beginPath(); c.moveTo(i * W * 0.14, -L * 0.5); c.lineTo(i * W * 0.17, L * 0.5); c.stroke(); }
+  c.restore();
+  hullPath(c, W, L); stroked(c, 2.4);
+  // inner cavity
+  c.save(); c.translate(0, L * 0.02); c.scale(0.74, 0.82); hullPath(c, W, L); c.fillStyle = '#8a5a30'; c.fill(); c.restore();
+  c.save(); c.translate(0, L * 0.02); c.scale(0.74, 0.82); hullPath(c, W, L); c.lineWidth = 1.6; c.strokeStyle = 'rgba(40,20,5,0.7)'; c.stroke(); c.restore();
+  c.save(); c.translate(0, L * 0.02); c.scale(0.7, 0.78); hullPath(c, W, L); c.clip();
+  c.strokeStyle = 'rgba(60,32,10,0.45)'; c.lineWidth = 1;
+  for (let i = -4; i <= 4; i++) { c.beginPath(); c.moveTo(-W * 0.5, i * L * 0.1); c.lineTo(W * 0.5, i * L * 0.1); c.stroke(); }
+  c.restore();
+  // bow drum (the beat)
+  const dp = o.pulse || 0, dr = W * 0.14 * (1 + 0.28 * dp);
+  c.save(); c.translate(0, -L * 0.33);
+  pathCircle(c, 0, 0, dr * 1.12); c.fillStyle = '#c44a3a'; c.fill(); stroked(c, 1.6);
+  pathCircle(c, 0, 0, dr * 0.82); c.fillStyle = dp > 0.4 ? '#fff3c0' : '#f3dcae'; c.fill(); stroked(c, 1.3);
+  c.fillStyle = '#c44a3a'; pathCircle(c, 0, 0, dr * 0.3); c.fill();
+  c.restore();
+  // seats
+  for (const sObj of seats) { rrect(c, -W * 0.3, sObj.sy + 7, W * 0.6, 4.5, 2); c.fillStyle = '#6e4521'; c.fill(); }
+  // rowers: body first, then oars, then paws, then heads
+  const owners = [];
+  for (let i = 0; i < seats.length; i++) { const s = seats[i]; if (!owners[s.owner]) owners[s.owner] = { sx: s.sx, sy: s.sy, kind: s.owner }; }
+  const order = owners.slice().sort((a, b) => a.sy - b.sy);
+  const rh = (n === 4 ? 0.24 : n === 3 ? 0.27 : 0.3) * W;
+  const sway = o.sway || 0;
+  for (const ow of order) {
+    const x = ow.sx, y = ow.sy + 2;
+    ell(c, x, y + rh * 0.95, rh * 1.0, rh * 0.8); c.fillStyle = BODY[ow.kind]; c.fill(); stroked(c, 1.6);
+  }
+  const paws = [];
+  for (let i = 0; i < seats.length; i++) {
+    const s = seats[i], age = o.ages[i], col = o.cols[i], deep = o.deep[i];
+    const ang = oarAngle(age);
+    if (s.side !== 0) {
+      const px = s.side * W * 0.46, py = s.sy + 4;
+      const dx = s.side * Math.cos(ang), dy = Math.sin(ang);
+      const Lo = W * 0.92 + 16, Li = W * 0.36;
+      const tx = px + dx * Lo, ty = py + dy * Lo, hx = px - dx * Li, hy = py - dy * Li;
+      // shaft
+      c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = 4.6; c.beginPath(); c.moveTo(hx, hy); c.lineTo(tx, ty); c.stroke();
+      c.strokeStyle = '#ecd7a6'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(hx, hy); c.lineTo(tx, ty); c.stroke();
+      // blade
+      c.save(); c.translate(tx + dx * 6, ty + dy * 6); c.rotate(Math.atan2(dy, dx));
+      ell(c, 0, 0, 10.5, 5.6); c.fillStyle = col; c.fill(); stroked(c, 1.8);
+      ell(c, -1.5, -1.5, 5, 1.8); c.fillStyle = 'rgba(255,255,255,0.45)'; c.fill();
+      c.restore();
+      c.fillStyle = deep; pathCircle(c, px, py, 2.6); c.fill();   // oarlock
+      paws.push({ x: hx, y: hy, kind: s.owner });
+    } else {
+      // stern oar: sculls from the notch at the back, side to side
+      const psw = (o.cnt ? o.cnt[i] % 2 ? 1 : -1 : 1) * (0.55 - 0.9 * Math.min(1, age / 0.5)) * (age < 0.6 ? 1 : 0.0001);
+      const a2 = age < 0.6 ? psw : 0;
+      const px = 0, py = L * 0.5 - 2, dx = Math.sin(a2), dy = Math.cos(a2);
+      const Lo = W * 0.55 + 24, Li = L * 0.2;
+      const tx = px + dx * Lo, ty = py + dy * Lo, hx = px - dx * Li, hy = py - dy * Li;
+      c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = 4.6; c.beginPath(); c.moveTo(hx, hy); c.lineTo(tx, ty); c.stroke();
+      c.strokeStyle = '#ecd7a6'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(hx, hy); c.lineTo(tx, ty); c.stroke();
+      c.save(); c.translate(tx + dx * 6, ty + dy * 6); c.rotate(Math.atan2(dy, dx));
+      ell(c, 0, 0, 10.5, 5.6); c.fillStyle = col; c.fill(); stroked(c, 1.8);
+      ell(c, -1.5, -1.5, 5, 1.8); c.fillStyle = 'rgba(255,255,255,0.45)'; c.fill();
+      c.restore();
+      c.fillStyle = deep; pathCircle(c, px, py, 2.6); c.fill();
+      paws.push({ x: hx, y: hy, kind: s.owner });
+    }
+  }
+  for (const p of paws) { pathCircle(c, p.x, p.y, 3.8); c.fillStyle = PAW[p.kind]; c.fill(); stroked(c, 1.5); }
+  for (const ow of order) {
+    const f = o.faces[ow.kind] || { expr: 'idle' };
+    drawHead(c, ow.kind, ow.sx + sway * 0.6, ow.sy - rh * 0.1, rh, f);
+  }
+  c.restore();
+}
+
+// =====================================================================
+// STATE + LAYOUT
+// =====================================================================
+const cv = $('cv'), ctx = cv.getContext('2d');
+const el = {
+  hud: $('hud'), btnPause: $('btnPause'), btnMute: $('btnMute'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrOver: $('scrOver'),
+  mascot: $('mascot'), modeLine: $('modeLine'), bestLine: $('bestLine'), tBest: $('tBest'), keyHint: $('keyHint'),
+  btnM: [$('btnM1'), $('btnM2'), $('btnM3'), $('btnM4')],
+  rTitle: $('rTitle'), rDist: $('rDist'), rBadge: $('rBadge'), rLine: $('rLine'), rCombo: $('rCombo'), rSync: $('rSync'), rTime: $('rTime'),
+  rBest: $('rBest'), rBestLine: $('rBestLine'), btnAgain: $('btnAgain'),
+};
+const S = {
+  view: 'title',           // 'title' | 'play'
+  n: clamp(parseInt(store.get(KEY_MODE, '1'), 10) || 1, 1, 4),
+  G: null, demo: null, demoCrew: null, paused: false, clock: 0, acc: 0, matchN: 0,
+  best: [0, readBest(1), readBest(2), readBest(3), readBest(4)], newRecord: false, overT: 0, resultShown: false,
+  cam: { x: 0, y: 0 }, expr: [], pops: [], bubbles: [], parts: [], wake: [], wakeT: 0, banner: null,
+  shake: 0, flash: 0, padFlash: [], pulse: 0, kb: false, hintRuns: parseInt(store.get(KEY_HINT, '0'), 10) || 0, strokesSeen: 0,
+  lastSpeak: -9, sinkFx: 0, perf: { ms: 0, max: 0, frames: 0 }, coachCmd: 0, ambOn: false,
+};
+const LAY = { W: 0, H: 0, dpr: 1, port: false, s: 1, ox: 0, oy: 0, pads: [], zones: [], topBar: 0 };
+const DPR_STEPS = [2, 1.5, 1];   // the resolution steps down by itself when frames take too long (low-end phones)
+let dprStep = 0;
+
+function layout() {
+  const cs = getComputedStyle($('probe'));
+  const sat = parseFloat(cs.paddingTop) || 0, sab = parseFloat(cs.paddingBottom) || 0, sal = parseFloat(cs.paddingLeft) || 0, sar = parseFloat(cs.paddingRight) || 0;
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, DPR_STEPS[dprStep]);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const port = H > W * 1.05;
+  const topBar = sat + 52, G = S.G || S.demo, n = (G ? G.oars.length : (S.n === 1 ? 2 : S.n));
+  Object.assign(LAY, { W, H, dpr, port, sat, sab, sal, sar, topBar });
+  LAY.pads = []; LAY.zones = [];
+  const place = (nd, x, y) => { nd.style.left = Math.round(x) + 'px'; nd.style.top = Math.round(y) + 'px'; };
+  place(el.btnPause, sal + 8, sat + 6); place(el.btnMute, W - sar - 54, sat + 6);
+  if (port) {
+    const padH = clamp(Math.round(H * 0.2), 118, 172), ph = padH - 10, gap = 8, margin = 8;
+    const innerW = W - sal - sar - 2 * margin, pw = (innerW - (n - 1) * gap) / n, py = H - sab - ph - 6;
+    for (let i = 0; i < n; i++) LAY.pads.push({ x: sal + margin + i * (pw + gap), y: py, w: pw, h: ph });
+    const zw = (W - sal - sar) / n;
+    for (let i = 0; i < n; i++) LAY.zones.push({ x0: sal + i * zw, x1: sal + (i + 1) * zw, y0: topBar - 6, y1: H });
+    const viewB = H - sab - padH - 4;
+    LAY.s = Math.min((W - sal - sar) / 350, (viewB - topBar) / 470);
+    LAY.ox = sal + (W - sal - sar) / 2; LAY.oy = topBar + (viewB - topBar) * 0.8;
+    LAY.padTop = py;
+  } else {
+    const colW = clamp(Math.round(W * 0.2), 112, 240), nl = Math.ceil(n / 2), nr = n - nl;
+    const y0 = sat + 58, y1 = H - sab - 8;
+    const mk = (cnt, x) => {
+      const out = [], gap = 8, h = Math.min(230, (y1 - y0 - (cnt - 1) * gap) / cnt);
+      const total = cnt * h + (cnt - 1) * gap, top = y0 + ((y1 - y0) - total) / 2;
+      for (let i = 0; i < cnt; i++) out.push({ x, y: top + i * (h + gap), w: colW, h });
+      return out;
+    };
+    const left = mk(nl, sal + 8), right = mk(nr, W - sar - 8 - colW);
+    for (let i = 0; i < n; i++) LAY.pads.push(i < nl ? left[i] : right[i - nl]);
+    for (let i = 0; i < n; i++) {
+      const isL = i < nl, cnt = isL ? nl : nr, k = isL ? i : i - nl, zh = H / cnt;
+      LAY.zones.push({ x0: isL ? 0 : W / 2, x1: isL ? W / 2 : W, y0: k * zh, y1: (k + 1) * zh });
+    }
+    LAY.s = clamp(H / 540, 0.45, 2);
+    LAY.ox = W / 2; LAY.oy = H * 0.76;
+  }
+  LAY.s = clamp(LAY.s, 0.4, 2);
+}
+const w2sx = (wx) => LAY.ox + (wx - S.cam.x) * LAY.s;
+const w2sy = (wy) => LAY.oy - (wy - S.cam.y) * LAY.s;
+function padAt(x, y) {
+  for (let i = LAY.zones.length - 1; i >= 0; i--) { const z = LAY.zones[i]; if (x >= z.x0 && x < z.x1 && y >= z.y0 && y < z.y1) return i; }
+  return -1;
+}
+
+// =====================================================================
+// RENDER
+// =====================================================================
+function outlineText(c, text, x, y, size, fill, stroke, font) {
+  c.font = size + 'px ' + (font || FONT_D); c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineJoin = 'round'; c.lineWidth = Math.max(3, size * 0.22); c.strokeStyle = stroke || INK; c.strokeText(text, x, y);
+  c.fillStyle = fill || PAPER; c.fillText(text, x, y);
+}
+function polyline(c, pts) { c.beginPath(); pts.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); }
+function heartPath(c, x, y, r) {
+  c.beginPath(); c.moveTo(x, y + r * 0.9);
+  c.bezierCurveTo(x - r * 1.5, y - r * 0.1, x - r * 0.8, y - r * 1.1, x, y - r * 0.4);
+  c.bezierCurveTo(x + r * 0.8, y - r * 1.1, x + r * 1.5, y - r * 0.1, x, y + r * 0.9); c.closePath();
+}
+const BIOME = [{ grass: '#78c957', grass2: '#6bbd4c', tree: '#3f9f4a', tree2: '#58b95a' }, { grass: '#b9c968', grass2: '#aebd5a', tree: '#e07b2e', tree2: '#f2a23a' }, { grass: '#5fb36e', grass2: '#53a665', tree: '#2c7d52', tree2: '#3f9a66' }];
+
+function renderWorld(c, G, t, drawBoatFlag) {
+  const s = LAY.s, W = LAY.W, H = LAY.H, C = G.C, B = G.boat;
+  const yTop = S.cam.y + LAY.oy / s + 60, yBot = S.cam.y - (H - LAY.oy) / s - 60;
+  const biome = BIOME[Math.floor(Math.max(0, B.y) / UNIT / 350) % 3];
+  // grass
+  c.fillStyle = biome.grass; c.fillRect(0, 0, W, H);
+  // river edges at sample rows
+  const pts = [];
+  for (let y = Math.floor(yBot / 28) * 28; y <= yTop + 28; y += 28) { const rc = cxAt(C, y), hw = riverW(C, y) / 2; pts.push([y, rc - hw, rc + hw]); }
+  const SX = (x) => LAY.ox + (x - S.cam.x) * s, SY = (y) => LAY.oy - (y - S.cam.y) * s;
+  // sand strip with a slightly ragged outer edge
+  for (const sd of [0, 1]) {
+    c.beginPath();
+    pts.forEach((p, i) => { const x = sd ? p[2] : p[1], w = 9 + 5 * Math.sin(p[0] * 0.037 + sd * 2) + 3 * Math.sin(p[0] * 0.11); const X = SX(x + (sd ? w : -w)), Y = SY(p[0]); i ? c.lineTo(X, Y) : c.moveTo(X, Y); });
+    for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; c.lineTo(SX(sd ? p[2] : p[1]), SY(p[0])); }
+    c.closePath(); c.fillStyle = '#ecd9a2'; c.fill();
+  }
+  // water
+  c.beginPath();
+  pts.forEach((p, i) => { const X = SX(p[1]), Y = SY(p[0]); i ? c.lineTo(X, Y) : c.moveTo(X, Y); });
+  for (let i = pts.length - 1; i >= 0; i--) c.lineTo(SX(pts[i][2]), SY(pts[i][0]));
+  c.closePath();
+  const wg = c.createLinearGradient(0, 0, 0, H); wg.addColorStop(0, '#2f9ac4'); wg.addColorStop(1, '#43b6d6');
+  c.fillStyle = wg; c.fill();
+  // shallow shadows along the banks (kept inside the water so no clipping is needed)
+  c.strokeStyle = 'rgba(20,110,150,0.32)'; c.lineWidth = 14 * s;
+  for (const sd of [1, 2]) { polyline(c, pts.map((p) => [SX(p[sd] + (sd === 1 ? 7 : -7)), SY(p[0])])); c.stroke(); }
+  c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 2.2 * s;
+  for (const sd of [1, 2]) { polyline(c, pts.map((p) => [SX(p[sd] + (sd === 1 ? 2 : -2)), SY(p[0])])); c.stroke(); }
+  // current streaks: they drift downstream at the speed of the water, faster in rapids
+  const off = (G.t * 70) % 6000, cell = 54;
+  c.lineCap = 'round';
+  const buckets = [new Path2D(), new Path2D(), new Path2D()], used = [false, false, false];
+  for (let gy = Math.floor((yBot - off) / cell); gy * cell + off < yTop; gy++) {
+    for (let gx = -7; gx <= 7; gx++) {
+      const h1 = hash2(gx * 7 + 3, gy + 100000), h2 = hash2(gx + 11, gy * 3 + 5);
+      const wy = gy * cell + off + h2 * cell, rc = cxAt(C, wy), wx = rc + ((gx + h1) / 8) * (riverW(C, wy) / 2 - 16);
+      const mul = rapidMul(C, wy);
+      if (h1 > 0.5 + 0.4 * (mul - 1) / 0.9) continue;
+      const len = (14 + h2 * 16) * (1 + (mul - 1) * 0.9), k = mul > 1.25 ? 2 : h1 < 0.22 ? 1 : 0;
+      buckets[k].moveTo(SX(wx), SY(wy)); buckets[k].lineTo(SX(wx + cxSlope(C, wy) * len), SY(wy + len)); used[k] = true;
+    }
+  }
+  const sty = [['rgba(255,255,255,0.2)', 1.8], ['rgba(255,255,255,0.3)', 2.4], ['rgba(255,255,255,0.45)', 2.8]];
+  for (let k = 0; k < 3; k++) if (used[k]) { c.strokeStyle = sty[k][0]; c.lineWidth = sty[k][1] * s; c.stroke(buckets[k]); }
+  // bank decor
+  const cellD = 70;
+  for (let gy = Math.floor(yBot / cellD); gy * cellD < yTop; gy++) {
+    for (const sd of [-1, 1]) {
+      for (let k = 0; k < 2; k++) {
+        const h = hash2(gy * 2 + k, sd + 77), h2 = hash2(gy + 9, k * 5 + sd + 31);
+        if (h > 0.75) continue;
+        const wy = gy * cellD + h2 * cellD, rc = cxAt(C, wy), hw = riverW(C, wy) / 2;
+        const out = 26 + h * 150 + k * 40, wx = rc + sd * (hw + out);
+        const X = SX(wx), Y = SY(wy), kind = h < 0.28 ? 0 : h < 0.5 ? 1 : h < 0.62 ? 2 : 3, bio = BIOME[Math.floor(Math.max(0, wy) / UNIT / 350) % 3];
+        if (X < -60 || X > W + 60) continue;
+        if (kind === 0) {   // tree
+          const r = (17 + h2 * 9) * s;
+          c.fillStyle = 'rgba(20,70,40,0.25)'; ell(c, X + r * 0.25, Y + r * 0.35, r * 1.05, r * 0.95); c.fill();
+          pathCircle(c, X, Y, r); c.fillStyle = bio.tree; c.fill(); stroked(c, Math.max(1.5, 1.8 * s));
+          pathCircle(c, X - r * 0.25, Y - r * 0.25, r * 0.55); c.fillStyle = bio.tree2; c.fill();
+        } else if (kind === 1) {   // bush
+          const r = (9 + h2 * 5) * s;
+          pathCircle(c, X, Y, r); c.fillStyle = bio.tree2; c.fill(); stroked(c, Math.max(1.2, 1.5 * s));
+          pathCircle(c, X + r * 0.9, Y + r * 0.2, r * 0.7); c.fillStyle = bio.tree; c.fill(); stroked(c, Math.max(1.2, 1.5 * s));
+        } else if (kind === 2) {   // flowers
+          for (let q = 0; q < 3; q++) { const fx = X + (q - 1) * 7 * s, fy = Y + (q % 2) * 5 * s; pathCircle(c, fx, fy, 2.6 * s); c.fillStyle = ['#ff8fc4', '#fff6a0', '#ffffff'][(q + gy) % 3]; c.fill(); }
+        } else {   // reeds and a small stone
+          c.strokeStyle = '#3f8f4a'; c.lineWidth = 1.6 * s;
+          for (let q = -1; q <= 1; q++) { c.beginPath(); c.moveTo(X + q * 3 * s, Y + 6 * s); c.lineTo(X + q * 5 * s, Y - 7 * s); c.stroke(); }
+          ell(c, X + 9 * s, Y + 5 * s, 5 * s, 3.4 * s); c.fillStyle = '#b9b4ac'; c.fill(); stroked(c, Math.max(1, 1.2 * s));
+        }
+      }
+    }
+  }
+  // start dock
+  if (yBot < 120) {
+    const rc0 = cxAt(C, 0), hw0 = riverW(C, 0) / 2;
+    for (const sd of [-1, 1]) {
+      const x0 = rc0 + sd * hw0, X = SX(sd < 0 ? x0 - 70 : x0), Y = SY(30), w = 70 * s, h = 200 * s;
+      rrect(c, X, Y, w, h, 6 * s); c.fillStyle = '#b07a43'; c.fill(); stroked(c, Math.max(1.5, 2 * s));
+      c.strokeStyle = 'rgba(70,40,15,0.5)'; c.lineWidth = 1.2 * s;
+      for (let q = 1; q < 6; q++) { c.beginPath(); c.moveTo(X, Y + q * h / 6); c.lineTo(X + w, Y + q * h / 6); c.stroke(); }
+    }
+    c.fillStyle = 'rgba(255,255,255,0.85)'; c.fillRect(SX(rc0 - hw0), SY(-58), 2 * hw0 * s, 5 * s);
+    outlineText(c, '출발', SX(rc0), SY(-96), Math.max(16, 26 * s), PAPER, INK);
+  }
+  // waterfalls and their signs
+  const m0 = Math.max(0, yBot) / UNIT, m1 = yTop / UNIT;
+  for (let k = Math.max(0, Math.floor((m0 - FALL0 - 40) / FALL_STEP)); FALL0 + FALL_STEP * k < m1 + 120; k++) {
+    const fy = (FALL0 + FALL_STEP * k) * UNIT;
+    const rc = cxAt(C, fy), hw = riverW(C, fy) / 2;
+    if (SY(fy) > -80 && SY(fy) < H + 100) {
+      const Y = SY(fy), x0 = SX(rc - hw), x1 = SX(rc + hw);
+      c.save(); c.beginPath(); c.rect(x0, Y - 150 * s, x1 - x0, 300 * s); c.clip();
+      const lg = c.createLinearGradient(0, Y - 70 * s, 0, Y + 4 * s); lg.addColorStop(0, 'rgba(10,80,120,0)'); lg.addColorStop(1, 'rgba(8,70,110,0.55)');
+      c.fillStyle = lg; c.fillRect(x0, Y - 70 * s, x1 - x0, 76 * s);
+      c.fillStyle = 'rgba(255,255,255,0.95)'; c.fillRect(x0, Y - 5 * s, x1 - x0, 15 * s);
+      for (let q = 0; q < 14; q++) { const bx = x0 + (q + 0.5 + 0.3 * Math.sin(q * 3.1 + t * 3)) * (x1 - x0) / 14; pathCircle(c, bx, Y + 12 * s + 4 * s * Math.sin(q + t * 4), (9 + (q % 3) * 3) * s); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill(); }
+      const mg = c.createLinearGradient(0, Y + 14 * s, 0, Y + 110 * s); mg.addColorStop(0, 'rgba(200,240,255,0.55)'); mg.addColorStop(1, 'rgba(200,240,255,0)'); c.fillStyle = mg; c.fillRect(x0, Y + 14 * s, x1 - x0, 96 * s);
+      c.restore();
+    }
+    // warning sign 100 m before the drop
+    const sy2 = fy - 100 * UNIT * 0.55;
+    if (SY(sy2) > -60 && SY(sy2) < H + 60) {
+      const rc2 = cxAt(C, sy2), hw2 = riverW(C, sy2) / 2, X = SX(rc2 - hw2 - 62), Y = SY(sy2);
+      c.fillStyle = '#6e4521'; c.fillRect(X - 3 * s, Y, 6 * s, 40 * s);
+      rrect(c, X - 38 * s, Y - 24 * s, 76 * s, 30 * s, 6 * s); c.fillStyle = '#e8b04a'; c.fill(); stroked(c, Math.max(1.5, 2 * s));
+      outlineText(c, '폭포!', X, Y - 9 * s, Math.max(12, 18 * s), '#fff', '#8a4b10');
+    }
+  }
+  // obstacles
+  const r0 = Math.max(0, rowIndexAt(C, yBot - 140)), r1 = Math.min(C.rows.length, rowIndexAt(C, yTop + 140) + 1);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let j = r0; j < r1; j++) for (const o of C.rows[j].obs) {
+      if ((o.k === 2) !== (pass === 0)) continue;
+      if (o.k === 2) drawWhirl(c, o, t, s, SX, SY);
+      else if (o.k === 0) drawRock(c, o, t, s, SX, SY);
+      else drawLog(c, o, t, s, SX, SY);
+    }
+  }
+  for (const b of C.buoys) {
+    if (b.y < yBot - 40 || b.y > yTop + 40) continue;
+    drawBuoy(c, SX(b.x), SY(b.y) + Math.sin(t * 2.2 + b.y) * 2 * s, s, b.got, t);
+  }
+  // wake behind the boat
+  for (const w of S.wake) {
+    const a = 1 - w.t / w.life; if (a <= 0) continue;
+    pathCircle(c, SX(w.x), SY(w.y), (w.r + (1 - a) * 8) * s); c.fillStyle = 'rgba(255,255,255,' + (0.5 * a).toFixed(2) + ')'; c.fill();
+  }
+  if (drawBoatFlag) drawPlayerBoat(c, G, t, SX, SY);
+  for (const p of S.parts) {
+    const a = clamp(1 - p.t / p.life, 0, 1);
+    c.globalAlpha = Math.min(1, a * 1.6); c.fillStyle = p.col;
+    if (p.sq) { c.save(); c.translate(SX(p.x), SY(p.y)); c.rotate(p.rot + p.t * 5); c.fillRect(-p.r * s, -p.r * 0.6 * s, p.r * 2 * s, p.r * 1.2 * s); c.restore(); }
+    else { pathCircle(c, SX(p.x), SY(p.y), Math.max(0.6, p.r * s * (0.5 + 0.5 * a))); c.fill(); }
+  }
+  c.globalAlpha = 1;
+  for (const f of S.floats) { c.globalAlpha = clamp(1 - f.t / f.life, 0, 1); outlineText(c, f.text, SX(f.x), SY(f.y), Math.max(16, 22 * s), f.col, INK); }
+  c.globalAlpha = 1;
+}
+function rockPoly(c, x, y, r, sd) {
+  const n = 10; c.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const a = (i % n) / n * TAU, k = 0.86 + 0.24 * hash2(sd, i % n), px = x + Math.cos(a) * r * k, py = y + Math.sin(a) * r * k * 0.94;
+    if (i === 0) c.moveTo(px, py); else { const a0 = ((i - 0.5) % n) / n * TAU, k0 = 0.86 + 0.24 * hash2(sd, (i - 1) % n); c.quadraticCurveTo(x + Math.cos(a0) * r * (k0 + k) * 0.5 * 1.04, y + Math.sin(a0) * r * (k0 + k) * 0.5 * 0.98, px, py); }
+  }
+  c.closePath();
+}
+function drawRock(c, o, t, s, SX, SY) {
+  const X = SX(o.x), Y = SY(o.y), r = o.r * s;
+  // foam where the current hits the rock (upstream = top of the screen)
+  c.strokeStyle = 'rgba(255,255,255,' + (0.55 + 0.15 * Math.sin(t * 5 + o.sd)).toFixed(2) + ')'; c.lineWidth = Math.max(1.5, 2.4 * s); c.lineCap = 'round';
+  c.beginPath(); c.arc(X, Y, r * 1.18 + 2 * s, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+  c.beginPath(); c.arc(X, Y, r * 1.38 + 3 * s, Math.PI * 1.25, Math.PI * 1.75); c.stroke();
+  c.fillStyle = 'rgba(6,50,80,0.28)'; ell(c, X + r * 0.2, Y + r * 0.3, r * 1.08, r * 1.0); c.fill();
+  rockPoly(c, X, Y, r, o.sd); c.fillStyle = '#9b958f'; c.fill();
+  c.save(); rockPoly(c, X, Y, r, o.sd); c.clip();
+  c.fillStyle = '#7d7771'; pathCircle(c, X + r * 0.45, Y + r * 0.5, r * 0.95); c.fill();
+  c.fillStyle = '#bfbab2'; pathCircle(c, X - r * 0.35, Y - r * 0.4, r * 0.6); c.fill();
+  c.fillStyle = 'rgba(90,170,80,0.85)'; ell(c, X + r * 0.1, Y - r * 0.6, r * 0.45, r * 0.18, 0.3); c.fill();
+  c.restore();
+  rockPoly(c, X, Y, r, o.sd); stroked(c, Math.max(1.6, 2.2 * s));
+}
+function drawLog(c, o, t, s, SX, SY) {
+  const x1 = SX(o.x), y1 = SY(o.y), x2 = SX(o.x2), y2 = SY(o.y2), w = o.r * 2 * s;
+  c.lineCap = 'round';
+  c.strokeStyle = 'rgba(6,50,80,0.28)'; c.lineWidth = w * 1.05; c.beginPath(); c.moveTo(x1 + 3 * s, y1 + 4 * s); c.lineTo(x2 + 3 * s, y2 + 4 * s); c.stroke();
+  c.strokeStyle = INK; c.lineWidth = w + Math.max(3, 3.6 * s); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+  c.strokeStyle = '#a8703c'; c.lineWidth = w; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+  c.strokeStyle = '#c99358'; c.lineWidth = w * 0.35; c.beginPath(); c.moveTo(x1 - 1.5 * s, y1 - 2 * s); c.lineTo(x2 - 1.5 * s, y2 - 2 * s); c.stroke();
+  c.strokeStyle = 'rgba(80,45,15,0.55)'; c.lineWidth = Math.max(1, 1.2 * s);
+  for (let q = 1; q < 5; q++) { const k = q / 5, px = x1 + (x2 - x1) * k, py = y1 + (y2 - y1) * k; c.beginPath(); c.moveTo(px - 2 * s, py - w * 0.3); c.lineTo(px + 2 * s, py + w * 0.3); c.stroke(); }
+  for (const [ex, ey] of [[x1, y1], [x2, y2]]) { ell(c, ex, ey, w * 0.5, w * 0.5); c.fillStyle = '#e6c387'; c.fill(); stroked(c, Math.max(1.2, 1.6 * s)); pathCircle(c, ex, ey, w * 0.25); c.strokeStyle = '#a8703c'; c.lineWidth = Math.max(1, 1.2 * s); c.stroke(); }
+  // foam at the upstream end
+  c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = Math.max(1.4, 2 * s);
+  c.beginPath(); c.moveTo(x1 - 4 * s, y1 - w * 0.9); c.lineTo(x2 + 4 * s, y2 - w * 0.9); c.stroke();
+}
+function drawWhirl(c, o, t, s, SX, SY) {
+  const X = SX(o.x), Y = SY(o.y), R = o.R * s, cr = o.core * s;
+  const g = c.createRadialGradient(X, Y, cr * 0.3, X, Y, R);
+  g.addColorStop(0, 'rgba(5,60,95,0.85)'); g.addColorStop(0.55, 'rgba(15,100,140,0.35)'); g.addColorStop(1, 'rgba(15,100,140,0)');
+  c.fillStyle = g; pathCircle(c, X, Y, R); c.fill();
+  c.lineCap = 'round';
+  for (let arm = 0; arm < 3; arm++) {
+    c.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const k = i / 16, a = arm * TAU / 3 + (reduceMotion ? 0 : t * 2.6 * -o.dir) + k * 4.2 * o.dir, rr = cr * 0.5 + (R * 0.92 - cr * 0.5) * k;
+      const px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.96;
+      if (i) c.lineTo(px, py); else c.moveTo(px, py);
+    }
+    c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = Math.max(1.6, 3 * s); c.stroke();
+  }
+  pathCircle(c, X, Y, cr); c.fillStyle = '#073a5c'; c.fill();
+  c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = Math.max(1.2, 1.8 * s); c.setLineDash([4 * s, 4 * s]); c.stroke(); c.setLineDash([]);
+}
+function drawBuoy(c, X, Y, s, got, t) {
+  const r = 15 * s;
+  if (got) return;
+  pathCircle(c, X, Y, r * 1.6); c.fillStyle = 'rgba(255,255,255,' + (0.18 + 0.1 * Math.sin(t * 4)).toFixed(2) + ')'; c.fill();
+  pathCircle(c, X, Y, r); c.fillStyle = '#fff'; c.fill();
+  for (let q = 0; q < 4; q += 2) { c.beginPath(); c.arc(X, Y, r, q * Math.PI / 2, (q + 1) * Math.PI / 2); c.arc(X, Y, r * 0.5, (q + 1) * Math.PI / 2, q * Math.PI / 2, true); c.closePath(); c.fillStyle = '#ff5a5f'; c.fill(); }
+  pathCircle(c, X, Y, r); stroked(c, Math.max(1.5, 2 * s)); pathCircle(c, X, Y, r * 0.5); c.fillStyle = '#3aa9cc'; c.fill(); stroked(c, Math.max(1.2, 1.6 * s));
+  const hp = heartPath; c.save(); c.translate(X + r * 0.95, Y - r * 1.15); hp(c, 0, 0, 6 * s); c.fillStyle = '#ff5a7a'; c.fill(); stroked(c, Math.max(1, 1.3 * s)); c.restore();
+}
+function faceFor(G, owner, t) {
+  const e = S.expr[owner];
+  let expr = 'idle';
+  if (e && e.until > S.clock) expr = e.name;
+  else if (G.phase !== 'play') expr = G.phase === 'sink' || G.phase === 'over' ? 'sad' : 'idle';
+  else if (G.combo >= 8) expr = 'happy';
+  else if (G.engaged && G.t - G.lastStroke < 0.45) expr = 'push';
+  const blink = ((t * 1000 + owner * 900) % 3600) < 110;
+  return { expr, blink: blink && expr === 'idle', lx: 0, ly: -0.2 };
+}
+function drawPlayerBoat(c, G, t, SX, SY) {
+  const B = G.boat, s = LAY.s, spec = G.spec, n = G.n;
+  const faces = [], ages = [], cols = [], deep = [], cnt = [];
+  for (let o = 0; o < n; o++) faces[o] = faceFor(G, o, t);
+  for (let i = 0; i < G.oars.length; i++) { ages[i] = G.t - G.oars[i].last; cols[i] = padColor(G, i); deep[i] = padDeep(G, i); cnt[i] = G.oars[i].cnt; }
+  let alpha = 1;
+  if (G.phase === 'play' && G.inv > G.t) alpha = (Math.floor(G.t * 9) % 2) ? 0.4 : 0.9;
+  c.save();
+  c.translate(SX(B.x), SY(B.y)); c.rotate(B.h);
+  let sc = s;
+  if (G.phase !== 'play') { const k = clamp(G.sinkT / SINK_T, 0, 1); sc = s * (1 - 0.4 * k); alpha = 1 - 0.85 * k * k; c.rotate(k * 1.4); }
+  c.scale(sc, sc); c.globalAlpha = alpha;
+  drawBoat(c, { n, spec, ages, cols, deep, cnt, faces, pulse: S.pulse, sway: clamp(B.w * 1.5, -3, 3) });
+  c.restore();
+  c.globalAlpha = 1;
+}
+
+// ---- pads (one big tap area per oar) ----
+function drawPads(c, G, t) {
+  const n = G.oars.length, phase = clamp((G.t - G.lastBeat) / Math.max(0.1, G.nextBeat - G.lastBeat), 0, 1);
+  for (let i = 0; i < n; i++) {
+    const r = LAY.pads[i]; if (!r) continue;
+    const col = padColor(G, i), deep = padDeep(G, i), o = G.oars[i];
+    const fl = S.padFlash[i] || 0, hint = S.hintOn ? (S.hintPad[i] || 0) : 0;
+    const dis = G.phase !== 'play';
+    c.save();
+    rrect(c, r.x, r.y, r.w, r.h, 18); c.fillStyle = 'rgba(5,32,50,0.8)'; c.fill();
+    if (fl > 0) { rrect(c, r.x, r.y, r.w, r.h, 18); c.fillStyle = col; c.globalAlpha = 0.38 * fl; c.fill(); c.globalAlpha = 1; }
+    const beatGlow = phase > 0.9 ? (phase - 0.9) / 0.1 : phase < 0.12 ? 1 - phase / 0.12 : 0;
+    rrect(c, r.x, r.y, r.w, r.h, 18); c.lineWidth = 3 + 2.5 * beatGlow; c.strokeStyle = col; c.globalAlpha = 0.55 + 0.45 * Math.max(beatGlow, fl); c.stroke(); c.globalAlpha = 1;
+    // avatar
+    const R = Math.min(r.w * 0.27, r.h * 0.24), ax = r.x + r.w / 2, ay = r.y + r.h * 0.37;
+    const owner = o.owner, f = faceFor(G, owner, t), bob = reduceMotion ? 0 : Math.sin(t * 6 + i) * (G.engaged && G.t - G.lastStroke < 0.5 ? 1.5 : 0);
+    // beat ring converging on the avatar
+    if (!dis) {
+      const rr = R * (1.12 + 0.55 * (1 - phase));
+      pathCircle(c, ax, ay, rr); c.lineWidth = 3 + 2 * phase; c.strokeStyle = col; c.globalAlpha = 0.25 + 0.65 * phase; c.stroke(); c.globalAlpha = 1;
+    }
+    pathCircle(c, ax, ay, R * 1.12); c.fillStyle = 'rgba(255,255,255,0.1)'; c.fill();
+    c.save(); pathCircle(c, ax, ay, R * 1.12); c.clip();
+    drawBust(c, owner, ax, ay + bob + R * 0.05, R * 0.92, Object.assign({ tear: dis ? 0.6 : 0 }, f));
+    c.restore();
+    pathCircle(c, ax, ay, R * 1.12); c.lineWidth = 2.5; c.strokeStyle = col; c.stroke();
+    // label
+    const lab = ROLE[G.n][i], fs = Math.max(11, Math.min(15, r.w * 0.14));
+    c.font = '700 ' + fs + 'px ' + FONT_B; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = col; c.fillText(lab, r.x + r.w / 2, ay + R * 1.58);
+    c.fillStyle = 'rgba(246,251,242,0.85)'; c.font = '700 ' + Math.max(10.5, fs - 2) + 'px ' + FONT_B;
+    const nm = G.n === 1 ? NAMES[0] : NAMES[owner];
+    if (r.h > 150 && !hint) c.fillText(nm, r.x + r.w / 2, ay + R * 1.58 + fs * 1.25);
+    // key badge
+    if (S.kb) {
+      const kl = KEYLBL[G.n][i]; rrect(c, r.x + 7, r.y + 7, 22, 20, 6); c.fillStyle = 'rgba(246,251,242,0.9)'; c.fill();
+      c.fillStyle = INK; c.font = '700 13px ' + FONT_B; c.fillText(kl, r.x + 18, r.y + 17.5);
+    }
+    // hint
+    if (hint) {
+      const txt = hint > 0 ? '저어요!' : '쉬어요';
+      const hp = reduceMotion ? 1 : 0.5 + 0.5 * Math.sin(t * 8);
+      if (hint > 0) { rrect(c, r.x + 2, r.y + 2, r.w - 4, r.h - 4, 16); c.lineWidth = 5; c.strokeStyle = GOLD; c.globalAlpha = 0.5 + 0.5 * hp; c.stroke(); c.globalAlpha = 1; }
+      rrect(c, r.x + r.w / 2 - 34, r.y + r.h - 25, 68, 20, 10); c.fillStyle = hint > 0 ? GOLD : 'rgba(246,251,242,0.18)'; c.fill();
+      c.fillStyle = hint > 0 ? INK : PAPER; c.font = '700 13px ' + FONT_B; c.fillText(txt, r.x + r.w / 2, r.y + r.h - 14.5);
+    }
+    // timing pop
+    const pp = S.pops[i];
+    if (pp && pp.t < 0.8) {
+      const k = pp.t / 0.8;
+      outlineText(c, pp.text, ax, ay - R * 1.2 - k * 10, Math.max(15, Math.min(22, r.w * 0.2)), pp.col, INK);
+    }
+    c.restore();
+  }
+}
+function drawBubbles(c, G) {
+  for (const b of S.bubbles) {
+    const r = LAY.pads[b.oi]; if (!r) continue;
+    const k = b.t / b.life, a = k < 0.1 ? k / 0.1 : k > 0.8 ? (1 - k) / 0.2 : 1;
+    c.save(); c.globalAlpha = clamp(a, 0, 1);
+    const fs = 15; c.font = '700 ' + fs + 'px ' + FONT_B;
+    const tw = c.measureText(b.text).width + 22, th = 28;
+    let bx, by, side = 0;
+    if (LAY.port) { bx = clamp(r.x + r.w / 2, LAY.sal + tw / 2 + 4, LAY.W - LAY.sar - tw / 2 - 4); by = r.y - 20 - (1 - Math.min(1, b.t * 6)) * 6 - (b.slot || 0) * 34; }
+    else { const leftSide = r.x < LAY.W / 2; side = leftSide ? 1 : -1; bx = leftSide ? r.x + r.w + 12 + tw / 2 : r.x - 12 - tw / 2; by = r.y + r.h * 0.3 - (b.slot || 0) * 34; }
+    rrect(c, bx - tw / 2, by - th / 2, tw, th, 14); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 2.4; c.strokeStyle = padColor(G, b.oi); c.stroke();
+    c.beginPath();
+    if (LAY.port) { const px = clamp(r.x + r.w / 2, bx - tw / 2 + 12, bx + tw / 2 - 12); c.moveTo(px - 6, by + th / 2 - 1); c.lineTo(px, by + th / 2 + 8); c.lineTo(px + 6, by + th / 2 - 1); }
+    else { const ex = bx - side * tw / 2; c.moveTo(ex + side * 1, by - 5); c.lineTo(ex - side * 8, by + 2); c.lineTo(ex + side * 1, by + 6); }
+    c.closePath(); c.fillStyle = '#fff'; c.fill(); c.stroke();
+    c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(b.text, bx, by + 1);
+    c.restore();
+  }
+}
+function drawHud(c, G, t) {
+  const W = LAY.W, cx = W / 2, top = LAY.sat;
+  const m = distM(G);
+  c.save();
+  outlineText(c, String(m), cx - 8, top + 27, 38, PAPER, INK);
+  const tw = c.measureText(String(m)).width;
+  outlineText(c, 'm', cx - 8 + tw / 2 + 12, top + 33, 18, GOLD, INK);
+  // zone
+  c.font = '700 13px ' + FONT_B; c.textAlign = 'center'; c.textBaseline = 'middle';
+  outlineText(c, ZONE_NAMES[G.zone], cx, top + 56, 14, '#d8f3ff', INK, FONT_B);
+  // hearts + streak
+  const hy = top + 80, hr = 9;
+  const comboW = G.combo >= 2 ? 96 : 0, total = MAX_HP * 26 + (comboW ? comboW + 10 : 0), hx0 = cx - total / 2 + 13;
+  for (let i = 0; i < MAX_HP; i++) {
+    const full = i < G.hp, x = hx0 + i * 26, shake = (G.phase === 'play' && G.inv > G.t && i === G.hp) ? Math.sin(t * 40) * 2 : 0;
+    heartPath(c, x + shake, hy, hr); c.fillStyle = full ? '#ff5a7a' : 'rgba(255,255,255,0.18)'; c.fill(); stroked(c, 2.2);
+    if (full) { pathCircle(c, x - 3.5 + shake, hy - 3, 1.8); c.fillStyle = 'rgba(255,255,255,0.7)'; c.fill(); }
+  }
+  if (comboW) {
+    const x = hx0 + MAX_HP * 26 - 4, pop = 1 + 0.25 * Math.max(0, 1 - (S.clock - (S.comboAt || 0)) * 4);
+    rrect(c, x, hy - 13, comboW, 26, 13); c.fillStyle = G.combo >= 10 ? 'rgba(255,209,102,0.95)' : 'rgba(6,34,52,0.78)'; c.fill();
+    c.lineWidth = 2; c.strokeStyle = G.combo >= 10 ? INK : GOLD; c.stroke();
+    c.save(); c.translate(x + comboW / 2, hy + 1); c.scale(pop, pop);
+    c.fillStyle = G.combo >= 10 ? INK : GOLD; c.font = '17px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('호흡 ×' + G.combo, 0, 0); c.restore();
+  }
+  c.restore();
+}
+function drawOverlayFx(c, G, t) {
+  const W = LAY.W, H = LAY.H;
+  // low-heart vignette
+  if (G.phase === 'play' && G.hp === 1) {
+    const a = reduceMotion ? 0.22 : 0.16 + 0.1 * Math.sin(t * 5);
+    const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75); g.addColorStop(0, 'rgba(255,60,80,0)'); g.addColorStop(1, 'rgba(255,60,80,' + a.toFixed(2) + ')');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+  }
+  if (S.flash > 0 && !reduceMotion) { c.globalAlpha = 0.28 * Math.min(1, S.flash); c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.globalAlpha = 1; }
+  // banner
+  const b = S.banner;
+  if (b) {
+    const k = b.t / b.life, a = k < 0.12 ? k / 0.12 : k > 0.78 ? (1 - k) / 0.22 : 1, sc = k < 0.12 ? 0.8 + 1.7 * k : 1;
+    c.save(); c.globalAlpha = clamp(a, 0, 1); c.translate(W / 2, LAY.sat + 168); c.scale(sc, sc);
+    outlineText(c, b.title, 0, 0, Math.min(46, W * 0.11), b.col || GOLD, INK);
+    if (b.sub) outlineText(c, b.sub, 0, 34, Math.min(19, W * 0.05), PAPER, INK, FONT_B);
+    c.restore();
+  }
+  // coaching text
+  if (S.coach && G.phase === 'play' && !S.banner) {
+    c.save(); c.globalAlpha = 0.95;
+    const y = LAY.sat + 118;
+    c.font = '700 17px ' + FONT_B; const tw = Math.min(W - 24, c.measureText(S.coach).width + 30);
+    rrect(c, W / 2 - tw / 2, y - 18, tw, 36, 18); c.fillStyle = 'rgba(6,34,52,0.82)'; c.fill(); c.lineWidth = 2; c.strokeStyle = GOLD; c.stroke();
+    c.fillStyle = PAPER; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(S.coach, W / 2, y + 1);
+    c.restore();
+  }
+}
+function hintArrow(c, G, t) {
+  // gold arrow over the free gap of the next row (first runs only)
+  const h = hintCmd(G), r = h.row; if (!r || r.y - G.boat.y < 140) return;
+  const s = LAY.s, X = w2sx(r.c), Y = Math.max(w2sy(r.y) - 52 * s, LAY.sat + 170), bob = reduceMotion ? 0 : Math.sin(t * 6) * 4;
+  c.save(); c.globalAlpha = 0.9; c.translate(X, Y + bob);
+  c.beginPath(); c.moveTo(0, 14); c.lineTo(-16, -6); c.lineTo(-6, -6); c.lineTo(-6, -22); c.lineTo(6, -22); c.lineTo(6, -6); c.lineTo(16, -6); c.closePath();
+  c.fillStyle = GOLD; c.fill(); stroked(c, 2.4);
+  c.restore();
+}
+function render() {
+  const c = ctx, W = LAY.W, H = LAY.H, dpr = LAY.dpr;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const G = S.view === 'play' ? S.G : S.demo;
+  if (!G) { c.fillStyle = '#2f9ac4'; c.fillRect(0, 0, W, H); return; }
+  const t = S.clock;
+  c.save();
+  if (S.shake > 0 && !reduceMotion) c.translate(vr(-1, 1) * S.shake * 7, vr(-1, 1) * S.shake * 7);
+  renderWorld(c, G, t, true);
+  if (S.view === 'play' && S.hintOn && G.phase === 'play') hintArrow(c, G, t);
+  c.restore();
+  if (S.view === 'play') {
+    drawPads(c, G, t); drawBubbles(c, G); drawHud(c, G, t); drawOverlayFx(c, G, t);
+  }
+}
+function mascotScene(t) {
+  const m = el.mascot; if (!m || m.offsetParent === null) return;
+  const c = m.getContext('2d'), w = m.width, h = m.height;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+  // a little patch of river with the whole crew in one boat
+  rrect(c, 8, 8, w - 16, h - 16, 26); c.fillStyle = '#3aa9cc'; c.fill();
+  c.save(); rrect(c, 8, 8, w - 16, h - 16, 26); c.clip();
+  c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 3; c.lineCap = 'round';
+  for (let i = 0; i < 9; i++) { const x = ((i * 97 + t * 60) % (w + 80)) - 40, y = 30 + (i * 53) % (h - 60); c.beginPath(); c.moveTo(x, y); c.lineTo(x + 34, y); c.stroke(); }
+  const spec = BOATS[4], bob = reduceMotion ? 0 : Math.sin(t * 2.5) * 3;
+  c.translate(w / 2, h / 2 + bob); c.rotate(Math.PI / 2); c.scale(2.15, 2.15);
+  const ages = [0, 1, 2, 3].map((i) => (reduceMotion ? 0.7 : ((t * 1.6 + i * 0.01) % 1)));
+  drawBoat(c, { n: 4, spec, ages, cols: PCOL, deep: PDEEP, cnt: [0, 0, 0, 0], faces: [0, 1, 2, 3].map((i) => ({ expr: 'happy', blink: false, lx: 0, ly: 0 })), pulse: reduceMotion ? 0 : Math.max(0, 1 - ((t * 1.6) % 1) * 3), sway: 0 });
+  c.restore();
+}
+
+// =====================================================================
+// EFFECTS
+// =====================================================================
+S.floats = []; S.hintOn = false; S.hintPad = []; S.coach = ''; S.comboAt = 0; S.crew = null;
+function burstAt(wx, wy, n, cols, speed, life, sq) {
+  if (reduceMotion) n = Math.ceil(n / 3);
+  for (let i = 0; i < n && S.parts.length < 220; i++) {
+    const a = Math.random() * TAU, sp = speed * (0.35 + Math.random() * 0.75);
+    S.parts.push({ x: wx, y: wy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: life * (0.6 + Math.random() * 0.6), col: cols[i % cols.length], r: 2 + Math.random() * 3, sq: !!sq, rot: Math.random() * TAU });
+  }
+}
+function splashAt(wx, wy, dir) {   // oar splash: drops thrown out sideways
+  const n = reduceMotion ? 2 : 6;
+  for (let i = 0; i < n && S.parts.length < 220; i++) S.parts.push({ x: wx, y: wy, vx: dir * (30 + Math.random() * 60), vy: (Math.random() - 0.3) * 60, t: 0, life: 0.45 + Math.random() * 0.25, col: i % 2 ? '#ffffff' : '#bfeaff', r: 2 + Math.random() * 2.5 });
+}
+function setExpr(owner, name, dur) { S.expr[owner] = { name, until: S.clock + dur }; }
+function speak(G, oi, text, force) {
+  if (!force && S.clock - S.lastSpeak < 0.7) return;
+  S.lastSpeak = S.clock;
+  const slot = S.bubbles.filter((b) => b.oi === oi).length;
+  if (slot > 1 || S.bubbles.length >= 3) return;
+  S.bubbles.push({ oi, text, t: 0, life: 1.9, slot });
+  Sound.cheer(oi);
+}
+const pickOne = (a) => a[(Math.random() * a.length) | 0];
+function randPad(G, except) { const n = G.oars.length; let i = (Math.random() * n) | 0; if (n > 1 && i === except) i = (i + 1) % n; return i; }
+function stepFx(dt) {
+  S.parts = S.parts.filter((p) => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.97; p.vy *= 0.97; return p.t < p.life; });
+  S.wake = S.wake.filter((w) => { w.t += dt; return w.t < w.life; });
+  S.bubbles = S.bubbles.filter((b) => { b.t += dt; return b.t < b.life; });
+  S.floats = S.floats.filter((f) => { f.t += dt; f.y += 40 * dt; return f.t < f.life; });
+  for (let i = 0; i < 4; i++) { if (S.pops[i]) { S.pops[i].t += dt; if (S.pops[i].t > 0.8) S.pops[i] = null; } if (S.padFlash[i] > 0) S.padFlash[i] = Math.max(0, S.padFlash[i] - dt * 5); }
+  if (S.banner) { S.banner.t += dt; if (S.banner.t > S.banner.life) S.banner = null; }
+  S.shake = Math.max(0, S.shake - dt * 2.4); S.flash = Math.max(0, S.flash - dt * 3); S.pulse = Math.max(0, S.pulse - dt * 4.5);
+}
+function emitWake(G, dt) {
+  const B = G.boat, f = { x: Math.sin(B.h), y: Math.cos(B.h) };
+  S.wakeT -= dt;
+  if (S.wakeT <= 0 && G.phase === 'play') {
+    S.wakeT = 0.04;
+    const L = G.spec.l * 0.5, rx = Math.cos(B.h), ry = -Math.sin(B.h);
+    for (const sd of [-0.6, 0, 0.6]) S.wake.push({ x: B.x - f.x * L + rx * sd * G.spec.w * 0.4, y: B.y - f.y * L + ry * sd * G.spec.w * 0.4, t: 0, life: 0.7 + Math.random() * 0.3, r: 3 + Math.random() * 3 });
+    if (S.wake.length > 90) S.wake.splice(0, S.wake.length - 90);
+  }
+}
+function oarTipWorld(G, i) {   // where the blade of oar i dips in, in world units
+  const B = G.boat, W = G.spec.w, sObj = seatsFor(G.n, G.spec)[i];
+  const lx = sObj.side === 0 ? 0 : sObj.side * (W * 0.46 + W * 0.92 + 16), ly = sObj.side === 0 ? G.spec.l * 0.5 + W * 0.55 + 22 : sObj.sy + 8;
+  const sh = Math.sin(B.h), ch = Math.cos(B.h);
+  return { x: B.x + lx * ch - ly * sh, y: B.y - lx * sh - ly * ch, side: sObj.side };
+}
+
+// =====================================================================
+// GAME FLOW
+// =====================================================================
+const SAY_SYNC = ['좋아요!', '척척!', '영차!', '이 박자예요!', '호흡 척척!'];
+const SAY_ZONE = [null, '바위 조심!', '통나무다!', '소용돌이 조심!', '물살이 빨라요!', '휴, 한숨 돌려요'];
+function newSeed() { S.matchN++; return BASE_SEED !== null ? (BASE_SEED + S.matchN - 1) | 0 : (Math.random() * 4294967295) | 0; }
+function startDemo() {
+  S.demo = newGame({ seed: newSeed(), n: S.n });
+  S.demoCrew = makeCrew(S.demo, 'good', 3);
+  S.cam.x = 0; S.cam.y = 0; S.wake.length = 0; S.parts.length = 0;
+}
+function setSel(n, save) {
+  S.n = n;
+  if (save) store.set(KEY_MODE, n);
+  el.btnM.forEach((b, i) => { b.classList.toggle('on', i + 1 === n); b.setAttribute('aria-checked', i + 1 === n ? 'true' : 'false'); });
+  el.modeLine.textContent = MODE_LINES[n];
+  el.tBest.textContent = S.best[n] > 0 ? S.best[n] + 'm' : '-';
+  el.bestLine.firstChild.textContent = (n === 1 ? '혼자서' : ['', '', '둘이서', '셋이서', '넷이서'][n]) + ' 최고 기록 ';
+}
+function showOnly(name) {
+  el.scrTitle.hidden = name !== 'title'; el.scrOver.hidden = name !== 'over'; el.scrPause.hidden = name !== 'pause';
+  el.hud.hidden = !(name === 'play' || name === 'pause' || name === 'over');
+}
+function toTitle() {
+  S.view = 'title'; S.paused = false; S.G = null; S.crew = null; S.parts.length = 0; S.bubbles.length = 0; S.banner = null; releaseAll();
+  setSel(S.n, false); showOnly('title'); startDemo(); layout(); ambient(false);
+}
+function startRun() {
+  Sound.ensure();
+  S.G = newGame({ seed: newSeed(), n: S.n });
+  S.crew = null; S.view = 'play'; S.paused = false; S.acc = 0; S.overT = 0; S.resultShown = false; S.newRecord = false;
+  S.parts.length = 0; S.wake.length = 0; S.bubbles.length = 0; S.floats.length = 0; S.pops = []; S.padFlash = []; S.expr = []; S.strokesSeen = 0; S.coach = '';
+  S.cam.x = 0; S.cam.y = 0; S.shake = 0; S.flash = 0; S.lastSpeak = -9;
+  S.banner = { title: '출발!', sub: '잔잔한 강에서 손을 풀어요', t: 0, life: 2.6, col: PCOL[0] };
+  S.hintOn = S.hintRuns < 3; S.hintRuns++; store.set(KEY_HINT, S.hintRuns);
+  releaseAll(); showOnly('play'); layout();
+}
+function ambient(on, k) { Sound.ambient(!!on && !S.paused, k || 0); }
+function pauseGame() {
+  if (S.view !== 'play' || S.paused || !S.G || S.G.phase === 'over') return;
+  S.paused = true; releaseAll(); showOnly('pause'); ambient(false);
+}
+function resumeGame() { if (!S.paused) return; S.paused = false; showOnly('play'); }
+function handleEvents(G, quiet) {
+  for (const e of G.ev) {
+    if (quiet) continue;
+    const B = G.boat;
+    if (e.t === 'beat') { Sound.beat(e.i); S.pulse = 1; }
+    else if (e.t === 'stroke') {
+      Sound.stroke(e.q, G.oars[e.i].side);
+      S.padFlash[e.i] = 1; S.strokesSeen++;
+      const txt = e.rush ? '급해요!' : e.q === 3 ? '완벽!' : e.q === 2 ? '좋아요' : e.q === 1 ? '아쉬워요' : (e.off < 0 ? '빨라요' : '늦었어요');
+      S.pops[e.i] = { text: txt, col: e.q === 3 ? GOLD : e.q === 2 ? '#bff5c8' : e.q === 1 ? '#fff' : '#ffb4b4', t: 0 };
+      if (e.q >= 2) setExpr(G.oars[e.i].owner, 'push', 0.45);
+      const tp = oarTipWorld(G, e.i); splashAt(tp.x, tp.y, tp.side || (Math.random() < 0.5 ? -1 : 1));
+      if (e.q === 0 && G.n > 1 && S.clock - (S.wobbleAt || -9) > 1.2) { S.wobbleAt = S.clock; S.floats.push({ x: B.x, y: B.y + G.spec.l * 0.7, text: '삐끗!', col: '#ffb4b4', t: 0, life: 0.9 }); }
+    } else if (e.t === 'sync') {
+      Sound.sync(e.n, e.perfect); S.comboAt = S.clock;
+      for (let i = 0; i < G.oars.length; i++) S.padFlash[i] = Math.max(S.padFlash[i] || 0, 0.7);
+      if (e.perfect) for (let o = 0; o < G.n; o++) setExpr(o, 'happy', 0.7);
+      burstAt(B.x, B.y + G.spec.l * 0.2, e.perfect ? 10 : 5, [GOLD, '#fff', '#ffe9a0'], 120, 0.7);
+      if (e.n === 3 || e.n === 6 || e.n === 10 || (e.n > 10 && e.n % 10 === 0)) speak(G, randPad(G), e.n >= 10 ? '전력 질주!' : pickOne(SAY_SYNC), true);
+    } else if (e.t === 'partial') {
+      Sound.partial();
+      if (G.n > 1 && G.partials % 5 === 3) { const who = []; for (let i = 0; i < G.oars.length; i++) if (!(e.mask & (1 << i))) who.push(i); if (who.length) speak(G, who[0], pickOne(['같이 해요!', '맞춰요!', '하나 둘!'])); }
+    } else if (e.t === 'idle') { speak(G, randPad(G), '같이 저어요!'); }
+    else if (e.t === 'nudge') { speak(G, randPad(G), pickOne(['영차영차!', '북소리에 톡!']), true); }
+    else if (e.t === 'crash') {
+      Sound.crash(e.kind); S.shake = 1; S.flash = 0.7; buzz([40, 30, 40]);
+      for (let o = 0; o < G.n; o++) { setExpr(o, 'hit', 0.7); }
+      burstAt(B.x, B.y, 22, ['#fff', '#bfeaff', '#ffd8a0', '#c98a4b'], 260, 0.9, true);
+      if (G.hp > 0) { speak(G, randPad(G), pickOne(['아야!', '으악!', '쿵!']), true); setTimeout(() => { if (S.G === G && G.phase === 'play') speak(G, randPad(G), pickOne(['괜찮아?', '힘내요!', '다시 맞춰요!']), true); }, 900); }
+    } else if (e.t === 'bump') { Sound.bump(); burstAt(e.x, e.y, 5, ['#fff', '#ecd9a2'], 120, 0.5); }
+    else if (e.t === 'pickup') {
+      Sound.pickup(); burstAt(e.x, e.y, 16, ['#ff7a8a', '#fff', GOLD], 200, 0.9);
+      for (let o = 0; o < G.n; o++) setExpr(o, 'happy', 1.2);
+      speak(G, randPad(G), e.healed ? '배가 고쳐졌어요!' : '튼튼한 배!', true);
+    } else if (e.t === 'zone') {
+      Sound.zone();
+      S.banner = { title: ZONE_BANNER[e.i], sub: ZONE_TIPS[e.i], t: 0, life: 2.6, col: e.i === 4 ? '#ff9a7a' : e.i === 5 ? '#9ff0c4' : GOLD };
+      if (SAY_ZONE[e.i]) speak(G, randPad(G), SAY_ZONE[e.i], true);
+    } else if (e.t === 'fall') {
+      Sound.fall(); S.shake = 1; S.flash = 0.9; buzz(60);
+      for (let o = 0; o < G.n; o++) setExpr(o, 'wow', 1.3);
+      burstAt(B.x, B.y, 40, ['#fff', '#bfeaff', '#7fd0ff'], 380, 1.1);
+      S.banner = { title: '풍덩!', sub: (G.falls) + '번째 폭포를 내려왔어요', t: 0, life: 2.4, col: '#bff0ff' };
+      speak(G, randPad(G), '으아아아~!', true);
+    } else if (e.t === 'sink') {
+      Sound.sink(); S.shake = 1; for (let o = 0; o < G.n; o++) setExpr(o, 'sad', 9);
+      burstAt(B.x, B.y, 30, ['#fff', '#bfeaff'], 220, 1.1);
+    }
+  }
+  G.ev.length = 0;
+}
+function hintsUpdate(G) {
+  S.coach = ''; S.hintPad = [];
+  if (!(S.view === 'play') || G.phase !== 'play') return;
+  if (!G.engaged && G.t < 12) { S.coach = G.n === 1 ? '북소리에 맞춰 두 칸을 톡톡!' : '북소리에 맞춰 내 칸을 톡톡!'; }
+  const ri = rowIndexAt(G.C, G.boat.y - 70);
+  S.hintOn = S.hintRuns <= 3 && ri < 4;
+  if (S.hintOn) {
+    const h = hintCmd(G);
+    if (h.row) {
+      for (let i = 0; i < G.oars.length; i++) { const sd = G.oars[i].side; S.hintPad[i] = sd === 0 || h.cmd === 0 ? 1 : (sd < 0 ? (h.cmd > 0 ? 1 : -1) : (h.cmd < 0 ? 1 : -1)); }
+      if (G.engaged) S.coach = h.cmd > 0 ? '왼쪽 노만 저으면 배가 오른쪽으로 돌아요' : h.cmd < 0 ? '오른쪽 노만 저으면 배가 왼쪽으로 돌아요' : '양쪽 노를 같이 저어요!';
+    }
+  }
+}
+function showResult() {
+  const G = S.G; if (!G || S.resultShown) return;
+  S.resultShown = true;
+  const m = distM(G), n = G.n, prev = S.best[n];
+  let rec = false;
+  if (m > prev && m > 0) { S.best[n] = m; store.set(bestKey(n), m); rec = true; }
+  S.newRecord = rec;
+  let line;
+  if (m < 100) line = n === 1 ? '첫 바위에서 풍덩! 북소리에 맞춰 다시 해 봐요.' : '첫 바위에서 풍덩! 서로 소리를 내며 박자를 맞춰 봐요.';
+  else if (m < 300) line = '바위 여울까지 왔어요. 한쪽 노만 저으면 배가 휘는 걸 써 봐요.';
+  else if (m < 600) line = '통나무와 소용돌이를 지나왔어요. 대단해요!';
+  else if (m < 1000) line = G.falls ? '폭포를 내려오다니, 멋진 뱃사공이에요!' : '폭포 바로 앞까지 왔어요!';
+  else line = '폭포를 ' + G.falls + '번이나 내려왔어요. 최고의 뱃사공이에요!';
+  if (n > 1 && m >= 100) line = '친구들과 호흡을 맞춰 ' + m + 'm! ' + line;
+  el.rTitle.textContent = G.falls ? '신나게 달렸는데 배가 가라앉았어요' : '배가 가라앉았어요';
+  el.rDist.textContent = m; el.rBadge.hidden = !rec;
+  el.rLine.textContent = line;
+  el.rCombo.textContent = G.maxCombo + '번'; el.rSync.textContent = (G.beatsTotal ? Math.round(100 * G.syncs / G.beatsTotal) : 0) + '%'; el.rTime.textContent = fmtTime(G.t);
+  el.rBestLine.firstChild.textContent = (n === 1 ? '혼자서' : ['', '', '둘이서', '셋이서', '넷이서'][n]) + ' 최고 ';
+  el.rBest.textContent = S.best[n] > 0 ? S.best[n] + 'm' : '-';
+  if (rec) Sound.win();
+  showOnly('over'); ambient(false);
+}
+function again() { startRun(); }
+
+// =====================================================================
+// INPUT: pointer + touch + mouse, one tap per finger, keyboard
+// =====================================================================
+// A finger can arrive as pointer events, touch events, or (on some whiteboards) only emulated mouse events.
+// All paths feed pressAt. A press that repeats a press from ANOTHER path at the same spot within 90 ms is the same finger.
+// Mouse presses within 700 ms of touch activity are emulated duplicates.
+const contacts = new Map();   // key -> contact
+const recent = [];
+let lastTouchAt = -1e9;
+function releaseAll() { contacts.clear(); recent.length = 0; }
+function ctKey(src, id) { return src + ':' + id; }
+function playable() { return S.view === 'play' && S.G && !S.paused && S.G.phase === 'play'; }
+function tapPad(oi) {
+  if (!playable()) return false;
+  const r = tap(S.G, oi);
+  if (r) { S.padFlash[oi] = 1; }
+  return !!r;
+}
+function pressAt(src, id, x, y, isTouch) {
+  const now = performance.now();
+  if (isTouch) lastTouchAt = now; else if (src === 'mouse' && now - lastTouchAt < 700) return false;
+  Sound.ensure();
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const r = recent[i];
+    if (now - r.t > 400) { recent.splice(i, 1); continue; }
+    if (r.src !== src && now - r.t < 90 && Math.abs(r.x - x) < 6 && Math.abs(r.y - y) < 6) {   // same finger seen through another event path
+      if (r.ct && contacts.get(r.key) === r.ct) { r.ct.keys.add(ctKey(src, id)); contacts.set(ctKey(src, id), r.ct); }
+      return false;
+    }
+  }
+  const k = ctKey(src, id), ex = contacts.get(k);
+  if (ex && now - ex.t < 60) return false;
+  const rec = { t: now, src, x, y, key: k, ct: null };
+  recent.push(rec);
+  if (!playable()) return false;
+  const oi = padAt(x, y); if (oi < 0) return false;
+  const ct = { keys: new Set([k]), t: now, oi };
+  rec.ct = ct; contacts.set(k, ct);
+  tapPad(oi);
+  return true;
+}
+function pressEnd(src, id) {
+  const ct = contacts.get(ctKey(src, id)); if (!ct) return;
+  for (const k of ct.keys) contacts.delete(k);
+}
+const isTouchPtr = (e) => e.pointerType !== 'mouse';
+cv.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button > 0) return;   // left button (button 0) only; touch/pen report 0 or -1
+  if (pressAt('pointer', e.pointerId, e.clientX, e.clientY, isTouchPtr(e))) e.preventDefault();
+});
+window.addEventListener('pointerup', (e) => pressEnd('pointer', e.pointerId));
+window.addEventListener('pointercancel', (e) => pressEnd('pointer', e.pointerId));
+cv.addEventListener('touchstart', (e) => {
+  lastTouchAt = performance.now();
+  for (const t of e.changedTouches) pressAt('touch', t.identifier, t.clientX, t.clientY, true);
+  if (e.cancelable) e.preventDefault();   // no emulated mouse events, no scrolling
+}, { passive: false });
+window.addEventListener('touchmove', () => { lastTouchAt = performance.now(); }, { passive: true });
+window.addEventListener('touchend', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+window.addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+cv.addEventListener('mousedown', (e) => { if (e.button > 0) return; pressAt('mouse', 0, e.clientX, e.clientY, false); });
+window.addEventListener('mouseup', () => pressEnd('mouse', 0));
+
+// keyboard: every oar has its own keys (see KEYSETS), so friends can share one keyboard
+const GAME_KEYS = new Set(['KeyA', 'KeyS', 'KeyD', 'KeyW', 'KeyQ', 'KeyG', 'KeyK', 'KeyL', 'Semicolon', 'Space', 'ArrowLeft', 'ArrowRight']);
+window.addEventListener('keydown', (e) => {
+  const code = e.code;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!S.kb && GAME_KEYS.has(code)) S.kb = true;
+  const onBtn = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  if (S.view === 'play' && !S.paused && S.G && S.G.phase === 'play') {
+    const sets = KEYSETS[S.G.n];
+    for (let i = 0; i < sets.length; i++) {
+      if (sets[i].includes(code)) { e.preventDefault(); if (!e.repeat) { Sound.ensure(); tapPad(i); } return; }
+    }
+  }
+  if (code === 'Space' || code === 'Enter') {
+    if (onBtn) return;   // the browser clicks the focused button itself
+    if (e.repeat) { e.preventDefault(); return; }
+    Sound.ensure();
+    if (S.paused) { e.preventDefault(); resumeGame(); return; }
+    if (S.view === 'title') { e.preventDefault(); startRun(); return; }
+    if (S.G && S.G.phase === 'over' && S.resultShown) { e.preventDefault(); again(); return; }
+    return;
+  }
+  if (S.view === 'title' && !S.paused) {
+    if (code === 'ArrowLeft' || code === 'ArrowRight') { e.preventDefault(); setSel(clamp(S.n + (code === 'ArrowRight' ? 1 : -1), 1, 4), true); Sound.ui(); startDemo(); layout(); return; }
+    if (code >= 'Digit1' && code <= 'Digit4') { setSel(+code.slice(5), true); Sound.ui(); startDemo(); layout(); return; }
+  }
+  if (code === 'Escape' || code === 'KeyP') { if (S.paused) resumeGame(); else pauseGame(); return; }
+  if (code === 'KeyM') { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (code === 'KeyR') { if (S.paused || (S.G && S.G.phase === 'over')) { e.preventDefault(); startRun(); } return; }
+});
+
+// buttons. A tap can come as pointer, touch or mouse events (and a click for keyboards), so every on-screen control
+// listens on all of them; a 120 ms window per control keeps one tap = one action.
+function onTap(node, fn) {
+  let sx = 0, sy = 0, armed = false, lastAt = -1e9;
+  const fire = (e) => { const t = performance.now(); if (t - lastAt < 120) return; lastAt = t; fn(e); };
+  const down = (x, y) => { sx = x; sy = y; armed = true; };
+  const up = (x, y) => { const ok = armed && Math.hypot(x - sx, y - sy) < 16; armed = false; return ok; };
+  node.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button > 0) return; if (e.pointerType !== 'mouse') lastTouchAt = performance.now(); down(e.clientX, e.clientY); });
+  node.addEventListener('pointerup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('touchstart', (e) => { lastTouchAt = performance.now(); const t = e.changedTouches[0]; if (t) down(t.clientX, t.clientY); }, { passive: true });
+  node.addEventListener('touchend', (e) => {
+    lastTouchAt = performance.now();
+    const t = e.changedTouches[0];
+    if (t && up(t.clientX, t.clientY)) fire(e);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  node.addEventListener('mousedown', (e) => { if (e.button <= 0 && performance.now() - lastTouchAt > 700) down(e.clientX, e.clientY); });
+  node.addEventListener('mouseup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('click', (e) => { armed = false; fire(e); });
+}
+function uiMute() {
+  el.btnMute.classList.toggle('muted', Sound.muted);
+  el.btnMute.setAttribute('aria-label', Sound.muted ? '소리 켜기' : '소리 끄기');
+}
+onTap($('btnStart'), () => { Sound.ensure(); Sound.ui(); startRun(); });
+el.btnM.forEach((b, i) => onTap(b, () => { Sound.ensure(); Sound.ui(); setSel(i + 1, true); startDemo(); layout(); }));
+onTap(el.btnAgain, () => { Sound.ensure(); again(); });
+onTap($('btnOverTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap($('btnResume'), () => { Sound.ensure(); resumeGame(); });
+onTap($('btnPauseRestart'), () => { Sound.ensure(); startRun(); });
+onTap($('btnPauseTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap(el.btnPause, () => { Sound.ensure(); Sound.ui(); pauseGame(); });
+onTap(el.btnMute, () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+// pause when the page is hidden. (No pause on window blur: focus can shift right after a touch starts on some boards.)
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+window.addEventListener('pagehide', () => pauseGame());
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  });
+}
+let lastW = 0, lastH = 0;
+function onResize() {
+  const changed = Math.abs(window.innerWidth - lastW) > 1 || Math.abs(window.innerHeight - lastH) > 1;
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  if (changed) releaseAll();
+  layout();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+
+// =====================================================================
+// LOOP + BOOT
+// =====================================================================
+let lastTs = 0, slowN = 0, slowSum = 0;
+function followCam(G, dt, hard) {
+  const B = G.boat, tx = B.x * 0.65 + cxAt(G.C, B.y + 260) * 0.35;
+  S.cam.x = hard ? tx : S.cam.x + (tx - S.cam.x) * Math.min(1, dt * 4);
+  S.cam.y = B.y;
+}
+function advanceGame(G, dt, live, crew) {
+  S.acc += dt;
+  let n = 0;
+  while (S.acc >= STEP && n < 12) {
+    if (crew) crewStep(G, crew);
+    step(G); S.acc -= STEP; n++;
+    if (G.ev.length) handleEvents(G, !live);
+  }
+  if (S.acc > STEP * 12) S.acc = 0;
+}
+function tick(dt) {
+  S.clock += dt;
+  if (S.view === 'play' && S.G && !S.paused) {
+    const G = S.G;
+    if (G.ev.length) handleEvents(G, false);   // strokes tapped since the last frame
+    advanceGame(G, dt, true, S.crew);
+    followCam(G, dt, false);
+    emitWake(G, dt);
+    hintsUpdate(G);
+    ambient(G.phase === 'play', clamp((G.speed - 60) / 200, 0, 1));
+    if (G.phase === 'over') { S.overT += dt; if (S.overT > 0.5 && !S.resultShown) showResult(); }
+  } else if (S.view === 'title' && S.demo) {
+    const D = S.demo;
+    if (D.phase === 'over') startDemo();
+    else if (!reduceMotion) { advanceGame(D, dt, false, S.demoCrew); followCam(D, dt, false); emitWake(D, dt); }
+    else followCam(D, dt, true);
+  }
+  stepFx(dt);
+}
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  // low-end devices: if frames keep taking too long, render at a lower resolution (2 -> 1.5 -> 1)
+  if (!S.paused && !document.hidden && dt > 0 && dt < 0.5 && dprStep < DPR_STEPS.length - 1) {
+    slowSum += dt; slowN++;
+    if (slowN >= 90) { if (slowSum / slowN > 0.0235 && (window.devicePixelRatio || 1) > DPR_STEPS[dprStep + 1]) { dprStep++; layout(); } slowN = 0; slowSum = 0; }
+  }
+  if (dt < 0) dt = 0; if (dt > 0.05) dt = 0.05;
+  const t0 = performance.now();
+  if (S.paused) { S.clock += dt; render(); }
+  else {
+    tick(dt);
+    if (S.view === 'title') mascotScene(reduceMotion ? 0.4 : S.clock);
+    render();
+  }
+  const ms = performance.now() - t0, P = S.perf;
+  P.ms = P.ms * 0.95 + ms * 0.05; if (ms > P.max) P.max = ms; P.frames++;
+}
+function snapshot() {
+  const G = S.G;
+  return {
+    view: S.view, n: S.n, paused: S.paused, best: S.best.slice(), newRecord: S.newRecord, resultShown: S.resultShown,
+    phase: G ? G.phase : '', t: G ? G.t : 0, dist: G ? distM(G) : 0, hp: G ? G.hp : 0, combo: G ? G.combo : 0, maxCombo: G ? G.maxCombo : 0, zone: G ? G.zone : 0,
+    strokes: G ? G.strokes : 0, crashes: G ? G.crashes : 0, falls: G ? G.falls : 0, pickups: G ? G.pickups : 0, speed: G ? G.speed : 0,
+    boat: G ? { x: G.boat.x, y: G.boat.y, h: G.boat.h, w: G.boat.w } : null, oars: G ? G.oars.map((o) => ({ side: o.side, cnt: o.cnt, q: o.q })) : [],
+    contacts: contacts.size, dpr: LAY.dpr, pads: LAY.pads.map((p) => Object.assign({}, p)), zones: LAY.zones.map((z) => Object.assign({}, z)), port: LAY.port,
+  };
+}
+window.__game = {
+  get state() { return snapshot(); },
+  get layout() { return Object.assign({}, LAY, { pads: LAY.pads.map((x) => Object.assign({}, x)), zones: LAY.zones.map((x) => Object.assign({}, x)) }); },
+  get G() { return S.G; },
+  get perf() { return Object.assign({}, S.perf); },
+  w2sx, w2sy,
+  start(n) { if (n) setSel(n, false); startRun(); },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  tap(i) { return tapPad(i); },
+  // QA: let stand-in "people" row the boat, and run the world faster than real time
+  autoplay(skill, salt) { const G = S.G; if (!G) return; S.crew = skill ? makeCrew(G, skill, salt || 0) : null; },
+  advance(sec) { const G = S.G; if (!G) return; const n = Math.round(sec / STEP); for (let i = 0; i < n; i++) { if (G.phase === 'over') break; if (S.crew) crewStep(G, S.crew); step(G); if (G.ev.length) handleEvents(G, false); } followCam(G, 0, true); },
+  logic: { newGame, step, tap, simulate, makeCrew, crewStep, SKILLS, verifyCourse, newCourse, ensureCourse, diffAt, zoneAt, hintCmd, distM, STEP, UNIT, BOATS },
+};
+
+lastW = window.innerWidth; lastH = window.innerHeight;
+uiMute();
+setSel(S.n, false);
+toTitle();
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

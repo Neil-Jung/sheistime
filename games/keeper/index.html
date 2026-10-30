@@ -2442,7 +2442,14 @@ function uiCombo(pop) {
 }
 // tap-zone geometry (CSS px): left / right halves, split into top (high dive) / bottom (low dive)
 const ZG = { mid: 0, ySplit: 0 };
-const coarse = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
+// Touch can be present on a "desktop" browser (interactive whiteboards, touch laptops report a fine
+// pointer), so any sign of touch input turns the tap-zone guide on, and the first real touch confirms it.
+let coarse = (() => {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches ||
+      (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  } catch (e) { return false; }
+})();
 function layoutZones() {
   const W = VM.w, H = VM.h;
   ZG.mid = W / 2;
@@ -2617,12 +2624,35 @@ function replayRender(tm) {
 // INPUT
 // =====================================================================
 const stage = $('stage');
-stage.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('button, a, .card, .replay')) return;
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  e.preventDefault();
+// One tap can arrive as pointer events, touch events, or (on some whiteboards) only emulated mouse
+// events, so all three paths feed tapAt() and a short de-dupe window keeps one tap = one dive.
+let lastTapAt = -1e9;
+function tapAt(x, y, fromTouch) {
+  const t = performance.now();
+  if (t - lastTapAt < 120) return;
+  lastTapAt = t;
+  if (fromTouch) coarse = true;
   Sound.ensure();
-  if (S.phase === 'playing') act(zoneAt(e.clientX, e.clientY));
+  if (S.phase === 'playing') act(zoneAt(x, y));
+}
+const isUiTarget = (t) => !!(t && t.closest && t.closest('button, a, .card, .replay, .overlay'));
+stage.addEventListener('pointerdown', (e) => {
+  if (isUiTarget(e.target)) return;
+  // mouse: left button only; touch / pen / unknown pointers (button 0 or -1) always count
+  if (e.pointerType === 'mouse' && e.button > 0) return;
+  e.preventDefault();
+  tapAt(e.clientX, e.clientY, e.pointerType === 'touch' || e.pointerType === 'pen');
+});
+stage.addEventListener('touchstart', (e) => {
+  if (isUiTarget(e.target)) return;
+  const t = e.changedTouches && e.changedTouches[0];
+  if (!t) return;
+  e.preventDefault();
+  tapAt(t.clientX, t.clientY, true);
+}, { passive: false });
+stage.addEventListener('mousedown', (e) => {
+  if (isUiTarget(e.target) || e.button > 0) return;
+  tapAt(e.clientX, e.clientY, false);
 });
 function act(z) {
   if (!ZONES.includes(z) || z === 'C') return false;

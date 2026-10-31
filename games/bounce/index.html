@@ -395,9 +395,10 @@ const CONFIG = {
   PAD_SMOOTH: 40, KEY_SPEED: 640, PAD_VX_MIX: 0.12, PAD_ANGLE: 58, PAD_MAX_ANGLE: 65, PAD_COYOTE: 6,
   BALL_R: 9, MAX_BALLS: 5, MAX_STEP_PX: 4, DT_SIM: 1 / 120, DT_MAX: 1 / 30,
   REF_H: 700, REF_WALL: 516,
-  V0: 310, V_ADD: 250, V_RAMP: 110, MIN_VY: 0.28, STALL_T: 12, STALL_NUDGE: 10,
+  V0: 310, V_ADD: 300, V_RAMP: 110, MIN_VY: 0.28, STALL_T: 12, STALL_NUDGE: 10,
   RESPAWN_SLOW: 0.85, RESPAWN_EASE: 10, LAUNCH_SPREAD: 25, SERVE_T: 1.0, READY_T: 1.0,
-  WALL_KEYS: [[0, 1.5], [10, 2.0], [30, 3.4], [60, 5.5], [90, 8.0], [150, 13.0], [210, 20.0], [300, 34.0]],
+  WALL_KEYS: [[0, 1.5], [10, 2.0], [30, 3.4], [60, 5.5], [90, 8.0], [150, 14.5], [210, 23.0], [300, 39.0]],   // keyed by difficulty time dtime(t)
+  DIFF_FREE: 10, DIFF_K: 2.0,   // the first DIFF_FREE seconds run at the old pace, then the difficulty clock runs DIFF_K times faster
   FAR_Y: 150, FAR_MUL: 2.2, NEAR_D: 100, NEAR_MUL: 0.5, NEAR_FADE: [120, 240], RUBBER_EASE: 0.4,   // the near-danger breather fades out between NEAR_FADE seconds so no round lasts forever
   RETREAT: 25, RETREAT_T: 0.35,
   HEARTS: 3, MAX_HEARTS: 5,
@@ -892,7 +893,7 @@ function drawRuler(c, x, y, w, h, sq, tilt) {
 // =====================================================================
 // WALL / ROW GENERATION
 // =====================================================================
-function rowWindow(t) { let w = CONFIG.ROW_TABLE[0]; for (const e of CONFIG.ROW_TABLE) if (t >= e.t) w = e; return w; }
+function rowWindow(t) { t = dtime(t); let w = CONFIG.ROW_TABLE[0]; for (const e of CONFIG.ROW_TABLE) if (t >= e.t) w = e; return w; }
 function pickHp(w) {
   const tot = w.hp[0] + w.hp[1] + w.hp[2]; let r = R() * tot;
   if ((r -= w.hp[0]) < 0) return 1;
@@ -973,8 +974,9 @@ function lowestBottom() {
 }
 function brickCount() { let n = 0; for (const r of S.rows) for (const c of r.cells) if (c) n++; return n; }
 function trimRows() { while (S.rows.length && S.rows[S.rows.length - 1].cells.every((c) => !c)) S.rows.pop(); }
-function wallSpeedBase(t) { return interp(CONFIG.WALL_KEYS, t) * G.kW; }
-function ballSpeedAt(t) { return (CONFIG.V0 + CONFIG.V_ADD * Math.min(t, CONFIG.V_RAMP) / CONFIG.V_RAMP) * G.kB; }
+function dtime(t) { return t < CONFIG.DIFF_FREE ? t : CONFIG.DIFF_FREE + (t - CONFIG.DIFF_FREE) * CONFIG.DIFF_K; }
+function wallSpeedBase(t) { return interp(CONFIG.WALL_KEYS, dtime(t)) * G.kW; }
+function ballSpeedAt(t) { return (CONFIG.V0 + CONFIG.V_ADD * Math.min(dtime(t), CONFIG.V_RAMP) / CONFIG.V_RAMP) * G.kB; }
 
 // =====================================================================
 // BALLS
@@ -1252,7 +1254,7 @@ function simStep(h) {
   const far = yb < G.brickTop + C.FAR_Y, near = !far && G.dangerY - yb < C.NEAR_D;
   if (!over && near && !S.near && S.t - S.warnBanT > 10) { banner('위험해요!', 'warn', 1.2); S.warnBanT = S.t; }
   S.near = near;
-  const nearMul = lerp(C.NEAR_MUL, 1, clamp((S.t - C.NEAR_FADE[0]) / (C.NEAR_FADE[1] - C.NEAR_FADE[0]), 0, 1));
+  const nearMul = lerp(C.NEAR_MUL, 1, clamp((dtime(S.t) - C.NEAR_FADE[0]) / (C.NEAR_FADE[1] - C.NEAR_FADE[0]), 0, 1));
   S.rubber += ((far ? C.FAR_MUL : near ? nearMul : 1) - S.rubber) * (1 - Math.exp(-h / C.RUBBER_EASE));
   S.frz += ((S.freezeT > 0 ? C.FREEZE_MUL : 1) - S.frz) * (1 - Math.exp(-h / C.RUBBER_EASE));
   let dy = over ? 0 : wallSpeedBase(S.t) * S.rubber * S.frz * h;

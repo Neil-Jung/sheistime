@@ -506,27 +506,33 @@ function disc(g, x, y, r, col) { g.fillStyle = col; g.beginPath(); g.arc(x, y, r
 function fmtT(t) { return (Math.floor(Math.max(0, t) * 10) / 10).toFixed(1); }
 
 // ================= DIFFICULTY =================
-// Gentle for the first 10 s, a real storm by 60 s, then a slow creep to a ceiling.
+// Gentle for the first 10 s, then the clock runs DIFF_WARP times faster: the "real storm" that
+// used to arrive around 60 s now builds by about 35 s, and the late ceiling sits a little higher.
+const DIFF_WARP = 1.9;
+function dt_(T) { return T < 10 ? T : 10 + (T - 10) * DIFF_WARP; }   // run time -> difficulty time
 function spawnRate(T) {
+  T = dt_(T);
   if (T < 10) return 1.15 + 0.075 * T;                 // 1.15 -> 1.9 per second
   if (T < 60) return 1.9 + 0.112 * (T - 10);           // 1.9  -> 7.5
-  return Math.min(10, 7.5 + 0.03 * (T - 60));
+  return Math.min(11.5, 7.5 + 0.03 * (T - 60));
 }
 function fallSpeed(T) {
+  T = dt_(T);
   if (T < 10) return 165 + 6 * T;                      // 165 -> 225 units/s
   if (T < 60) return 225 + 4.2 * (T - 10);             // 225 -> 435
-  return Math.min(520, 435 + 1.0 * (T - 60));
+  return Math.min(585, 435 + 1.0 * (T - 60));
 }
-function aimChance(T) { return 0.22 + 0.26 * smooth01(T / 60); }
+function aimChance(T) { return 0.22 + 0.26 * smooth01(dt_(T) / 60); }
 function kindWeights(T, out) {
+  T = dt_(T);
   out[T_NORMAL] = 1;
   out[T_WOBBLE] = T < 7 ? 0 : 0.12 + 0.2 * smooth01((T - 7) / 30);
   out[T_TINY] = T < 14 ? 0 : 0.1 + 0.16 * smooth01((T - 14) / 30);
   out[T_BIG] = T < 20 ? 0 : 0.07 + 0.1 * smooth01((T - 20) / 30);
   return out;
 }
-function eventGap(T) { return lerp(11, 6.5, smooth01((T - 24) / 40)) * rand(0.85, 1.15); }
-function warnDur(T) { return lerp(1.05, 0.8, smooth01((T - 24) / 40)); }
+function eventGap(T) { return lerp(11, 6.5, smooth01((dt_(T) - 24) / 40)) * rand(0.85, 1.15); }
+function warnDur(T) { return lerp(1.05, 0.8, smooth01((dt_(T) - 24) / 40)); }
 
 // ================= STATE =================
 let W = 1, H = 1, DPR = 1, U = 1, FX0 = 0, GY = 1, GU = 700, SPK = 1, TOPU = 0, safeTop = 0, safeBot = 0;
@@ -545,7 +551,7 @@ const pl = {
   x: CFG.FW / 2, vx: 0, dir: 0, face: 1, lean: 0, run: 0, bob: 0, squash: 0, blink: 2, worried: 0, happy: 0,
   dead: false, hatKind: 0, dustT: 0, lastDir: 0, aiT: 0, aiX: CFG.FW / 2,
 };
-const D = { nextSpawn: 1, nextEvent: 24, nextPickup: 12, queue: [], warns: [], waves: 0, bursts: 0 };
+const D = { nextSpawn: 1, nextEvent: 17, nextPickup: 12, queue: [], warns: [], waves: 0, bursts: 0 };
 const cam = { shake: 0, sx: 0, sy: 0 };
 const input = { left: false, right: false, keyDir: 0, ptr: null };
 
@@ -644,7 +650,7 @@ function startBurst(T) {
   // one lane (two late in the run, with a guaranteed safe gap between them)
   const lanes = [];
   const w = rand(96, 124);
-  if (T >= 50 && Math.random() < 0.35) {
+  if (dt_(T) >= 50 && Math.random() < 0.35) {
     const gap = rand(110, 140), total = w * 2 + gap, x0 = rand(0, CFG.FW - total);
     lanes.push(x0 + w / 2, x0 + w + gap + w / 2);
   } else {
@@ -692,9 +698,9 @@ function director(h) {
     spawnRandom();
     D.nextSpawn += (1 / spawnRate(T)) * rand(0.6, 1.4);
   }
-  // special events: warned bursts from 24 s, sweeping waves from 38 s
+  // special events: warned bursts from ~17 s, sweeping waves from ~25 s (difficulty time 24 / 38)
   if (T >= D.nextEvent) {
-    if (T >= 38 && Math.random() < 0.42) startWave(); else startBurst(T);
+    if (dt_(T) >= 38 && Math.random() < 0.42) startWave(); else startBurst(T);
     D.nextEvent = T + eventGap(T);
   }
   for (let i = D.warns.length - 1; i >= 0; i--) {
@@ -837,7 +843,7 @@ function resetRun() {
   S.t = 0; S.dodged = 0; S.nears = 0; S.blocks = 0; S.nearStreak = 0; S.nearT = 0; S.maxStreak = 0;
   S.newRecord = false; S.recordShown = S.best <= 0; S.milestone = 0; S.seen = [true, false, false, false, false, false];
   S.shieldT = 0; S.slowT = 0; S.slowK = 1; S.dieT = 0; S.killer = 0; S.flash = 0; S.storm = 0; S.hintT = 0;
-  D.nextSpawn = CFG.START_DELAY; D.nextEvent = 24 + rand(-1, 2); D.nextPickup = 12 + rand(0, 3); D.waves = 0; D.bursts = 0;
+  D.nextSpawn = CFG.START_DELAY; D.nextEvent = 17 + rand(-1, 2); D.nextPickup = 12 + rand(0, 3); D.waves = 0; D.bursts = 0;
   pl.x = CFG.FW / 2; pl.vx = 0; pl.dir = 0; pl.lean = 0; pl.squash = 0; pl.dead = false; pl.worried = 0; pl.happy = 0; pl.face = 1;
   input.ptr = null;
   cam.shake = 0;

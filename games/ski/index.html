@@ -381,7 +381,8 @@ const CFG = {
   UNIT_M: 20,              // world units per metre
   VIEW_W: 470, VIEW_H: 780,
   ANCHOR: 0.3,             // skier's height on screen (fraction from top)
-  V0: 230, VADD: 440, VSCALE: 11000, // base speed keeps climbing with distance: ~1.6x by 200 m, ~2.2x by 550 m, capped at 670 (≈120 km/h)
+  V0: 230, VADD: 470, VSCALE: 11000, // base speed keeps climbing with distance (the first 100 m exactly as before, then YK times faster): ~1.8x by 200 m, ~2.8x by 550 m, capped at 700 (≈126 km/h)
+  Y_FREE: 2000, YK: 1.5,
   BOOST_STEP: 0.07, BOOST_MAX: 0.2, BOOST_DECAY: 0.07,
   MIN_SW_T: 0.34,          // the course never asks for two turns closer than this many seconds (at top speed)
   LIFT_X: 214,
@@ -438,7 +439,7 @@ function rr(g, x, y, w, h, r) {
 function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 
 // ================= MOTION MODEL (shared by the skier, the course generator and tests) =================
-function vBase(y) { return CFG.V0 + CFG.VADD * (1 - Math.exp(-Math.max(0, y) / CFG.VSCALE)); }
+function vBase(y) { y = Math.max(0, y); if (y > CFG.Y_FREE) y = CFG.Y_FREE + (y - CFG.Y_FREE) * CFG.YK; return CFG.V0 + CFG.VADD * (1 - Math.exp(-y / CFG.VSCALE)); }
 // how much faster than the start the slope is here; the course spreads gates out and widens them with it
 function speedK(y) { return vBase(y) / CFG.V0; }
 function stepGeom(st, ds) {
@@ -476,10 +477,13 @@ const arch = { k: K_ARCH, x: 0, y: -24, h: 80, r: 0 };
 // with clearance from that line, so every gate is provably reachable with the same turn radius.
 // Turns in the reference line are never closer together than MIN_SW_T seconds even at full boosted speed.
 let course = null;
-function diffK(i) { return clamp(i / 70, 0, 1); }
+// difficulty gate index: the first DIFF_FREE gates are unchanged, after that the course "ages" DIFF_K times faster
+const DIFF_FREE = 8, DIFF_K = 1.9;
+function dGate(i) { return i <= DIFF_FREE ? i : DIFF_FREE + (i - DIFF_FREE) * DIFF_K; }
+function diffK(i) { return clamp(dGate(i) / 70, 0, 1); }
 function gateWidth(i, rnd) {
   if (i < 3) return 165;
-  const base = lerp(150, 84, diffK(i)) - Math.max(0, i - 70) * 0.15;
+  const base = lerp(150, 84, diffK(i)) - Math.max(0, dGate(i) - 70) * 0.15;
   return Math.max(72, base) * (0.95 + 0.1 * rnd());
 }
 function newCourse(seed) {
@@ -562,12 +566,13 @@ function genSegment(Cs) {
   };
   let nObs = 0;
   if (i >= 9) {
-    if (i < 20) nObs = rnd() < 0.45 ? 1 : 0;
-    else if (i < 40) nObs = rnd() < 0.5 ? 1 : 2;
+    const di = dGate(i);
+    if (di < 20) nObs = rnd() < 0.45 ? 1 : 0;
+    else if (di < 40) nObs = rnd() < 0.5 ? 1 : 2;
     else nObs = 1 + Math.floor(rnd() * 2.6);
   }
   for (let j = 0; j < nObs; j++) {
-    const isRock = i >= 16 && rnd() < 0.35;
+    const isRock = dGate(i) >= 16 && rnd() < 0.35;
     const r = isRock ? 15 : 13;
     for (let a = 0; a < 14; a++) {
       const x = (rnd() * 2 - 1) * (CFG.HALF - 22), y = y0 + 50 + rnd() * (D - 100);
@@ -580,7 +585,7 @@ function genSegment(Cs) {
     }
   }
   // patrol snowmobile: drives back and forth across a short lane that the reference line never touches
-  if (i >= 28 && rnd() < 0.22 + 0.2 * k) {
+  if (dGate(i) >= 28 && rnd() < 0.22 + 0.2 * k) {
     const r = 15, amp = 40 + rnd() * 30;
     for (let a = 0; a < 14; a++) {
       const x = (rnd() * 2 - 1) * (CFG.HALF - 30 - amp), y = y0 + D * (0.3 + 0.4 * rnd());

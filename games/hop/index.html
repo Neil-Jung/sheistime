@@ -608,18 +608,23 @@ function resetGen(startT, demo) {
   S.gen = { count: 0, readyTick: S.tick, lastEnd: startT, intro: {}, prevKind: '', demo: !!demo, first: true, wave: 0 };
   S.plans.length = 0;
 }
-function waveSpeed(n) { const d = clamp(n / 110, 0, 1); return 285 + 175 * d + clamp((n - 110) * 0.35, 0, 60); }
+// Difficulty "level" m: the first DIFF_FREE friends are unchanged, after that the level climbs DIFF_K times
+// faster than the friend count, so unlocks, speed and the shrinking jump windows arrive earlier.
+const DIFF_FREE = 6, DIFF_K = 2.0;
+function level(n) { return n <= DIFF_FREE ? n : DIFF_FREE + (n - DIFF_FREE) * DIFF_K; }
+function waveSpeed(n) { const d = clamp(n / 110, 0, 1); return 285 + 195 * d + clamp((n - 110) * 0.4, 0, 66); }
 function minWin(n) { return Math.round(lerp(16, 6, clamp(n / 110, 0, 1))); }
 function dangerHalf(f) { return (CFG.PW + f.hw + 2) / f.v; }
 
 function pickWave(g) {
   if (g.demo) return { k: pickOf(['single', 'single', 'tall', 'pair', 'train', 'pogo', 'sprint', 'duo'], rng), intro: false };
-  for (const w of WAVES) if (g.count >= w.at && !g.intro[w.k]) { g.intro[w.k] = 1; return { k: w.k, intro: w.at > 0 }; }
+  const lv = level(g.count);
+  for (const w of WAVES) if (lv >= w.at && !g.intro[w.k]) { g.intro[w.k] = 1; return { k: w.k, intro: w.at > 0 }; }
   let tot = 0;
-  for (const w of WAVES) if (g.count >= w.at && (w.k === 'single' || w.k !== g.prevKind)) tot += w.w;
+  for (const w of WAVES) if (lv >= w.at && (w.k === 'single' || w.k !== g.prevKind)) tot += w.w;
   let r = rng() * tot;
   for (const w of WAVES) {
-    if (!(g.count >= w.at && (w.k === 'single' || w.k !== g.prevKind))) continue;
+    if (!(lv >= w.at && (w.k === 'single' || w.k !== g.prevKind))) continue;
     r -= w.w; if (r <= 0) return { k: w.k, intro: false };
   }
   return { k: 'single', intro: false };
@@ -692,7 +697,7 @@ function clusterOpt(cl, readyTick, mw) {
 
 function genWave() {
   const g = S.gen;
-  const n = g.demo ? 8 : g.count;
+  const n = g.demo ? 8 : level(g.count);
   const d = clamp(n / 110, 0, 1);
   const base = waveSpeed(n);
   let pick = pickWave(g);

@@ -515,8 +515,8 @@ const CLAW = (function () {
     GRAV: 1500, H: 1 / 120,
     DROP_V: 400, RISE_V: 330, CARRY_V: 300, MAXV: 420, CLOSE_T: 0.35, REL_T: 0.4, AFTER_T: 0.12,
     START_TIME: 75, MAX_TIME: 120, RUSH_AT: 15, GOLD_BONUS: 4, BOMB_PENALTY: 3,
-    SPRING_W: 12, ZETA0: 0.7, ZETA1: 0.4, RAMP: 60,         // claw sway: damping goes 0.7 -> 0.4 over 60 s
-    GRIP0: 4.8, GRIP1: 4.2,                                  // claw grip capacity, wears out over 60 s
+    SPRING_W: 12, ZETA0: 0.7, ZETA1: 0.35, RAMP: 60,        // claw sway: damping goes 0.7 -> 0.35 over 60 (difficulty-clock) s
+    GRIP0: 4.8, GRIP1: 3.9,                                  // claw grip capacity, wears out over 60 (difficulty-clock) s
     TOL_A: 28, TOL_B: 0.45, TOL_MIN: 9,                      // catch tolerance(r) = max(9, 28 - 0.45 r)
     ZONE_LO: 8, ZONE_HI: 70, MAX_HOLD: 3, SHIFT: 10, SUP_N: 0.35,
     MU: 0.8, REST: 0.1, SLEEP_V: 26, MULT_STEP: 0.5, MULT_N: 6, S0: 0.4,
@@ -531,15 +531,18 @@ const CLAW = (function () {
   };
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-  const ramp = (t) => clamp(t / C.RAMP, 0, 1);
+  // difficulty clock: the first DIFF_T0 s run as before, afterwards the wear / mix curves advance DIFF_K times faster
+  const DIFF_T0 = 10, DIFF_K = 1.7;
+  const dclock = (t) => (t < DIFF_T0 ? t : DIFF_T0 + (t - DIFF_T0) * DIFF_K);
+  const ramp = (t) => clamp(dclock(t) / C.RAMP, 0, 1);
   const tol = (r) => Math.max(C.TOL_MIN, C.TOL_A - C.TOL_B * r);
   const gripAt = (t) => C.GRIP0 + (C.GRIP1 - C.GRIP0) * ramp(t);
   const zetaAt = (t) => C.ZETA0 + (C.ZETA1 - C.ZETA0) * ramp(t);
   // type weights over the clock (t = seconds played)
   function mixAt(t) {
     const a = ramp(t);
-    const late = (s, e) => clamp((t - s) / (e - s), 0, 1);
-    return { chick: 44 - 20 * a, rabbit: 34 - 8 * a, bear: 22 + 2 * a, dino: 14 * late(12, 40), bomb: 12 * late(22, 50) };
+    const late = (s, e) => clamp((dclock(t) - s) / (e - s), 0, 1);
+    return { chick: 44 - 20 * a, rabbit: 34 - 8 * a, bear: 22 + 2 * a, dino: 14 * late(12, 40), bomb: 14 * late(22, 50) };
   }
   function pickType(G) {
     const m = mixAt(G.t); let sum = 0; for (const k in m) sum += m[k];

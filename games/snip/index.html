@@ -456,9 +456,9 @@ const C = {
   R: 31, R_GOLD: 26, R_DECOY: 33, // item radii
   // ---- difficulty knots (linear interpolation between them, clamped after the last) ----
   KNOT_T:     [0,    15,   30,   60,   90,   120,  180,  240],
-  KNOT_GAP:   [2.50, 2.20, 1.80, 1.38, 1.10, 0.94, 0.78, 0.66],   // seconds between wave launches (first knots raised from 2.30/2.00/1.70 for gentler first 30 s)
-  KNOT_G:     [680,  760,  860,  980,  1090, 1180, 1280, 1360],   // gravity px/s^2 (higher = faster, shorter flights)
-  KNOT_DECOY: [0,    0.12, 0.25, 0.38, 0.48, 0.55, 0.62, 0.68],   // chance that a wave carries a 시험지 companion
+  KNOT_GAP:   [2.50, 2.20, 1.80, 1.38, 1.10, 0.94, 0.72, 0.60],   // seconds between wave launches (first knots raised from 2.30/2.00/1.70 for gentler first 30 s)
+  KNOT_G:     [680,  760,  860,  980,  1090, 1180, 1370, 1470],   // gravity px/s^2 (higher = faster, shorter flights)
+  KNOT_DECOY: [0,    0.12, 0.25, 0.38, 0.48, 0.55, 0.62, 0.72],   // chance that a wave carries a 시험지 companion
   APEX: [330, 520],                                    // apex height above the launch line (px), random per item
   TIER_T: [12, 28, 48, 70, 95],
   // pattern weights per tier: single pair line fan stream cross
@@ -478,13 +478,17 @@ const C = {
   REGEN_CHAIN: 30,
   DECOY_FIRST: 12, DECOY_CLEAR: 104, DECOY_TWO_T: 60,
 };
+// difficulty clock: the first DIFF_T0 s run at the normal pace, afterwards the knots below are reached DIFF_K times faster
+const DIFF_T0 = 10, DIFF_K = 1.7;
+function dclock(t) { return t < DIFF_T0 ? t : DIFF_T0 + (t - DIFF_T0) * DIFF_K; }
 function lerpArr(arr, t) {
+  t = dclock(t);
   const T = C.KNOT_T;
   if (t <= T[0]) return arr[0];
   for (let i = 1; i < T.length; i++) if (t <= T[i]) return arr[i - 1] + (arr[i] - arr[i - 1]) * (t - T[i - 1]) / (T[i] - T[i - 1]);
   return arr[T.length - 1];
 }
-function tierOf(t) { let i = 0; while (i < C.TIER_T.length && t >= C.TIER_T[i]) i++; return i; }
+function tierOf(t) { t = dclock(t); let i = 0; while (i < C.TIER_T.length && t >= C.TIER_T[i]) i++; return i; }
 function multOf(chain) { return Math.min(C.MULT_MAX, 1 + Math.floor(chain / C.MULT_EVERY)); }
 function pickW(rng, w) { const r = rng(); let a = 0; for (let i = 0; i < w.length; i++) { a += w[i]; if (r < a) return i; } return w.length - 1; }
 function rr(S, a, b) { return a + (b - a) * S.rng(); }
@@ -540,7 +544,7 @@ function genWave(S) {
   if (t >= C.DECOY_FIRST) {
     const dp = lerpArr(C.KNOT_DECOY, t);
     let nd = !S.firstDecoy ? 1 : (S.rng() < dp ? 1 : 0);
-    if (S.firstDecoy && nd && t >= C.DECOY_TWO_T && S.rng() < 0.3) nd = 2;
+    if (S.firstDecoy && nd && dclock(t) >= C.DECOY_TWO_T && S.rng() < 0.3) nd = 2;
     for (let k = 0; k < nd; k++) {
       const h = list.length ? list[0].h + rr(S, -60, 60) : rr(S, C.APEX[0], C.APEX[1]);
       for (let tries = 0; tries < 16; tries++) {

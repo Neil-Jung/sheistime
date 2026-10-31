@@ -1,0 +1,2290 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>당겨당겨</title>
+<meta name="theme-color" content="#1d4a33">
+<meta name="description" content="동물 친구들과 박자에 맞춰 영차! 줄을 당겨 상대 팀을 진흙 웅덩이에 풍덩 빠뜨려요. 지치면 한 박자 쉬고, 용쓰기엔 꾹 버텨요. 혼자서도, 한 화면에서 최대 4대4까지 함께 할 수 있어요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* Visual world: a sunny creek-side sports day. Two teams of animal friends pull one rope over a mud puddle:
+   the sun team (orange, left) against the moon team (blue, right). */
+:root {
+  --night: #1d4a33;
+  --panel: rgba(18, 44, 32, 0.96);
+  --hud-bg: rgba(14, 38, 28, 0.74);
+  --ink: #17261c;
+  --paper: #f8fbef;
+  --paper-dim: #b7d3bd;
+  --tl: #ff8a3d;
+  --tl-deep: #d6601a;
+  --tr: #3da5ff;
+  --tr-deep: #1f78cc;
+  --gold: #ffd166;
+  --good: #7be0a1;
+  --danger: #ff6b6b;
+  --mud: #7a4a2b;
+  --font-d: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --font-b: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: var(--night); color: var(--paper);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--night); }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+
+/* ---------- HUD (the two buttons are placed by layout() in JS; everything else is drawn on the canvas) ---------- */
+#hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+#hud[hidden] { display: none; }
+#hud > * { position: absolute; }
+.icon-btn {
+  width: 46px; height: 46px; border-radius: 15px; padding: 0;
+  border: 2px solid rgba(248, 251, 239, 0.75); background: var(--hud-bg); color: var(--paper);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(var(--sat) + 62px) calc(var(--sar) + 14px) calc(var(--sab) + 14px) calc(var(--sal) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(10, 30, 20, 0.5);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.overlay[hidden] { display: none; }
+#scrPause { justify-content: center; background: rgba(8, 24, 16, 0.88); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(450px, 100%); margin: auto;
+  background: var(--panel); color: var(--paper);
+  border: 2px solid rgba(248, 251, 239, 0.85); border-radius: 24px;
+  box-shadow: 0 8px 0 rgba(4, 16, 10, 0.9);
+  padding: 20px 18px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 7px; z-index: 2;
+  background: linear-gradient(90deg, var(--tl) 0 50%, var(--tr) 50% 100%);
+}
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.mascot { display: block; width: 240px; height: 112px; margin: 0 auto 4px; }
+.tag {
+  display: inline-block; font-size: 13px; letter-spacing: 1px; color: var(--ink); background: var(--paper);
+  padding: 3px 10px 2px; border-radius: 6px; transform: rotate(-2deg); font-weight: 700;
+}
+.logo {
+  margin: 6px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 60px; line-height: 1.05; letter-spacing: 1px;
+  white-space: nowrap;
+}
+.logo span {
+  display: inline-block; animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 2.8s ease-in-out infinite;
+  text-shadow: 0 5px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
+.logo span:nth-child(1) { color: var(--tl); }
+.logo span:nth-child(2) { color: #ffd166; animation-delay: 0.1s, 0.4s; }
+.logo span:nth-child(3) { color: #7fe3b0; animation-delay: 0.2s, 0.8s; }
+.logo span:nth-child(4) { color: var(--tr); animation-delay: 0.3s, 1.2s; }
+@keyframes logoIn { from { transform: translateY(-34px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.hook { margin: 8px 0 8px; font-size: 16.5px; color: var(--paper); line-height: 1.45; }
+.hook small { display: block; margin-top: 3px; font-size: 14px; color: var(--paper-dim); }
+.howto {
+  background: rgba(248, 251, 239, 0.06); border: 1px solid rgba(248, 251, 239, 0.22); border-radius: 14px;
+  padding: 6px 12px; text-align: left; font-size: 14.5px; line-height: 1.4; color: var(--paper);
+}
+.howto p { margin: 6px 0; display: flex; gap: 9px; align-items: baseline; }
+.howto .k { flex: none; min-width: 66px; text-align: center; font-size: 12.5px; color: var(--gold); border: 1px solid rgba(255, 209, 102, 0.55); border-radius: 7px; padding: 1px 5px; }
+.best-line { margin: 10px 0 4px; font-size: 15px; color: var(--paper-dim); }
+.best-line b { color: var(--gold); font-weight: normal; font-family: var(--font-d); font-size: 21px; }
+.best-line[hidden] { display: none; }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; border-radius: 16px;
+  border: 2px solid var(--ink); background: var(--gold); color: var(--ink);
+  font-family: var(--font-d); font-size: 25px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 #c99a12; touch-action: manipulation;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a12; }
+.btn.sub {
+  background: transparent; color: var(--paper); border: 2px solid rgba(248, 251, 239, 0.55);
+  box-shadow: none; font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0;
+}
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, .mode:focus-visible, .size:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--paper-dim); line-height: 1.35; }
+.back {
+  position: absolute; left: calc(var(--sal) + 10px); top: calc(var(--sat) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--paper); border: 2px solid rgba(248, 251, 239, 0.8); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.res-title { margin: 4px 0 0; font-size: 28px; font-weight: normal; font-family: var(--font-d); color: var(--paper); letter-spacing: 1px; line-height: 1.2; }
+.res-title.win { color: var(--gold); }
+.res-title.L { color: var(--tl); }
+.res-title.R { color: var(--tr); }
+.pause-line { margin: 10px 0 14px; font-size: 16.5px; color: var(--paper-dim); line-height: 1.45; }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 64px; line-height: 1.1; color: var(--gold); text-shadow: 0 4px 0 var(--ink), 0 0 24px rgba(255, 209, 102, 0.35); }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 24px; color: var(--paper); margin-left: 4px; text-shadow: none; }
+.res-big[hidden] { display: none; }
+.res-score { margin: 6px 0 0; display: flex; justify-content: center; align-items: center; gap: 14px; font-family: var(--font-d); font-size: 54px; line-height: 1.1; }
+.res-score[hidden] { display: none; }
+.res-score .l { color: var(--tl); text-shadow: 0 4px 0 var(--ink); }
+.res-score .r { color: var(--tr); text-shadow: 0 4px 0 var(--ink); }
+.res-score .c { font-size: 30px; color: var(--paper-dim); }
+.badge {
+  display: inline-block; margin-top: 6px; padding: 4px 14px 5px; border-radius: 12px;
+  background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 18px; border: 2px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge[hidden] { display: none; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.stats { margin: 12px 0 4px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.stats div { background: rgba(248, 251, 239, 0.06); border: 1px solid rgba(248, 251, 239, 0.22); border-radius: 12px; padding: 7px 2px 6px; font-size: 12.5px; color: var(--paper-dim); }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 21px; color: var(--paper); margin-top: 3px; }
+
+/* cards with a scrolling info area and an actions dock that never leaves the screen */
+.card.fit { display: flex; flex-direction: column; flex: 0 1 auto; max-height: 100%; min-height: 0; padding: 0; }
+.card.fit .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 20px 18px 6px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.card.fit .actions { flex: none; padding: 8px 18px 14px; background: linear-gradient(to bottom, rgba(18, 44, 32, 0), var(--panel) 10px); position: relative; }
+.pick-label { margin: 10px 0 5px; font-size: 13px; color: var(--paper-dim); text-align: left; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sizes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mode, .size {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; padding: 6px 4px;
+  border-radius: 16px; border: 3px solid rgba(248, 251, 239, 0.28); background: rgba(248, 251, 239, 0.06); color: var(--paper-dim);
+  touch-action: manipulation; font-family: var(--font-b);
+}
+.mode b, .size b { font-family: var(--font-d); font-weight: normal; font-size: 21px; line-height: 1.1; padding-top: 3px; color: var(--paper); white-space: nowrap; }
+.mode small, .size small { font-size: 11.5px; line-height: 1.2; white-space: nowrap; }
+.size .dots { display: flex; gap: 3px; align-items: center; height: 14px; }
+.size .dots i { display: block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.size .dots i.l { background: var(--tl); }
+.size .dots i.r { background: var(--tr); }
+.mode.on, .size.on { border-color: var(--gold); background: rgba(255, 209, 102, 0.16); color: var(--paper); box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.25); }
+.mode.on::after, .size.on::after {
+  content: '\2713'; position: absolute; right: 4px; top: 3px; width: 17px; height: 17px; border-radius: 50%; background: var(--gold); color: var(--ink);
+  font-size: 11px; font-weight: 700; display: grid; place-items: center;
+}
+.mode:active, .size:active { transform: translateY(2px); }
+.mode-line { margin: 10px 0 0; font-size: 14px; color: var(--paper-dim); line-height: 1.4; min-height: 4.2em; }
+.btn-row { display: flex; gap: 10px; margin-top: 10px; }
+.btn-row .btn.sub { margin-top: 0; flex: 1 1 0; min-width: 0; font-size: 16px; }
+
+@media (max-width: 420px) { .size .dots { gap: 2px; } .size .dots i { width: 6px; height: 6px; } }
+@media (max-width: 380px) { .logo { font-size: 52px; } .mode b, .size b { font-size: 18px; } .mode small, .size small { font-size: 10.5px; } }
+@media (max-height: 800px) {
+  .mascot { display: none; }
+  .logo { font-size: 52px; }
+  .res-big { font-size: 54px; }
+  .card { padding-top: 18px; }
+}
+@media (min-width: 600px) and (min-height: 700px) {
+  .overlay { padding-top: calc(var(--sat) + 14px); }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding: calc(var(--sat) + 8px) calc(var(--sar) + 124px) calc(var(--sab) + 8px) calc(var(--sal) + 124px); }
+  .card { padding: 12px 16px 10px; width: min(680px, 100%); }
+  .pause-line { margin: 4px 0 6px; font-size: 14.5px; }
+  .badge { margin-top: 2px; font-size: 15px; padding: 2px 12px 3px; }
+  .tag { display: none; }
+  .logo { font-size: 38px; margin-top: 0; }
+  .hook { margin: 4px 0 6px; font-size: 14px; }
+  .hook small { display: none; }
+  .howto { display: none; }
+  .card.fit .scroll { padding: 14px 16px 4px; }
+  .card.fit .actions { padding: 6px 16px 10px; }
+  .pick-label { margin: 6px 0 3px; font-size: 12px; }
+  .mode, .size { min-height: 44px; padding: 3px 4px; flex-direction: row; flex-wrap: wrap; column-gap: 7px; }
+  .mode small, .size small { display: none; }
+  .mode.on::after, .size.on::after { display: none; }
+  .mode b, .size b { font-size: 19px; }
+  .mode-line { margin-top: 6px; min-height: 0; font-size: 12.5px; }
+  .best-line { margin: 4px 0 4px; }
+  .btn { min-height: 48px; font-size: 21px; }
+  .keyhint { display: none; }
+  .res-title { font-size: 22px; }
+  .res-big { font-size: 42px; }
+  .res-score { font-size: 40px; margin-top: 2px; }
+  .stats { margin: 6px 0 2px; }
+  .stats b { font-size: 18px; }
+  .btn.sub { min-height: 42px; margin-top: 6px; font-size: 15px; }
+  .back { min-height: 40px; }
+}
+@media (max-height: 540px) and (orientation: landscape) and (max-width: 760px) {
+  .overlay { padding-left: calc(var(--sal) + 14px); padding-right: calc(var(--sar) + 14px); padding-top: calc(var(--sat) + 50px); }
+  .best-line { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card { animation: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="냇가 줄다리기 경기장"></canvas>
+  <div id="probe"></div>
+
+  <div id="hud" hidden>
+    <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+    </button>
+    <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+    </button>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card fit">
+      <div class="scroll">
+        <canvas class="mascot" id="mascot" width="480" height="224" aria-hidden="true"></canvas>
+        <span class="tag">박자 줄다리기</span>
+        <h1 class="logo" aria-label="당겨당겨"><span>당</span><span>겨</span><span>당</span><span>겨</span></h1>
+        <p class="hook" id="tHook">링이 동그라미에 닿을 때 톡! 박자를 맞추면 영차! 하고 줄이 확 끌려와요.<small>연타만 하면 금방 지쳐요. 한 박자씩 쉬고, 용쓰기 땐 꾹 버텨서 상대를 진흙탕에 풍덩!</small></p>
+        <p class="pick-label">누가 할까요?</p>
+        <div class="modes" role="radiogroup" aria-label="누가 할까요">
+          <button class="mode on" id="btnSolo" type="button" role="radio" aria-checked="true"><b>혼자서</b><small>컴퓨터와 겨루기</small></button>
+          <button class="mode" id="btnMulti" type="button" role="radio" aria-checked="false"><b>함께</b><small>사람끼리 겨루기</small></button>
+        </div>
+        <p class="pick-label">한 팀에 몇 명?</p>
+        <div class="sizes" role="radiogroup" aria-label="한 팀 인원">
+          <button class="size on" id="btnS1" type="button" role="radio" aria-checked="true"><span class="dots"><i class="l"></i><i class="r"></i></span><b>1대1</b><small id="sm1">내가 대표</small></button>
+          <button class="size" id="btnS2" type="button" role="radio" aria-checked="false"><span class="dots"><i class="l"></i><i class="l"></i><i class="r"></i><i class="r"></i></span><b>2대2</b><small id="sm2">컴퓨터 팀원</small></button>
+          <button class="size" id="btnS3" type="button" role="radio" aria-checked="false"><span class="dots"><i class="l"></i><i class="l"></i><i class="l"></i><i class="r"></i><i class="r"></i><i class="r"></i></span><b>3대3</b><small id="sm3">컴퓨터 팀원</small></button>
+          <button class="size" id="btnS4" type="button" role="radio" aria-checked="false"><span class="dots"><i class="l"></i><i class="l"></i><i class="l"></i><i class="l"></i><i class="r"></i><i class="r"></i><i class="r"></i><i class="r"></i></span><b>4대4</b><small id="sm4">컴퓨터 팀원</small></button>
+        </div>
+        <p class="mode-line" id="modeLine"></p>
+        <p class="best-line" id="bestLine">최고 기록 <b id="tBest">-</b></p>
+        <div class="howto" style="margin-top:10px">
+          <p><span class="k">박자에 톡</span><span>링이 동그라미에 닿을 때 누르면 영차! 힘이 제일 세요</span></p>
+          <p><span class="k">쉬어가요</span><span>빈 박자도 필요해요. 지침 게이지가 바닥나면 힘이 쭉 빠져요</span></p>
+          <p><span class="k">용쓰기</span><span>신호가 오면 패드를 꾹 누르고 있어요. 오래 버틴 팀이 이겨요</span></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnStart" type="button">시작하기</button>
+        <p class="keyhint" id="keyHint"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card fit">
+      <div class="scroll">
+        <h2 class="res-title">잠깐 쉬어요</h2>
+        <p class="pause-line">줄도 친구들도 멈춰 있어요.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnResume" type="button">계속하기</button>
+        <div class="btn-row">
+          <button class="btn sub" id="btnPauseRestart" type="button">처음부터 다시</button>
+          <button class="btn sub" id="btnPauseTitle" type="button">인원 고르기</button>
+        </div>
+        <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+        <p class="keyhint">스페이스·P로 계속하고, R로 처음부터 할 수 있어요</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card fit">
+      <div class="scroll">
+        <h2 class="res-title" id="rTitle">이겼어요!</h2>
+        <div class="res-big" id="rBigBox"><span id="rBig">0</span><small id="rBigUnit">연승</small></div>
+        <div class="res-score" id="rScoreBox" hidden><span class="l" id="rSL">0</span><span class="c">:</span><span class="r" id="rSR">0</span></div>
+        <div class="badge" id="rBadge" hidden>새 기록이에요!</div>
+        <p class="pause-line" id="rLine"></p>
+        <div class="stats">
+          <div>가장 긴 합동<b id="rChain">0</b></div>
+          <div>박자 맞춘 비율<b id="rSync">0%</b></div>
+          <div>걸린 시간<b id="rTime">0:00</b></div>
+        </div>
+        <p class="best-line" id="rBestLine">최고 기록 <b id="rBest">-</b></p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnAgain" type="button">다음 판</button>
+        <div class="btn-row">
+          <button class="btn sub" id="btnOverTitle" type="button">인원 고르기</button>
+        </div>
+        <p class="keyhint">스페이스바로도 다시 할 수 있어요</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+(() => {
+//#LOGIC-START
+// ---------------------------------------------------------------------
+// Pure game logic: no DOM, no audio, no wall clock. A match is stepped with a fixed timestep (STEP), so it is deterministic
+// for a given seed and testable from Node.
+// World: one flag position x on the rope, -1 = the left team's finish line, +1 = the right team's. The left team (team 0)
+// pulls x down, the right team (team 1) pulls it up.
+// Every team shares one drum beat. A tap on the beat pulls (perfect > good > ok); a tap off the beat pulls nothing and wastes
+// stamina. Every member has a tiredness gauge (stamina): tapping costs it, resting refills it, an empty gauge makes the
+// member weak until it refills. Every so often a "strain" (용쓰기) starts: everybody holds their pad and the team with more
+// (and longer) holds drags the rope; the winner splashes mud on the other team. A whole team hitting the beat together builds
+// a chain that pulls harder; at 8 the crowd cheers (cheer buff).
+// ---------------------------------------------------------------------
+const STEP = 1 / 120;
+const COUNT_T = 2.4;                       // 3, 2, 1 before the first beat
+const BEAT0 = 0.95, PER0 = 0.70, PER1 = 0.52, RAMP = 70;   // first beat after the go; beat period (s) eases from PER0 to PER1 over RAMP beats
+const WIN = [0.085, 0.155, 0.235];         // half windows (s) of perfect / good / ok around the beat
+const QV = [0, 0.45, 0.8, 1.0];            // pull per quality: 0 off-beat, 1 ok, 2 good, 3 perfect
+const COST = [24, 18, 15, 12.5];             // stamina cost per quality
+const REG_BUSY = 4, REG_IDLE = 26, IDLE_AFTER = 0.55, TIRED_REC = 50;   // stamina per second while tapping / resting, rest needs 0.55 s without a tap
+const DAMP = 2.6, BASE = 0.35, VMAX = 3;   // rope friction (1/s) and pull of one perfect beat of a whole team
+const CHAIN_STEP = 0.06, CHAIN_MAX = 8, CHEER_T = 4.0, MUD_T = 4.5;
+const GRIT = 0.3;                          // the team that is being dragged toward the line digs in (pull up to +30%) so matches turn around now and then
+const GROUP_OK = 0.62;                     // a beat counts for the chain when the team's mean quality reaches this
+const STRAIN_FIRST = 12, STRAIN_EVERY = 14, WARN_T = 1.5, STRAIN_D = 1.8, STRAIN_COST = 26, STRAIN_F = 0.5, SNAP = 0.25, AFTER_T = 1.0, RESUME_T = 0.8, MUD_MARGIN = 0.18;
+const SOFT_T = 50, HARD_T = 100, SD_MIN = 0.35;   // sudden death: the finish lines close in from 50 s on, the match ends by 100 s at the latest
+const NSCALE = [0, 1, 1.45, 1.34, 1.22];     // teams of different sizes are balanced: a lone player wins as often as a whole team of equal skill
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function lerp(a, b, k) { return a + (b - a) * k; }
+function smooth(k) { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); }
+function gauss(rng) { let u = 0; while (!u) u = rng(); const v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(Math.PI * 2 * v); }
+
+function period(k) { return lerp(PER0, PER1, Math.min(1, k / RAMP)); }
+function mkTeam(n) {
+  const mem = [];
+  for (let i = 0; i < n; i++) mem.push({ st: 100, tired: false, tapT: -9, held: false, sc: 0, taps: 0, perfect: 0, good: 0, ok: 0, stray: 0, tiredN: 0 });
+  return { n, mem, chain: 0, bestChain: 0, cheerT: 0, mudT: 0, pw: 1, rec: 1, sp: 0, beats: 0, hits: 0, rests: 0, strainWins: 0, cheers: 0, pull: 0 };
+}
+function mkBeat(G, k, t) { return { k, t, q: [new Array(G.teams[0].n).fill(-1), new Array(G.teams[1].n).fill(-1)] }; }
+// o: { seed, nL, nR, pwL, pwR, recL, recR }
+function newGame(o) {
+  const seed = o.seed | 0;
+  const G = {
+    seed, rng: mulberry32((seed ^ 0x2f6e2b1) >>> 0), phase: 'play', winner: -1, reason: '', cd: o.noCount ? 0 : COUNT_T, t: 0,
+    teams: [mkTeam(clamp(o.nL || 1, 1, 4)), mkTeam(clamp(o.nR || o.nL || 1, 1, 4))],
+    x: 0, v: 0, sm: 'beat', k: 0, nextT: BEAT0, since: 0, every: STRAIN_FIRST, strainN: 0, warnEnd: 0, sEnd: 0, resumeT: 0,
+    pend: [], ev: [], beatsTotal: 0, sd: false, tension: 0, lastBeatT: -9, lastMargin: 0,
+  };
+  G.teams[0].pw = o.pwL || 1; G.teams[1].pw = o.pwR || 1; G.teams[0].rec = o.recL || 1; G.teams[1].rec = o.recR || 1;
+  G.pend.push(mkBeat(G, 0, BEAT0));
+  return G;
+}
+function threshold(G) { return G.t < SOFT_T ? 1 : lerp(1, SD_MIN, clamp((G.t - SOFT_T) / (HARD_T - SOFT_T - 10), 0, 1)); }
+const FAT_FULL = 45, FAT_MIN = 0.3, TIRED_PULL = 0.12;
+function fatigue(m) { return m.tired ? TIRED_PULL : m.st >= FAT_FULL ? 1 : FAT_MIN + (1 - FAT_MIN) * m.st / FAT_FULL; }
+function grit(G, ti) { const d = ti === 0 ? G.x : -G.x; return d > 0.3 ? 1 + GRIT * smooth((d - 0.3) / 0.7) : 1; }
+function chainMul(T) { return 1 + CHAIN_STEP * Math.min(T.chain, CHAIN_MAX); }
+// can the pads be tapped right now (the beat part of the match)?
+function live(G) { return G.phase === 'play' && G.cd <= 0; }
+
+// a tap on pad (team ti, member mi). ahead = seconds since the last step (the tap really happened a little later than G.t).
+// Returns null when nothing happened, otherwise { q (-1 free tap, 0 off beat, 1..3), off, imp }.
+function tap(G, ti, mi, ahead) {
+  if (!live(G)) return null;
+  const T = G.teams[ti]; if (!T) return null;
+  const m = T.mem[mi]; if (!m) return null;
+  const tj = G.t + (ahead || 0), w = T.mudT > 0 ? 0.7 : 1;
+  let b = null, bd = 9;
+  for (const e of G.pend) { const d = Math.abs(tj - e.t); if (d < bd) { bd = d; b = e; } }
+  const near = b && bd <= WIN[2] * w;
+  if (G.sm !== 'beat' && !near) { m.tapT = G.t; return { ti, mi, q: -1, off: 0, imp: 0 }; }   // a quiet moment: nothing pulls, but it is no rest either
+  let q = 0, off = 0;
+  if (near) {
+    off = tj - b.t;
+    q = bd <= WIN[0] * w ? 3 : bd <= WIN[1] * w ? 2 : 1;
+    if (b.q[ti][mi] >= 0) q = 0;                       // a second tap for the same beat
+    else b.q[ti][mi] = q;
+  }
+  const fat = fatigue(m);
+  const cost = COST[q] * (T.cheerT > 0 ? 0.5 : 1);
+  m.st -= cost; m.tapT = G.t; m.taps++;
+  if (q === 3) m.perfect++; else if (q === 2) m.good++; else if (q === 1) m.ok++; else m.stray++;
+  if (m.st <= 0) { m.st = 0; if (!m.tired) { m.tired = true; m.tiredN++; G.ev.push({ t: 'tired', ti, mi }); } }
+  const imp = BASE * QV[q] * fat * chainMul(T) * (T.mudT > 0 ? 0.8 : 1) * (T.cheerT > 0 ? 1.25 : 1) * T.pw / T.n * NSCALE[T.n] * grit(G, ti);
+  G.v += (ti === 0 ? -1 : 1) * imp;
+  T.pull += imp;
+  G.ev.push({ t: 'tap', ti, mi, q, off, imp, tired: m.tired });
+  return { ti, mi, q, off, imp };
+}
+// hold / release a pad (used by the strain). Returns whether the state changed.
+function hold(G, ti, mi, on) {
+  const m = G.teams[ti] && G.teams[ti].mem[mi]; if (!m) return false;
+  on = !!on; if (m.held === on) return false;
+  m.held = on; if (on) m.tapT = G.t;
+  return true;
+}
+function resolveBeat(G, b) {
+  for (let ti = 0; ti < 2; ti++) {
+    const T = G.teams[ti];
+    let att = 0, sum = 0, good = 0;
+    for (let i = 0; i < T.n; i++) { const q = b.q[ti][i]; if (q > 0) { att++; sum += QV[q]; if (q >= 2) good++; } }
+    T.beats++; T.hits += good;
+    const mean = sum / T.n;
+    if (att === 0) { T.rests++; G.ev.push({ t: 'rest', ti, k: b.k }); continue; }   // a rest beat keeps the chain
+    if (mean >= GROUP_OK) {
+      T.chain++; if (T.chain > T.bestChain) T.bestChain = T.chain;
+      G.ev.push({ t: 'sync', ti, k: b.k, n: T.chain, att, team: T.n > 1, perfect: mean >= 0.92 });
+      if (T.chain % CHAIN_MAX === 0) { T.cheerT = CHEER_T; T.cheers++; G.ev.push({ t: 'cheer', ti }); }
+    } else {
+      if (T.chain >= 3) G.ev.push({ t: 'chainBreak', ti, n: T.chain });
+      T.chain = 0;
+    }
+  }
+  G.beatsTotal++;
+}
+function endMatch(G, winner, reason) {
+  G.phase = 'over'; G.winner = winner; G.reason = reason; G.overT = 0;
+  const th = threshold(G);
+  if (reason === 'flag') G.x = winner === 0 ? -th : th;
+  for (const T of G.teams) for (const m of T.mem) m.held = false;
+  G.ev.push({ t: 'finish', winner, reason });
+}
+function step(G) {
+  if (G.phase === 'over') return;
+  if (G.cd > 0) {
+    const a = Math.ceil(G.cd / 0.8);
+    G.cd -= STEP;
+    if (G.cd <= 0) { G.cd = 0; G.ev.push({ t: 'go' }); }
+    else if (Math.ceil(G.cd / 0.8) !== a) G.ev.push({ t: 'count', n: Math.ceil(G.cd / 0.8) });
+    return;
+  }
+  G.t += STEP;
+  const t = G.t;
+  // ---- the beat / strain schedule ----
+  if (G.sm === 'beat') {
+    if (t >= G.nextT) {
+      G.lastBeatT = G.nextT; G.since++;
+      G.ev.push({ t: 'beat', k: G.k, i: G.k, accent: G.k % 4 === 0 });
+      G.k++;
+      if (G.since >= G.every) { G.sm = 'warn'; G.warnEnd = t + WARN_T; G.ev.push({ t: 'warn' }); }
+      else { G.nextT += period(G.k); G.pend.push(mkBeat(G, G.k, G.nextT)); }
+    }
+  } else if (G.sm === 'warn') {
+    if (t >= G.warnEnd) {
+      G.sm = 'strain'; G.sEnd = t + STRAIN_D;
+      for (const T of G.teams) for (const m of T.mem) m.sc = 0;
+      G.ev.push({ t: 'strainGo' });
+    }
+  } else if (G.sm === 'strain') {
+    const sp = [0, 0];
+    for (let ti = 0; ti < 2; ti++) {
+      const T = G.teams[ti]; let acc = 0;
+      for (let i = 0; i < T.n; i++) {
+        const m = T.mem[i];
+        if (!m.held) continue;
+        const w = m.tired ? 0.35 : 1;
+        m.sc += w * STEP; acc += w; m.tapT = t;
+        m.st -= STRAIN_COST * STEP * (T.cheerT > 0 ? 0.5 : 1);
+        if (m.st <= 0) { m.st = 0; if (!m.tired) { m.tired = true; m.tiredN++; G.ev.push({ t: 'tired', ti, mi: i }); } }
+      }
+      T.sp = acc / T.n * T.pw * (T.mudT > 0 ? 0.85 : 1) * grit(G, ti); sp[ti] = T.sp;
+    }
+    G.v += STRAIN_F * (sp[1] - sp[0]) * STEP;
+    if (t >= G.sEnd) {
+      const s0 = G.teams[0].mem.reduce((a, m) => a + m.sc, 0) / (G.teams[0].n * STRAIN_D), s1 = G.teams[1].mem.reduce((a, m) => a + m.sc, 0) / (G.teams[1].n * STRAIN_D);
+      const margin = s0 - s1;
+      G.lastMargin = margin;
+      G.v -= SNAP * margin;
+      let win = -1;
+      if (Math.abs(margin) >= MUD_MARGIN) { win = margin > 0 ? 0 : 1; G.teams[1 - win].mudT = MUD_T; G.teams[win].strainWins++; G.ev.push({ t: 'mud', ti: 1 - win }); }
+      G.sm = 'after'; G.resumeT = t + AFTER_T; G.strainN++;
+      for (const T of G.teams) { T.sp = 0; }
+      G.ev.push({ t: 'strainEnd', s0, s1, margin, winner: win });
+    }
+  } else if (G.sm === 'after') {
+    if (t >= G.resumeT) {
+      G.sm = 'beat'; G.since = 0; G.every = STRAIN_EVERY + (G.strainN % 2 ? 2 : 0);
+      G.nextT = t + RESUME_T; G.pend.push(mkBeat(G, G.k, G.nextT)); G.ev.push({ t: 'resume' });
+    }
+  }
+  // judged beats
+  while (G.pend.length && t >= G.pend[0].t + WIN[2] + 0.06) { const b = G.pend.shift(); if (b.k < G.k) resolveBeat(G, b); else { G.pend.unshift(b); break; } }
+  // ---- stamina / timers ----
+  for (let ti = 0; ti < 2; ti++) {
+    const T = G.teams[ti];
+    if (T.cheerT > 0) T.cheerT = Math.max(0, T.cheerT - STEP);
+    if (T.mudT > 0) T.mudT = Math.max(0, T.mudT - STEP);
+    for (let i = 0; i < T.n; i++) {
+      const m = T.mem[i];
+      if (m.held && G.sm === 'strain') continue;
+      const idle = t - m.tapT > IDLE_AFTER;
+      const rate = (idle ? REG_IDLE : REG_BUSY) * T.rec * (T.cheerT > 0 ? 1.3 : 1) * (T.mudT > 0 ? 0.7 : 1);
+      if (m.st < 100) m.st = Math.min(100, m.st + rate * STEP);
+      if (m.tired && m.st >= TIRED_REC) { m.tired = false; G.ev.push({ t: 'recover', ti, mi: i }); }
+    }
+  }
+  // ---- the rope ----
+  G.v = clamp(G.v, -VMAX, VMAX);
+  G.x += G.v * STEP;
+  G.v *= Math.exp(-DAMP * STEP);
+  G.tension += (Math.min(1, Math.abs(G.v) * 1.2 + (G.sm === 'strain' ? 0.5 : 0)) - G.tension) * Math.min(1, STEP * 6);
+  if (G.t >= SOFT_T && !G.sd) { G.sd = true; G.ev.push({ t: 'sudden' }); }
+  const th = threshold(G);
+  if (G.x <= -th) { G.x = -th; endMatch(G, 0, 'flag'); }
+  else if (G.x >= th) { G.x = th; endMatch(G, 1, 'flag'); }
+  else if (G.t >= HARD_T) {
+    let w = G.x < -0.005 ? 0 : G.x > 0.005 ? 1 : (G.teams[0].pull > G.teams[1].pull ? 0 : G.teams[0].pull < G.teams[1].pull ? 1 : (G.rng() < 0.5 ? 0 : 1));
+    endMatch(G, w, 'time');
+  }
+}
+
+// beats to draw as approaching rings: the judged ones still pending plus the ones that come next, up to `horizon` seconds ahead
+function ringBeats(G, now, horizon) {
+  const out = G.pend.slice();
+  if (G.sm === 'beat' && out.length) {
+    let last = out[out.length - 1], k = last.k, t = last.t, j = 0;
+    while (j < 4) {
+      j++; k++; t += period(k);
+      if (G.since + 1 + j > G.every || t > now + horizon) break;
+      out.push({ k, t, q: null });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------
+// Stand-in "people": bots that tap with human-like timing errors, lapses, a speed limit and a tendency to forget to rest.
+// Used for the computer team, the computer teammates, and (in tests) for measuring how a normal player fares.
+// ---------------------------------------------------------------------
+const PRESETS = {
+  poor:   { sigma: 0.115, bias: 0.02, miss: 0.12, stray: 0.08, restTh: 8,  rt: 0.60, holdMin: 0.35, holdMax: 0.85, minGap: 0.20 },
+  human:  { sigma: 0.075, bias: 0.012, miss: 0.06, stray: 0.045, restTh: 22, rt: 0.42, holdMin: 0.55, holdMax: 1.0, minGap: 0.17 },
+  steady: { sigma: 0.060, bias: 0.008, miss: 0.04, stray: 0.025, restTh: 30, rt: 0.34, holdMin: 0.70, holdMax: 1.0, minGap: 0.16 },
+  good:   { sigma: 0.045, bias: 0.004, miss: 0.02, stray: 0.012, restTh: 38, rt: 0.26, holdMin: 0.88, holdMax: 1.0, minGap: 0.15 },
+  greedy: { sigma: 0.075, bias: 0.012, miss: 0.06, stray: 0.045, restTh: -1, rt: 0.42, holdMin: 0.55, holdMax: 1.0, minGap: 0.17 },   // never rests
+  stubborn: { sigma: 0.075, bias: 0.012, miss: 0.06, stray: 0.045, restTh: -1, ignoreTired: 1, rt: 0.42, holdMin: 0.55, holdMax: 1.0, minGap: 0.17 },   // keeps tapping even when worn out
+  masher: { sigma: 0.075, bias: 0.012, miss: 0.0, stray: 0.0, restTh: -1, rt: 0.42, holdMin: 0.55, holdMax: 1.0, minGap: 0.17, mash: 0.16 },   // just hammers the pad ~6 times a second
+};
+const AI_MAXL = 12;
+// strength u (0 = a sleepy beginner .. 1 = nearly perfect) -> the computer's accuracy, power and tiredness recovery
+function aiParams(u) {
+  u = clamp(u, 0, 1);
+  return {
+    u, sigma: lerp(0.16, 0.04, u), bias: 0.01, miss: lerp(0.16, 0.01, u), stray: lerp(0.12, 0.01, u), restTh: lerp(4, 40, u),
+    rt: lerp(0.65, 0.22, u), holdMin: lerp(0.30, 0.95, u), holdMax: 1.0, minGap: lerp(0.20, 0.15, u),
+    pw: lerp(0.86, 1.12, u), rec: lerp(0.78, 1.30, u),
+  };
+}
+// the computer for the Lth match in a row (L = 0 is the first). AI_U is the strength per match, measured against a normal-player bot.
+const AI_U = [0.52, 0.545, 0.595, 0.63, 0.667, 0.69, 0.705, 0.72, 0.735, 0.75, 0.76, 0.775, 0.79];
+const AI_NADJ = [0, 0, 0.01, 0.07, 0.07];       // a computer team of 3 or 4 plays a little stronger so it stays as hard as 1 or 2 against a normal player with computer teammates
+function aiLevel(L, n) {
+  L = clamp(L | 0, 0, AI_MAXL);
+  const o = aiParams(AI_U[L] + AI_NADJ[clamp(n || 1, 1, 4)]); o.L = L; return o;
+}
+// how awake the computer is t seconds into a match: loose for the first few seconds of the very first match, then it wakes up fast
+function aiWarm(L, t) {
+  if (L <= 0) return lerp(0.40, 1, smooth((t - 5) / 5));
+  if (L === 1) return lerp(0.65, 1, smooth((t - 3) / 3));
+  return 1;
+}
+// ti: team index, idx: member indices it controls, prm: preset object or name, warm: optional function t -> 0..1
+function makeBot(G, ti, idx, prm, salt, warm) {
+  const p = typeof prm === 'string' ? PRESETS[prm] : prm;
+  const rng = mulberry32((Math.imul(G.seed, 2654435761) + (salt | 0) * 7919 + ti * 131 + 12345) >>> 0);
+  const form = Math.exp(0.2 * gauss(rng));   // today's form: every match a player is a little better or worse than usual
+  return { ti, idx: idx.slice(), p, rng, form, warm: warm || null, planned: -1, q: [], mem: idx.map(() => ({ rest: 0, lastT: -9 })), strained: -1, hs: idx.map(() => ({ on: -1, off: -1 })) };
+}
+function botStep(G, bot) {
+  if (!live(G)) return;
+  const p = bot.p, rng = bot.rng, t = G.t, w = bot.warm ? bot.warm(t) : 1, T = G.teams[bot.ti];
+  if (p.mash) {   // hammering: ignores the beat
+    if (G.sm === 'beat') bot.idx.forEach((mi, j) => { const bm = bot.mem[j]; if (t >= bm.lastT + p.mash * (0.8 + 0.4 * rng())) { bm.lastT = t; tap(G, bot.ti, mi, 0); } });
+    else if (G.sm === 'strain') bot.idx.forEach((mi) => hold(G, bot.ti, mi, true));
+    else bot.idx.forEach((mi) => hold(G, bot.ti, mi, false));
+    return;
+  }
+  // plan the taps for the next beat shortly before it
+  if (G.sm === 'beat') {
+    for (const b of G.pend) {
+      if (b.k <= bot.planned || t < b.t - 0.35) continue;
+      bot.planned = b.k;
+      const sg = p.sigma * bot.form * (1 + (1 - w) * 1.3), ms = p.miss * bot.form + (1 - w) * 0.3;
+      bot.idx.forEach((mi, j) => {
+        const m = T.mem[mi], bm = bot.mem[j];
+        if (bm.rest > 0) { bm.rest--; return; }
+        if ((m.tired && !p.ignoreTired) || m.st + gauss(rng) * 6 < p.restTh + (p.prep && G.every - G.since <= 2 ? p.prep : 0)) { bm.rest = rng() < 0.5 ? 1 : 0; return; }
+        if (rng() < ms) return;
+        let tt = b.t + p.bias + gauss(rng) * sg;
+        tt = Math.max(tt, bm.lastT + p.minGap, t);
+        bm.lastT = tt;
+        bot.q.push({ t: tt, mi, hold: 0 });
+        if (rng() < p.stray) { const t2 = Math.max(b.t + (rng() < 0.5 ? -1 : 1) * (0.28 + 0.2 * rng()), tt + p.minGap, t); bm.lastT = t2; bot.q.push({ t: t2, mi, hold: 0 }); }
+      });
+    }
+  }
+  // strain: start holding after a reaction time, let go after a while
+  if (G.sm === 'strain' && bot.strained !== G.strainN) {
+    bot.strained = G.strainN;
+    const go = G.sEnd - STRAIN_D;
+    bot.idx.forEach((mi, j) => {
+      const on = go + Math.max(-0.1, p.rt + gauss(rng) * 0.1) * (1 + (1 - w) * 0.8);
+      const frac = lerp(p.holdMin, p.holdMax, rng()) * (0.7 + 0.3 * w);
+      bot.hs[j].on = on; bot.hs[j].off = Math.max(on + 0.15, go + STRAIN_D * frac);
+    });
+  }
+  for (let i = bot.q.length - 1; i >= 0; i--) if (t >= bot.q[i].t) { tap(G, bot.ti, bot.q[i].mi, 0); bot.q.splice(i, 1); }
+  if (G.sm === 'strain') {
+    bot.idx.forEach((mi, j) => {
+      const h = bot.hs[j], m = T.mem[mi];
+      if (h.on >= 0 && t >= h.on && t < h.off) hold(G, bot.ti, mi, true);
+      else if (m.held && t >= h.off) hold(G, bot.ti, mi, false);
+    });
+  } else if (bot.idx.some((mi) => T.mem[mi].held)) { bot.idx.forEach((mi) => hold(G, bot.ti, mi, false)); bot.q.length = 0; }
+}
+// A match between bot teams. o: { seed, nL, nR, left: preset|object, right: preset|object, level: aiLevel index for the right team (optional),
+//   allies: preset for the left teammates (the first left member is "left"), tmax }
+function simulate(o) {
+  const lv = o.level !== undefined ? aiLevel(o.level, o.nR || o.nL) : null;
+  const G = newGame({ seed: o.seed, nL: o.nL, nR: o.nR, noCount: true, pwL: o.pwL, pwR: lv ? lv.pw : o.pwR, recL: o.recL, recR: lv ? lv.rec : o.recR });
+  const nL = G.teams[0].n, nR = G.teams[1].n, bots = [];
+  const all = (n) => Array.from({ length: n }, (_, i) => i);
+  if (o.allies && nL > 1) { bots.push(makeBot(G, 0, [0], o.left || 'human', 1)); bots.push(makeBot(G, 0, all(nL).slice(1), o.allies, 2)); }
+  else if (o.left !== 'none') bots.push(makeBot(G, 0, all(nL), o.left || 'human', 1));
+  if (o.right !== 'none') bots.push(makeBot(G, 1, all(nR), lv || o.right || 'human', 3, lv ? (t) => aiWarm(lv.L, t) : null));
+  const tmax = o.tmax || 200, onStep = o.onStep;
+  while (G.phase !== 'over' && G.t < tmax) {
+    for (const b of bots) botStep(G, b);
+    step(G);
+    if (onStep) onStep(G);
+    G.ev.length = 0;
+  }
+  return { G, winner: G.winner, t: G.t, reason: G.reason, over: G.phase === 'over' };
+}
+//#LOGIC-END
+
+// =====================================================================
+// VIEW: everything from here on touches the DOM, the canvas or the audio
+// =====================================================================
+const KEY_BEST = 'arcade.tug.best';       // best win streak against the computer (a plain number)
+const KEY_MUTE = 'arcade.tug.muted';
+const KEY_MODE = 'arcade.tug.mode';       // 'solo' | 'multi'
+const KEY_SIZE = 'arcade.tug.size';       // 1..4 per team
+const KEY_HINT = 'arcade.tug.hints';      // how many matches have shown the coaching hints
+const TAU = Math.PI * 2;
+const FONT_D = '"Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+const FONT_B = '"Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+const INK = '#17261c', PAPER = '#f8fbef', GOLD = '#ffd166', MUD = '#7a4a2b', MUD2 = '#946037';
+const TCOL = ['#ff8a3d', '#3da5ff'], TDEEP = ['#d6601a', '#1f78cc'], TLIGHT = ['#ffc08f', '#a9d9ff'];
+const TNAME = ['해님팀', '달님팀'];
+const MCOL = ['#ffd24a', '#7be07f', '#ff8fc4', '#8fd0ff'];   // member colours on the pads: duck, frog, hippo, panda
+const KINDS = [[0, 1, 2, 3], [3, 2, 1, 0]];                   // animal of member i in team 0 / team 1
+const ANAMES = ['동실이', '개굴이', '풍덩이', '판판이'];
+const KEYS = [['KeyA', 'KeyS', 'KeyD', 'KeyF'], ['KeyJ', 'KeyK', 'KeyL', 'Semicolon']];   // by screen slot, left to right
+const KEYLBL = [['A', 'S', 'D', 'F'], ['J', 'K', 'L', ';']];
+const SOLO_KEYS = new Set(['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Space', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+const APPROACH = 0.95;   // seconds a ring takes to shrink onto the pad
+
+const QS = new URLSearchParams(location.search);
+const seedParam = QS.get('seed');
+const BASE_SEED = seedParam !== null && seedParam !== '' ? (+seedParam | 0) : null;
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function readBest() { const v = parseInt(store.get(KEY_BEST, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function buzz(p) { try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ } }
+function fmtTime(sec) { const s = Math.max(0, Math.floor(sec)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+const vr = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only: never touches the simulation
+
+// =====================================================================
+// AUDIO (all synthesized)
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0, str: null,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.5;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 2);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.5, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  tone(type, f0, f1, dur, vol, delay, attack, pri) {
+    if (!this.ok() || (!pri && this.voices >= 10)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.005));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type, pri, f1) {
+    if (!this.ok() || (!pri && this.voices >= 10)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+      if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(t, Math.random() * 0.9); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  // the drum that sets the beat: a round thump, stronger on the first beat of four
+  drum(accent) {
+    this.tone('sine', accent ? 170 : 135, 52, 0.2, accent ? 0.34 : 0.24, 0, 0.004, true);
+    this.noise(0.05, 260, 0.8, accent ? 0.08 : 0.05, 0, 'bandpass', true);
+    if (accent) this.tone('triangle', 520, 360, 0.05, 0.05, 0, 0.002, true);
+  },
+  count(n) { this.tone('sine', 440 + (3 - n) * 40, 440 + (3 - n) * 40, 0.16, 0.16, 0, 0.005, true); },
+  go() { this.tone('square', 660, 660, 0.12, 0.07, 0, 0.005, true); this.tone('square', 990, 990, 0.26, 0.07, 0.1, 0.005, true); this.noise(0.3, 1800, 0.6, 0.06, 0, 'highpass', true); },
+  // "영~차!" in two quick vowels: a buzzing source pushed through two moving resonances
+  yeongcha(f0, vol, big) {
+    if (!this.ok() || this.voices >= 12) return;
+    try {
+      const c = this.ctx, t = c.currentTime, len = big ? 0.34 : 0.28;
+      const o = c.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f0 * 0.92, t); o.frequency.linearRampToValueAtTime(f0 * 0.86, t + 0.12); o.frequency.setValueAtTime(f0 * 1.12, t + 0.13); o.frequency.linearRampToValueAtTime(f0 * 1.3, t + len);
+      const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = 6; lg.gain.value = f0 * 0.012; lfo.connect(lg); lg.connect(o.frequency);
+      const out = c.createGain();
+      out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(vol, t + 0.02); out.gain.setValueAtTime(vol * 0.8, t + 0.1); out.gain.exponentialRampToValueAtTime(vol * 0.35, t + 0.125);
+      out.gain.exponentialRampToValueAtTime(vol, t + 0.15); out.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      const mk = (f1, f2, q, gv) => {
+        const b = c.createBiquadFilter(); b.type = 'bandpass'; b.Q.value = q;
+        b.frequency.setValueAtTime(f1, t); b.frequency.linearRampToValueAtTime(f1 * 0.95, t + 0.12); b.frequency.setValueAtTime(f2, t + 0.13); b.frequency.linearRampToValueAtTime(f2 * 1.05, t + len);
+        const g = c.createGain(); g.gain.value = gv; o.connect(b); b.connect(g); g.connect(out);
+      };
+      mk(580, 820, 7, 1.0); mk(1000, 1350, 8, 0.55); mk(2400, 2600, 9, 0.12);
+      out.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); lfo.start(t); o.stop(t + len + 0.05); lfo.stop(t + len + 0.05);
+      this.noise(0.05, 3600, 1.0, vol * 0.18, 0.12, 'bandpass', true);   // the "ch" of 차
+    } catch (e) { /* ignore */ }
+  },
+  hit(q, who) {
+    const rv = 1 + (Math.random() - 0.5) * 0.08;
+    if (q === 3) { this.tone('triangle', 780 * rv, 1040 * rv, 0.07, 0.07, 0, 0.003); this.noise(0.1, 1200, 0.9, 0.07); }
+    else if (q === 2) { this.tone('triangle', 640 * rv, 760 * rv, 0.07, 0.05, 0, 0.003); this.noise(0.09, 900, 0.9, 0.05); }
+    else if (q === 1) { this.noise(0.09, 700, 0.9, 0.05); this.tone('sine', 230, 160, 0.07, 0.05); }
+  },
+  stray() { this.noise(0.12, 420, 0.7, 0.07); this.tone('sine', 180, 100, 0.1, 0.06); },
+  tired() { this.tone('sine', 420, 190, 0.5, 0.09, 0, 0.01, true); this.noise(0.5, 900, 0.5, 0.05, 0.05, 'lowpass', true); },
+  recover() { this.tone('triangle', 520, 780, 0.12, 0.06, 0, 0.005, true); },
+  // the rope groans when it is pulled tight
+  creak(k) {
+    if (!this.ok() || this.voices >= 10) return;
+    try {
+      const c = this.ctx, t = c.currentTime, d = 0.22 + 0.15 * Math.random();
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(55 + Math.random() * 25, t); o.frequency.linearRampToValueAtTime(75 + Math.random() * 40, t + d);
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 11; f.frequency.setValueAtTime(650 + 250 * Math.random(), t); f.frequency.linearRampToValueAtTime(1100 + 500 * Math.random(), t + d);
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.03 + 0.05 * k, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(f); f.connect(g); g.connect(this.master); this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + d + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  sync(n, big) {
+    const base = 523 * Math.pow(2, Math.min(n, 12) / 12 * 0.5);
+    [0, 7].forEach((s, i) => { const f = base * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.16, big ? 0.1 : 0.07, i * 0.05, 0.005, true); });
+  },
+  warn() { [0, 5, 9].forEach((s, i) => { const f = 330 * Math.pow(2, s / 12); this.tone('square', f, f, 0.16, 0.05, i * 0.13, 0.005, true); }); },
+  strainGo() { this.noise(0.5, 300, 0.6, 0.18, 0, 'lowpass', true); this.tone('sawtooth', 110, 220, 0.5, 0.1, 0, 0.02, true); for (let i = 0; i < 6; i++) this.noise(0.05, 220, 0.8, 0.07, i * 0.05, 'bandpass', true); },
+  strainLoop(on, k) {   // a low grunt that grows with how many are holding
+    if (!this.ctx) return;
+    try {
+      if (!this.str && on) {
+        const c = this.ctx, o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 70;
+        const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420; f.Q.value = 3;
+        const g = c.createGain(); g.gain.value = 0; o.connect(f); f.connect(g); g.connect(this.master); o.start();
+        this.str = { o, f, g };
+      }
+      if (this.str) {
+        const T = this.ctx.currentTime;
+        this.str.g.gain.setTargetAtTime(on ? 0.02 + 0.07 * k : 0, T, 0.06);
+        this.str.o.frequency.setTargetAtTime(62 + 40 * k, T, 0.1);
+        this.str.f.frequency.setTargetAtTime(300 + 500 * k, T, 0.1);
+      }
+    } catch (e) { /* ignore */ }
+  },
+  mud() { this.noise(0.35, 380, 0.6, 0.2, 0, 'lowpass', true, 150); this.tone('sine', 220, 70, 0.25, 0.16, 0, 0.004, true); },
+  cheer() { this.noise(0.9, 1500, 0.6, 0.09, 0, 'bandpass', true, 2400); for (let i = 0; i < 5; i++) this.noise(0.04, 2800, 0.8, 0.05, 0.1 + i * 0.09, 'bandpass', true); [0, 4, 7].forEach((s, i) => { const f = 700 * Math.pow(2, s / 12); this.tone('triangle', f, f * 1.2, 0.18, 0.05, i * 0.07, 0.005, true); }); },
+  splash() { this.noise(0.6, 900, 0.5, 0.26, 0, 'lowpass', true, 250); this.tone('sine', 360, 70, 0.45, 0.22, 0, 0.004, true); this.tone('sine', 520, 140, 0.25, 0.1, 0.08, 0.004, true); },
+  sudden() { [0, -3, 0, -3].forEach((s, i) => { const f = 740 * Math.pow(2, s / 12); this.tone('square', f, f, 0.1, 0.05, i * 0.11, 0.005, true); }); },
+  win() { [0, 4, 7, 12, 7, 12, 16].forEach((s, i) => { const f = 659 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.2, 0.11, i * 0.09, 0.005, true); }); },
+  lose() { [0, -2, -4, -7].forEach((s, i) => { const f = 440 * Math.pow(2, s / 12); this.tone('triangle', f, f * 0.97, 0.26, 0.09, i * 0.16, 0.01, true); }); },
+  ui() { this.tone('sine', 880, 1100, 0.06, 0.08, 0, 0.005, true); },
+};
+
+function pathCircle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, TAU); }
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(0.01, rx), Math.max(0.01, ry), rot || 0, 0, TAU); }
+function stroked(c, w) { c.lineWidth = w; c.strokeStyle = INK; c.lineJoin = 'round'; c.lineCap = 'round'; c.stroke(); }
+function rrect(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+// one eye. side: -1 left, +1 right. expr: idle | push | wow | hit | happy | sad. R is the head radius.
+function drawEye(c, x, y, R, side, o, big) {
+  const e = o.expr, k = big || 1;
+  c.fillStyle = INK; c.strokeStyle = INK; c.lineCap = 'round'; c.lineJoin = 'round';
+  if (e === 'happy') {
+    c.lineWidth = Math.max(1.4, R * 0.085); c.beginPath(); c.arc(x, y + R * 0.07, R * 0.13 * k, Math.PI * 1.08, Math.PI * 1.92); c.stroke();
+  } else if (e === 'hit') {
+    c.lineWidth = Math.max(1.4, R * 0.085); c.beginPath();
+    c.moveTo(x - side * R * 0.12 * k, y - R * 0.11 * k); c.lineTo(x + side * R * 0.1 * k, y); c.lineTo(x - side * R * 0.12 * k, y + R * 0.11 * k); c.stroke();
+  } else if (o.blink) {
+    c.lineWidth = Math.max(1.4, R * 0.07); c.beginPath(); c.moveTo(x - R * 0.11 * k, y + R * 0.03); c.lineTo(x + R * 0.11 * k, y + R * 0.03); c.stroke();
+  } else {
+    const grow = e === 'wow' ? 1.3 : 1, rx = R * 0.1 * k * grow, ry = R * 0.125 * k * grow;
+    const ex = x + (o.lx || 0) * R * 0.04, ey = y + (o.ly || 0) * R * 0.03;
+    ell(c, ex, ey, rx, ry); c.fill();
+    c.fillStyle = '#fff'; pathCircle(c, ex - rx * 0.35, ey - ry * 0.4, Math.max(0.7, R * 0.036 * k * grow)); c.fill();
+    c.strokeStyle = INK; c.lineWidth = Math.max(1.3, R * 0.065);
+    if (e === 'push') { c.beginPath(); c.moveTo(x - side * R * 0.14 * k, y - R * 0.24 * k); c.lineTo(x + side * R * 0.13 * k, y - R * 0.3 * k); c.stroke(); }   // determined: the inner end (toward the nose) is the low one
+    else if (e === 'sad') { c.beginPath(); c.moveTo(x - side * R * 0.15 * k, y - R * 0.34 * k); c.lineTo(x + side * R * 0.14 * k, y - R * 0.2 * k); c.stroke(); }   // sad: inner end high
+    else if (e === 'wow') { c.beginPath(); c.arc(x, y - R * 0.3 * k, R * 0.13 * k, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+  }
+}
+function drawMouth(c, x, y, R, expr) {
+  c.strokeStyle = INK; c.fillStyle = INK; c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = Math.max(1.3, R * 0.065);
+  if (expr === 'happy') {
+    c.beginPath(); c.moveTo(x - R * 0.2, y); c.quadraticCurveTo(x, y + R * 0.08, x + R * 0.2, y); c.quadraticCurveTo(x + R * 0.18, y + R * 0.3, x, y + R * 0.3); c.quadraticCurveTo(x - R * 0.18, y + R * 0.3, x - R * 0.2, y); c.closePath();
+    c.fillStyle = '#6b1f33'; c.fill(); stroked(c, Math.max(1.3, R * 0.06));
+    c.save(); c.clip(); c.fillStyle = '#ff8fa8'; ell(c, x, y + R * 0.3, R * 0.12, R * 0.09); c.fill(); c.restore();
+  } else if (expr === 'sad') {
+    c.beginPath(); c.moveTo(x - R * 0.13, y + R * 0.1); c.quadraticCurveTo(x, y - R * 0.03, x + R * 0.13, y + R * 0.1); c.stroke();
+  } else if (expr === 'wow' || expr === 'hit') {
+    ell(c, x, y + R * 0.06, R * 0.075, R * (expr === 'hit' ? 0.07 : 0.1)); c.fill();
+  } else if (expr === 'push') {   // teeth together, little "ㅁ"
+    rrect(c, x - R * 0.12, y - R * 0.01, R * 0.24, R * 0.13, R * 0.04); c.fillStyle = '#fff'; c.fill(); stroked(c, Math.max(1.2, R * 0.055));
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + R * 0.12); c.lineWidth = Math.max(1, R * 0.04); c.stroke();
+  } else {   // idle: a little "w"
+    c.beginPath(); c.arc(x - R * 0.07, y, R * 0.07, 0.15, Math.PI - 0.15); c.stroke(); c.beginPath(); c.arc(x + R * 0.07, y, R * 0.07, 0.15, Math.PI - 0.15); c.stroke();
+  }
+}
+function blush(c, x, y, R, a) { c.fillStyle = 'rgba(255,110,130,' + (a || 0.45) + ')'; ell(c, x, y, R * 0.14, R * 0.085); c.fill(); }
+// kind 0 duck, 1 frog, 2 hippo, 3 panda.  o: { expr, lx, ly, blink }.  Head radius R, centred on (x, y).
+function drawHead(c, kind, x, y, R, o) {
+  c.save();
+  const lw = Math.max(1.4, R * 0.07);
+  if (kind === 0) {   // duck: yellow round head, tuft, orange beak
+    for (const sd of [-1, 0, 1]) { c.beginPath(); c.moveTo(x + sd * R * 0.12 - R * 0.1, y - R * 0.9); c.quadraticCurveTo(x + sd * R * 0.3, y - R * (1.35 - Math.abs(sd) * 0.15), x + sd * R * 0.12 + R * 0.12, y - R * 0.88); c.closePath(); c.fillStyle = '#ffd64a'; c.fill(); stroked(c, lw * 0.9); }
+    pathCircle(c, x, y, R); c.fillStyle = '#ffd64a'; c.fill();
+    c.save(); pathCircle(c, x, y, R); c.clip(); c.fillStyle = '#f4be2a'; pathCircle(c, x + R * 0.25, y + R * 0.4, R * 1.05); c.fill(); c.restore();
+    pathCircle(c, x, y, R); stroked(c, lw);
+    blush(c, x - R * 0.66, y + R * 0.18, R); blush(c, x + R * 0.66, y + R * 0.18, R);
+    drawEye(c, x - R * 0.38, y - R * 0.1, R, -1, o); drawEye(c, x + R * 0.38, y - R * 0.1, R, 1, o);
+    // beak: two halves, open for happy / wow
+    const open = o.expr === 'happy' ? 0.2 : o.expr === 'wow' || o.expr === 'hit' ? 0.17 : o.expr === 'push' ? 0.06 : 0;
+    ell(c, x, y + R * 0.4 + R * open * 0.5, R * 0.34, R * (0.14 + open * 0.55)); c.fillStyle = '#7a2d1f'; if (open > 0.05) { c.fill(); }
+    ell(c, x, y + R * 0.3, R * 0.36, R * 0.17); c.fillStyle = '#ff9a2e'; c.fill(); stroked(c, lw * 0.9);
+    if (open > 0.05) { ell(c, x, y + R * 0.38 + R * open, R * 0.3, R * 0.13); c.fillStyle = '#ff9a2e'; c.fill(); stroked(c, lw * 0.9); }
+    else { c.beginPath(); c.moveTo(x - R * 0.26, y + R * 0.33); c.quadraticCurveTo(x, y + R * 0.4, x + R * 0.26, y + R * 0.33); c.lineWidth = lw * 0.7; c.strokeStyle = INK; c.stroke(); }
+    ell(c, x - R * 0.12, y + R * 0.26, R * 0.04, R * 0.025); c.fillStyle = INK; c.fill(); ell(c, x + R * 0.12, y + R * 0.26, R * 0.04, R * 0.025); c.fill();
+  } else if (kind === 1) {   // frog: wide green head, eyes in bumps on top, wide mouth
+    for (const sd of [-1, 1]) {
+      pathCircle(c, x + sd * R * 0.52, y - R * 0.66, R * 0.34); c.fillStyle = '#7fe070'; c.fill(); stroked(c, lw);
+      pathCircle(c, x + sd * R * 0.52, y - R * 0.66, R * 0.24); c.fillStyle = '#fff'; c.fill();
+    }
+    ell(c, x, y, R * 1.06, R * 0.92); c.fillStyle = '#7fe070'; c.fill();
+    c.save(); ell(c, x, y, R * 1.06, R * 0.92); c.clip(); c.fillStyle = '#6acb5c'; pathCircle(c, x + R * 0.3, y + R * 0.5, R * 1.1); c.fill(); c.fillStyle = '#d8f7a8'; ell(c, x, y + R * 0.62, R * 0.7, R * 0.4); c.fill(); c.restore();
+    ell(c, x, y, R * 1.06, R * 0.92); stroked(c, lw);
+    // eyes sit inside the bumps
+    for (const sd of [-1, 1]) {
+      const ex = x + sd * R * 0.52, ey = y - R * 0.66, er = R * 0.24;
+      if (o.expr === 'happy') { c.lineWidth = lw * 1.1; c.beginPath(); c.arc(ex, ey + er * 0.35, er * 0.6, Math.PI * 1.1, Math.PI * 1.9); c.strokeStyle = INK; c.stroke(); }
+      else if (o.expr === 'hit') { c.lineWidth = lw; c.strokeStyle = INK; c.beginPath(); c.moveTo(ex - sd * er * 0.5, ey - er * 0.4); c.lineTo(ex + sd * er * 0.4, ey); c.lineTo(ex - sd * er * 0.5, ey + er * 0.4); c.stroke(); }
+      else if (o.blink) { c.lineWidth = lw; c.strokeStyle = INK; c.beginPath(); c.moveTo(ex - er * 0.55, ey + er * 0.1); c.lineTo(ex + er * 0.55, ey + er * 0.1); c.stroke(); }
+      else {
+        const pr = er * (o.expr === 'wow' ? 0.4 : 0.55);
+        pathCircle(c, ex + (o.lx || 0) * er * 0.15, ey + (o.ly || 0) * er * 0.15 + er * 0.05, pr); c.fillStyle = INK; c.fill();
+        pathCircle(c, ex + (o.lx || 0) * er * 0.15 - pr * 0.3, ey + (o.ly || 0) * er * 0.15 - pr * 0.2, pr * 0.3); c.fillStyle = '#fff'; c.fill();
+        if (o.expr === 'push') { c.strokeStyle = INK; c.lineWidth = lw; c.beginPath(); c.moveTo(ex - sd * er * 0.9, ey - er * 0.62); c.lineTo(ex + sd * er * 0.7, ey - er * 0.85); c.stroke(); }
+        else if (o.expr === 'sad') { c.strokeStyle = INK; c.lineWidth = lw; c.beginPath(); c.moveTo(ex - sd * er * 0.95, ey - er * 0.9); c.lineTo(ex + sd * er * 0.7, ey - er * 0.35); c.stroke(); }
+      }
+    }
+    blush(c, x - R * 0.7, y + R * 0.18, R); blush(c, x + R * 0.7, y + R * 0.18, R);
+    ell(c, x - R * 0.1, y - R * 0.05, R * 0.03, R * 0.02); c.fillStyle = INK; c.fill(); ell(c, x + R * 0.1, y - R * 0.05, R * 0.03, R * 0.02); c.fill();
+    // mouth
+    const ex2 = o.expr;
+    if (ex2 === 'happy') { c.beginPath(); c.moveTo(x - R * 0.45, y + R * 0.22); c.quadraticCurveTo(x, y + R * 0.78, x + R * 0.45, y + R * 0.22); c.closePath(); c.fillStyle = '#6b1f33'; c.fill(); stroked(c, lw); c.save(); c.clip(); c.fillStyle = '#ff8fa8'; ell(c, x, y + R * 0.62, R * 0.2, R * 0.12); c.fill(); c.restore(); }
+    else if (ex2 === 'wow' || ex2 === 'hit') { ell(c, x, y + R * 0.38, R * 0.12, R * 0.14); c.fillStyle = '#6b1f33'; c.fill(); stroked(c, lw * 0.9); }
+    else if (ex2 === 'sad') { c.beginPath(); c.moveTo(x - R * 0.32, y + R * 0.42); c.quadraticCurveTo(x, y + R * 0.28, x + R * 0.32, y + R * 0.42); c.lineWidth = lw; c.strokeStyle = INK; c.stroke(); }
+    else if (ex2 === 'push') { c.beginPath(); c.moveTo(x - R * 0.34, y + R * 0.34); c.lineTo(x + R * 0.34, y + R * 0.34); c.lineWidth = lw; c.strokeStyle = INK; c.stroke(); rrect(c, x - R * 0.14, y + R * 0.3, R * 0.28, R * 0.12, R * 0.03); c.fillStyle = '#fff'; c.fill(); stroked(c, lw * 0.7); }
+    else { c.beginPath(); c.moveTo(x - R * 0.4, y + R * 0.3); c.quadraticCurveTo(x, y + R * 0.55, x + R * 0.4, y + R * 0.3); c.lineWidth = lw; c.strokeStyle = INK; c.stroke(); }
+  } else if (kind === 2) {   // hippo: lilac-pink round head, small ears, big snout with nostrils
+    for (const sd of [-1, 1]) { pathCircle(c, x + sd * R * 0.66, y - R * 0.78, R * 0.22); c.fillStyle = '#f5a9d2'; c.fill(); stroked(c, lw); pathCircle(c, x + sd * R * 0.66, y - R * 0.78, R * 0.11); c.fillStyle = '#d97aae'; c.fill(); }
+    pathCircle(c, x, y, R); c.fillStyle = '#f5a9d2'; c.fill();
+    c.save(); pathCircle(c, x, y, R); c.clip(); c.fillStyle = '#eb92c2'; pathCircle(c, x + R * 0.25, y + R * 0.4, R * 1.05); c.fill(); c.restore();
+    pathCircle(c, x, y, R); stroked(c, lw);
+    ell(c, x, y + R * 0.42, R * 0.72, R * 0.5); c.fillStyle = '#ffd2ea'; c.fill(); stroked(c, lw * 0.9);
+    ell(c, x - R * 0.24, y + R * 0.3, R * 0.07, R * 0.05); c.fillStyle = '#b25b8c'; c.fill(); ell(c, x + R * 0.24, y + R * 0.3, R * 0.07, R * 0.05); c.fill();
+    drawEye(c, x - R * 0.44, y - R * 0.16, R, -1, o); drawEye(c, x + R * 0.44, y - R * 0.16, R, 1, o);
+    blush(c, x - R * 0.74, y + R * 0.05, R, 0.4); blush(c, x + R * 0.74, y + R * 0.05, R, 0.4);
+    drawMouth(c, x, y + R * 0.5, R * 0.9, o.expr);
+  } else {   // panda: white head, black ears and eye patches
+    for (const sd of [-1, 1]) { pathCircle(c, x + sd * R * 0.7, y - R * 0.74, R * 0.3); c.fillStyle = '#26303a'; c.fill(); stroked(c, lw * 0.8); }
+    pathCircle(c, x, y, R); c.fillStyle = '#fbfcfd'; c.fill();
+    c.save(); pathCircle(c, x, y, R); c.clip(); c.fillStyle = '#e3e9ee'; pathCircle(c, x + R * 0.25, y + R * 0.4, R * 1.05); c.fill(); c.restore();
+    pathCircle(c, x, y, R); stroked(c, lw);
+    for (const sd of [-1, 1]) { ell(c, x + sd * R * 0.4, y - R * 0.04, R * 0.24, R * 0.3, sd * 0.45); c.fillStyle = '#26303a'; c.fill(); }
+    // eyes sit on the patches: pale ring so the dark pupils read
+    for (const sd of [-1, 1]) {
+      const ex = x + sd * R * 0.4, ey = y - R * 0.05;
+      if (o.expr === 'happy') { c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, R * 0.085); c.beginPath(); c.arc(ex, ey + R * 0.06, R * 0.12, Math.PI * 1.08, Math.PI * 1.92); c.stroke(); }
+      else if (o.expr === 'hit') { c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, R * 0.08); c.beginPath(); c.moveTo(ex - sd * R * 0.12, ey - R * 0.1); c.lineTo(ex + sd * R * 0.1, ey); c.lineTo(ex - sd * R * 0.12, ey + R * 0.1); c.stroke(); }
+      else if (o.blink) { c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.4, R * 0.07); c.beginPath(); c.moveTo(ex - R * 0.1, ey + R * 0.03); c.lineTo(ex + R * 0.1, ey + R * 0.03); c.stroke(); }
+      else {
+        const gr = o.expr === 'wow' ? 1.25 : 1;
+        ell(c, ex + (o.lx || 0) * R * 0.03, ey + (o.ly || 0) * R * 0.03, R * 0.1 * gr, R * 0.12 * gr); c.fillStyle = '#fff'; c.fill();
+        pathCircle(c, ex + (o.lx || 0) * R * 0.04, ey + (o.ly || 0) * R * 0.04 + R * 0.01, R * 0.065 * gr); c.fillStyle = INK; c.fill();
+        pathCircle(c, ex - R * 0.03, ey - R * 0.03, R * 0.022 * gr); c.fillStyle = '#fff'; c.fill();
+        if (o.expr === 'sad') { c.strokeStyle = '#26303a'; c.lineWidth = Math.max(1.5, R * 0.075); c.beginPath(); c.moveTo(ex - sd * R * 0.2, ey - R * 0.48); c.lineTo(ex + sd * R * 0.17, ey - R * 0.3); c.stroke(); }
+        else if (o.expr === 'wow') { c.strokeStyle = '#26303a'; c.lineWidth = Math.max(1.5, R * 0.075); c.beginPath(); c.arc(ex, ey - R * 0.3, R * 0.14, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+      }
+    }
+    ell(c, x, y + R * 0.24, R * 0.13, R * 0.08); c.fillStyle = '#26303a'; c.fill();
+    blush(c, x - R * 0.7, y + R * 0.3, R, 0.5); blush(c, x + R * 0.7, y + R * 0.3, R, 0.5);
+    drawMouth(c, x, y + R * 0.42, R * 0.9, o.expr);
+  }
+  c.restore();
+}
+function drawTear(c, x, y, R, k) {
+  const ty = y + R * 0.1 + k * R * 0.4;
+  c.fillStyle = 'rgba(140,215,255,0.95)'; c.beginPath(); c.moveTo(x + R * 0.4, ty - R * 0.1); c.quadraticCurveTo(x + R * 0.5, ty + R * 0.08, x + R * 0.4, ty + R * 0.14); c.quadraticCurveTo(x + R * 0.3, ty + R * 0.08, x + R * 0.4, ty - R * 0.1); c.fill();
+}
+const BODY = ['#ffd64a', '#7fe070', '#f5a9d2', '#fbfcfd'], BODYD = ['#f4be2a', '#6acb5c', '#eb92c2', '#e3e9ee'], PAW = ['#ffd64a', '#7fe070', '#f5a9d2', '#26303a'];
+// bust for the pads and the title: head plus a little body below it
+function drawBust(c, kind, x, y, R, o) {
+  c.save();
+  const by = y + R * 1.2;
+  ell(c, x, by, R * 1.0, R * 0.85); c.fillStyle = BODY[kind]; c.fill(); stroked(c, Math.max(1.4, R * 0.07));
+  ell(c, x, by + R * 0.12, R * 0.55, R * 0.5); c.fillStyle = kind === 3 ? '#e3e9ee' : kind === 1 ? '#d8f7a8' : kind === 2 ? '#ffd2ea' : '#fff0a8'; c.fill();
+  c.restore();
+  drawHead(c, kind, x, y, R, o);
+  if (o.expr === 'sad' && o.tear) drawTear(c, x, y, R, o.tear);
+}
+
+// =====================================================================
+// STATE + LAYOUT
+// =====================================================================
+const cv = $('cv'), ctx = cv.getContext('2d');
+const el = {
+  hud: $('hud'), btnPause: $('btnPause'), btnMute: $('btnMute'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrOver: $('scrOver'),
+  mascot: $('mascot'), modeLine: $('modeLine'), bestLine: $('bestLine'), tBest: $('tBest'), keyHint: $('keyHint'),
+  btnSolo: $('btnSolo'), btnMulti: $('btnMulti'), btnS: [$('btnS1'), $('btnS2'), $('btnS3'), $('btnS4')], sm: [$('sm1'), $('sm2'), $('sm3'), $('sm4')],
+  rTitle: $('rTitle'), rBig: $('rBig'), rBigUnit: $('rBigUnit'), rBigBox: $('rBigBox'), rScoreBox: $('rScoreBox'), rSL: $('rSL'), rSR: $('rSR'),
+  rBadge: $('rBadge'), rLine: $('rLine'), rChain: $('rChain'), rSync: $('rSync'), rTime: $('rTime'), rBest: $('rBest'), rBestLine: $('rBestLine'), btnAgain: $('btnAgain'),
+};
+const S = {
+  view: 'title',           // 'title' | 'play'
+  mode: store.get(KEY_MODE, 'solo') === 'multi' ? 'multi' : 'solo',
+  size: clamp(parseInt(store.get(KEY_SIZE, '1'), 10) || 1, 1, 4),
+  G: null, demo: null, bots: [], demoBots: [], paused: false, clock: 0, acc: 0, tickAt: 0, matchN: 0,
+  level: 0, streak: 0, best: readBest(), newRecord: false, overT: 0, resultShown: false, series: [0, 0], lastWinner: -1, resultInfo: null,
+  mv: [[], []], parts: [], pops: [], floats: [], banner: null, shake: 0, flash: 0, padFlash: [], kb: false,
+  hintRuns: parseInt(store.get(KEY_HINT, '0'), 10) || 0, perf: { ms: 0, max: 0, frames: 0 }, coach: '', creakAt: 0, ycAt: [-9, -9], strainShow: null,
+  downs: {}, endT: 0, endSplash: false, tapsSeen: 0, tireHint: false, lvInfo: null, stripe: 0, holdK: 0, pressed: [], pairs: [],
+};
+const LAY = { W: 0, H: 0, dpr: 1, port: false, pads: [], zones: [], top: 0, padTop: 0 };
+const DPR_STEPS = [2, 1.5, 1];   // the resolution steps down by itself when frames take too long (low-end phones)
+let dprStep = 0;
+
+function curG() { return S.G || S.demo; }
+function mvOf(ti, mi) { const a = S.mv[ti]; return a[mi] || (a[mi] = { expr: 'idle', until: 0, pull: 0, lean: 0, sweat: 0, blink: 0, tear: 0, look: 0 }); }
+function setExpr(ti, mi, name, dur) { const m = mvOf(ti, mi); m.expr = name; m.until = S.clock + dur; }
+
+// pad (visual slot) order on screen, left to right. Member 0 is the front puller (nearest the middle), so a left team's pads run from its
+// last member to its first, and a right team's from its first to its last.
+function slotMember(ti, slot, n) { return ti === 0 ? n - 1 - slot : slot; }
+function memberSlot(ti, mi, n) { return ti === 0 ? n - 1 - mi : mi; }
+function humanPads() {   // [{ti, mi}] in screen order for the current game setup
+  const G = curG(), out = [];
+  if (!G) return out;
+  if (G.solo) { out.push({ ti: 0, mi: 0 }); return out; }
+  for (let ti = 0; ti < 2; ti++) for (let s = 0; s < G.teams[ti].n; s++) out.push({ ti, mi: slotMember(ti, s, G.teams[ti].n) });
+  return out;
+}
+
+function layout() {
+  const cs = getComputedStyle($('probe'));
+  const sat = parseFloat(cs.paddingTop) || 0, sab = parseFloat(cs.paddingBottom) || 0, sal = parseFloat(cs.paddingLeft) || 0, sar = parseFloat(cs.paddingRight) || 0;
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, DPR_STEPS[dprStep]);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const port = H > W * 1.05;
+  const G = curG(), n = G ? G.teams[0].n : S.size, solo = G ? G.solo : S.mode === 'solo';
+  const top = sat + 56;
+  const padH = port ? clamp(Math.round(H * 0.27), 150, 250) : clamp(Math.round(H * 0.3), 84, 140);
+  const padTop = H - sab - padH - 6;
+  Object.assign(LAY, { W, H, dpr, port, sat, sab, sal, sar, top, padH, padTop, n, solo });
+  const place = (nd, x, y) => { nd.style.left = Math.round(x) + 'px'; nd.style.top = Math.round(y) + 'px'; };
+  place(el.btnPause, sal + 8, sat + 6); place(el.btnMute, W - sar - 54, sat + 6);
+  // ---- pads (visual) and touch zones ----
+  const pads = [], zones = [], gap = 8, m = 8;
+  const pushPad = (ti, mi, x, y, w, h) => pads.push({ ti, mi, x, y, w, h, key: -1 });
+  if (solo) {
+    if (port) pushPad(0, 0, sal + m, padTop, W - sal - sar - 2 * m, padH);
+    else { const pw = Math.min(W * 0.46, 360); pushPad(0, 0, sal + m, padTop, pw, padH); }
+    zones.push({ x0: 0, x1: W, y0: top, y1: H });
+  } else {
+    for (let ti = 0; ti < 2; ti++) {
+      const mem = []; for (let s = 0; s < n; s++) mem.push(slotMember(ti, s, n));
+      const x0 = ti === 0 ? sal + m : W / 2 + gap / 2, x1 = ti === 0 ? W / 2 - gap / 2 : W - sar - m;
+      if (port && n >= 3) {
+        const rows = 2, ph = (padH - 6 - gap) / rows, cw = (x1 - x0 - gap) / 2;
+        for (let s = 0; s < n; s++) {
+          const r = Math.floor(s / 2), cI = s % 2, last = n === 3 && s === 2;
+          const px = last ? x0 : x0 + cI * (cw + gap), pw = last ? x1 - x0 : cw;
+          pushPad(ti, mem[s], px, padTop + r * (ph + gap), pw, ph);
+        }
+      } else if (port) {
+        const pw = (x1 - x0 - (n - 1) * gap) / n;
+        for (let s = 0; s < n; s++) pushPad(ti, mem[s], x0 + s * (pw + gap), padTop, pw, padH);
+      } else {
+        const pw = Math.min(150, Math.floor(((W * 0.5 - 24 - sal - m) - (n - 1) * gap) / n));
+        for (let s = 0; s < n; s++) {
+          const px = ti === 0 ? sal + m + s * (pw + gap) : W - sar - m - (n - s) * pw - (n - 1 - s) * gap;
+          pushPad(ti, mem[s], px, padTop, pw, padH);
+        }
+      }
+    }
+    // touch zones tile the screen: left half for team 0, right half for team 1
+    for (let ti = 0; ti < 2; ti++) {
+      const ps = pads.filter((p) => p.ti === ti).sort((a, b) => a.x - b.x || a.y - b.y);
+      const lo = ti === 0 ? 0 : W / 2, hi = ti === 0 ? W / 2 : W;
+      if (port && n >= 3) {
+        const midY = padTop + (padH - 6 - gap) / 2 + gap / 2 + 3;
+        const cols = [lo, (lo + hi) / 2, hi];
+        ps.forEach((p, k) => {
+          const r = Math.floor(k / 2), cI = k % 2, last = n === 3 && k === 2;
+          zones.push({ x0: last ? lo : cols[cI], x1: last ? hi : cols[cI + 1], y0: r === 0 ? top : midY, y1: r === 0 ? midY : H, ti, mi: p.mi });
+        });
+      } else {
+        const xs = ps.map((p) => p.x + p.w / 2);
+        ps.forEach((p, k) => zones.push({ x0: k === 0 ? lo : (xs[k - 1] + xs[k]) / 2, x1: k === ps.length - 1 ? hi : (xs[k] + xs[k + 1]) / 2, y0: top, y1: H, ti, mi: p.mi }));
+      }
+    }
+  }
+  pads.forEach((p, i) => { p.i = i; });
+  if (solo) zones[0].ti = 0, zones[0].mi = 0;
+  LAY.pads = pads; LAY.zones = zones;
+  // ---- scene geometry ----
+  const sceneB = padTop - 4, sceneH = sceneB - top;
+  const wr = [0, 0.08, 0.062, 0.05, 0.038][clamp(n, 1, 4)];
+  const Rh = Math.max(9, Math.min(W * wr, sceneH / (port ? 8.6 : 8.1)));
+  const gy = port ? top + sceneH * 0.72 : sceneB - Math.max(10, Rh * 0.55);
+  Object.assign(LAY, {
+    sceneB, sceneH, Rh, gy, cx: W / 2, fb: W * 0.12 + (n === 1 ? W * 0.012 : 0), D: W * 0.085, pud: W * 0.07, step: Rh * 2.05, ropeY: gy - Rh * 1.12,
+  });
+  buildSpectators();
+}
+let specSeed = 7;
+function buildSpectators() {
+  const r = mulberry32(specSeed), out = [], W = LAY.W, rows = LAY.port ? 2 : 1, per = W > 700 ? 12 : W > 500 ? 10 : 7;
+  for (let row = 0; row < rows; row++) for (let i = 0; i < per; i++) {
+    const side = (i + 0.5) / per < 0.5 ? 0 : 1;
+    out.push({ u: (i + 0.5 + (r() - 0.5) * 0.5) / per, row, kind: (r() * 4) | 0, hue: (r() * 6) | 0, ph: r() * 6.28, side });
+  }
+  S.spec = out;
+}
+function padAt(x, y) {
+  for (let i = LAY.zones.length - 1; i >= 0; i--) { const z = LAY.zones[i]; if (x >= z.x0 && x < z.x1 && y >= z.y0 && y < z.y1) return z; }
+  return null;
+}
+
+// =====================================================================
+// RENDER: the field
+// =====================================================================
+function outlineText(c, text, x, y, size, fill, stroke, font) {
+  c.font = size + 'px ' + (font || FONT_D); c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineJoin = 'round'; c.lineWidth = Math.max(3, size * 0.22); c.strokeStyle = stroke || INK; c.strokeText(text, x, y);
+  c.fillStyle = fill || PAPER; c.fillText(text, x, y);
+}
+function polyline(c, pts) { c.beginPath(); pts.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); }
+function heartPath(c, x, y, r) {
+  c.beginPath(); c.moveTo(x, y + r * 0.9);
+  c.bezierCurveTo(x - r * 1.5, y - r * 0.1, x - r * 0.8, y - r * 1.1, x, y - r * 0.4);
+  c.bezierCurveTo(x + r * 0.8, y - r * 1.1, x + r * 1.5, y - r * 0.1, x, y + r * 0.9); c.closePath();
+}
+function tree(c, x, y, r, col1, col2) {
+  c.fillStyle = '#7a5230'; c.fillRect(x - r * 0.12, y - r * 0.2, r * 0.24, r * 0.75);
+  pathCircle(c, x, y - r * 0.55, r * 0.62); c.fillStyle = col1; c.fill();
+  pathCircle(c, x - r * 0.38, y - r * 0.2, r * 0.45); c.fillStyle = col2; c.fill();
+  pathCircle(c, x + r * 0.4, y - r * 0.25, r * 0.42); c.fill();
+}
+function cloud(c, x, y, s) {
+  c.fillStyle = 'rgba(255,255,255,0.92)';
+  for (const [dx, dy, r] of [[-0.9, 0.1, 0.55], [-0.3, -0.25, 0.7], [0.4, -0.1, 0.62], [1.0, 0.12, 0.48]]) { pathCircle(c, x + dx * s, y + dy * s, r * s); c.fill(); }
+  c.fillRect(x - 0.9 * s, y + 0.1 * s, 1.9 * s, 0.5 * s);
+}
+const baseCache = { cv: null, key: '' };
+function renderBackdrop(c, t, shift) {
+  const W = LAY.W, H = LAY.H, Rh = LAY.Rh, gy = LAY.gy, cx = LAY.cx;
+  const hz = gy - Rh * 0.85;   // where the grass starts
+  // the sky and the grass never change: keep them as one picture and blit it
+  const key = W + 'x' + H + ':' + LAY.dpr + ':' + Math.round(hz) + ':' + Math.round(gy) + ':' + Math.round(Rh * 10);
+  if (!baseCache.cv || baseCache.key !== key) {
+    const oc = baseCache.cv || document.createElement('canvas'); oc.width = Math.round(W * LAY.dpr); oc.height = Math.round(H * LAY.dpr);
+    const o = oc.getContext('2d'); o.setTransform(LAY.dpr, 0, 0, LAY.dpr, 0, 0);
+    const sg = o.createLinearGradient(0, 0, 0, hz); sg.addColorStop(0, '#7cc8ff'); sg.addColorStop(1, '#d8f1ff'); o.fillStyle = sg; o.fillRect(0, 0, W, hz + 2);
+    const gg = o.createLinearGradient(0, hz, 0, H); gg.addColorStop(0, '#79cf5a'); gg.addColorStop(1, '#58b246'); o.fillStyle = gg; o.fillRect(0, hz, W, H - hz);
+    o.fillStyle = 'rgba(40,120,50,0.18)';
+    for (let k = 0; k < 6; k++) { const yy = hz + (gy - hz) * 0.15 + k * Rh * 0.55; o.fillRect(0, yy, W, Rh * 0.2); }
+    baseCache.cv = oc; baseCache.key = key;
+  }
+  c.drawImage(baseCache.cv, 0, 0, W, H);
+  // sun
+  const sx = LAY.port ? W * 0.82 : W * 0.5, sy = LAY.top + Math.max(Rh * 1.4, 40);
+  pathCircle(c, sx, sy, Math.max(16, Rh * 0.9)); c.fillStyle = 'rgba(255,240,170,0.95)'; c.fill();
+  pathCircle(c, sx, sy, Math.max(26, Rh * 1.5)); c.fillStyle = 'rgba(255,240,170,0.25)'; c.fill();
+  // clouds drift slowly
+  const cs = Math.max(14, Rh * 0.8), cd = reduceMotion ? 0 : (t * 4) % (W + cs * 8);
+  cloud(c, ((W * 0.12 + cd) % (W + cs * 6)) - cs * 3, LAY.top + cs * 1.6, cs);
+  cloud(c, ((W * 0.62 + cd * 0.7) % (W + cs * 6)) - cs * 3, LAY.top + cs * 2.6 + (LAY.port ? cs * 1.5 : 0), cs * 0.8);
+  // far hills (move a little with the rope: parallax)
+  const hp = shift * 0.12;
+  c.fillStyle = '#a5dba0';
+  c.beginPath(); c.moveTo(0, hz);
+  for (let x = 0; x <= W + 20; x += 20) c.lineTo(x, hz - Rh * (1.3 + 0.55 * Math.sin((x + hp) * 0.011) + 0.3 * Math.sin((x + hp) * 0.027 + 1)));
+  c.lineTo(W, hz); c.closePath(); c.fill();
+  c.fillStyle = '#82c987';
+  c.beginPath(); c.moveTo(0, hz);
+  for (let x = 0; x <= W + 20; x += 20) c.lineTo(x, hz - Rh * (0.55 + 0.35 * Math.sin((x + hp * 1.6) * 0.017 + 2) + 0.2 * Math.sin((x + hp * 1.6) * 0.04)));
+  c.lineTo(W, hz); c.closePath(); c.fill();
+  // trees on the hill
+  const tr = Math.max(10, Rh * 0.85);
+  for (let i = 0; i < 9; i++) {
+    const x = ((i * 0.139 + 0.04) * (W + 60) + hp * 1.4) % (W + 60) - 20;
+    tree(c, x, hz - Rh * 0.28, tr * (0.8 + 0.35 * ((i * 37) % 5) / 5), i % 3 === 0 ? '#3f9f4a' : '#4fae55', i % 2 ? '#5bbd5f' : '#46a64f');
+  }
+  // grass tufts slide with the rope so the pulling can be felt
+  c.strokeStyle = 'rgba(30,110,45,0.55)'; c.lineWidth = Math.max(1.4, Rh * 0.07); c.lineCap = 'round';
+  for (let i = 0; i < 26; i++) {
+    const rx = ((i * 97 + (i % 3) * 41) % 100) / 100, ry = ((i * 53 + 17) % 100) / 100;
+    const x = ((rx * (W + 80) + shift * (0.6 + ry * 0.7)) % (W + 80) + (W + 80)) % (W + 80) - 40, y = gy + Rh * 0.3 + ry * (H - gy - Rh * 0.6) * 0.9;
+    if (y > LAY.sceneB + 6 && y > H) continue;
+    c.beginPath(); c.moveTo(x - Rh * 0.12, y); c.lineTo(x - Rh * 0.2, y - Rh * 0.28); c.moveTo(x, y); c.lineTo(x, y - Rh * 0.36); c.moveTo(x + Rh * 0.12, y); c.lineTo(x + Rh * 0.2, y - Rh * 0.28); c.stroke();
+  }
+  return hz;
+}
+// the cheering critters on the bank behind the teams
+function renderSpectators(c, G, t, hz) {
+  const W = LAY.W, Rh = LAY.Rh, r = Math.max(5, Rh * 0.46);
+  const ridge = LAY.port ? 0 : 0;
+  c.fillStyle = '#6cbf6b';
+  const by = hz - Rh * 0.5;
+  for (const s of S.spec) {
+    const x = s.u * W, row = s.row;
+    const baseY = by - (LAY.port ? row * r * 1.9 : 0) - r * 0.2 + (LAY.port ? 0 : 0);
+    const side = s.side;
+    const T = G ? G.teams[side] : null;
+    const hype = T ? (T.cheerT > 0 ? 1 : Math.min(1, T.chain / 8)) : 0;
+    const winner = G && G.phase === 'over' ? (G.winner === side ? 1 : -1) : 0;
+    let jump = 0;
+    if (!reduceMotion) {
+      const beatPh = G && G.phase === 'play' ? Math.max(0, 1 - ((G.t + S.acc) - (G.lastBeatT || 0)) * 3.2) : 0;
+      jump = (Math.abs(Math.sin(t * (5 + hype * 3) + s.ph)) * (0.25 + 0.9 * hype) + beatPh * 0.35) * r * (winner < 0 ? 0.1 : 1);
+      if (winner > 0) jump = Math.abs(Math.sin(t * 8 + s.ph)) * r * 1.3;
+    }
+    const y = baseY - jump;
+    const palette = [['#ffe6a0', '#d9b24f'], ['#ffd0e0', '#d98aa8'], ['#d8e4ff', '#8ea6d8'], ['#e9ffd0', '#9bc86a'], ['#fff', '#cfd6dd'], ['#ffc9a0', '#d98e57']][s.hue];
+    // ears
+    c.fillStyle = palette[0]; c.strokeStyle = INK; c.lineWidth = Math.max(1, r * 0.12);
+    if (s.kind === 0) { for (const sd of [-1, 1]) { ell(c, x + sd * r * 0.5, y - r * 1.15, r * 0.2, r * 0.55, sd * 0.15); c.fill(); c.stroke(); } }
+    else if (s.kind === 1) { for (const sd of [-1, 1]) { pathCircle(c, x + sd * r * 0.65, y - r * 0.8, r * 0.27); c.fill(); c.stroke(); } }
+    else if (s.kind === 2) { for (const sd of [-1, 1]) { c.beginPath(); c.moveTo(x + sd * r * 0.2, y - r * 0.85); c.lineTo(x + sd * r * 0.75, y - r * 0.8); c.lineTo(x + sd * r * 0.55, y - r * 1.35); c.closePath(); c.fill(); c.stroke(); } }
+    pathCircle(c, x, y, r); c.fillStyle = palette[0]; c.fill(); c.lineWidth = Math.max(1, r * 0.12); c.stroke();
+    // eyes + mouth
+    c.fillStyle = INK; pathCircle(c, x - r * 0.35, y - r * 0.1, r * 0.1); c.fill(); pathCircle(c, x + r * 0.35, y - r * 0.1, r * 0.1); c.fill();
+    c.strokeStyle = INK; c.lineWidth = Math.max(1, r * 0.1);
+    if (winner < 0) { c.beginPath(); c.arc(x, y + r * 0.5, r * 0.18, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); }
+    else { c.beginPath(); c.arc(x, y + r * 0.2, r * 0.22, 0.15, Math.PI - 0.15); c.stroke(); }
+    // pompoms in the team colour, waved up and down
+    const wave = reduceMotion ? 0 : Math.sin(t * 6 + s.ph);
+    for (const sd of [-1, 1]) {
+      const px = x + sd * r * 1.0, py = y - r * (0.7 + 0.5 * (sd > 0 ? wave : -wave) * (winner < 0 ? 0.2 : 1)) - (winner > 0 ? r * 0.4 : 0);
+      c.strokeStyle = INK; c.lineWidth = Math.max(1, r * 0.1); c.beginPath(); c.moveTo(x + sd * r * 0.7, y + r * 0.35); c.lineTo(px, py + r * 0.15); c.stroke();
+      pathCircle(c, px, py, r * 0.3); c.fillStyle = TCOL[side]; c.fill(); c.lineWidth = Math.max(1, r * 0.1); c.stroke();
+    }
+  }
+}
+function renderPuddle(c, G, t) {
+  const cx = LAY.cx, gy = LAY.gy, Rh = LAY.Rh, rx = LAY.pud, ry = Rh * 0.62, py = gy + Rh * 0.08;
+  ell(c, cx, py + Rh * 0.1, rx * 1.12, ry * 1.18); c.fillStyle = '#a7743f'; c.fill();                   // trampled rim
+  ell(c, cx, py, rx, ry); const g = c.createLinearGradient(0, py - ry, 0, py + ry); g.addColorStop(0, '#8c5a34'); g.addColorStop(1, '#6b3f22'); c.fillStyle = g; c.fill();
+  c.lineWidth = Math.max(2, Rh * 0.08); c.strokeStyle = 'rgba(60,34,18,0.8)'; c.stroke();
+  // ripples + bubbles
+  c.strokeStyle = 'rgba(255,225,185,0.35)'; c.lineWidth = Math.max(1, Rh * 0.05);
+  const ph = reduceMotion ? 0.3 : (t * 0.5) % 1;
+  for (let k = 0; k < 2; k++) { const q = (ph + k * 0.5) % 1; ell(c, cx + Math.sin(k * 3 + 1) * rx * 0.25, py + ry * 0.08, rx * (0.2 + 0.55 * q), ry * (0.2 + 0.55 * q)); c.globalAlpha = 0.7 * (1 - q); c.stroke(); }
+  c.globalAlpha = 1;
+  if (!reduceMotion) for (let k = 0; k < 3; k++) {
+    const q = (t * 0.55 + k * 0.37) % 1, bx = cx + (k - 1) * rx * 0.45 + Math.sin(t + k) * 3, by = py + ry * 0.3 - q * ry * 0.9, br = Rh * 0.1 * (0.5 + q);
+    pathCircle(c, bx, by, br); c.fillStyle = 'rgba(255,225,185,' + (0.5 * (1 - q)) + ')'; c.fill();
+  }
+}
+// the two finish poles: the flag reaching a pole makes that pole's team the winner
+function renderPoles(c, G, t) {
+  const gy = LAY.gy, Rh = LAY.Rh, cx = LAY.cx, th = G ? threshold(G) : 1;
+  for (let ti = 0; ti < 2; ti++) {
+    const px = cx + (ti === 0 ? -1 : 1) * LAY.D * th, dir = ti === 0 ? 1 : -1;
+    // line on the ground
+    c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = Math.max(2, Rh * 0.1); c.setLineDash([Rh * 0.28, Rh * 0.2]);
+    c.beginPath(); c.moveTo(px, gy - Rh * 0.65); c.lineTo(px, LAY.sceneB + Rh * 0.2); c.stroke(); c.setLineDash([]);
+    // pole + pennant
+    const ph = Rh * 4.7;
+    c.strokeStyle = INK; c.lineWidth = Math.max(2.4, Rh * 0.12); c.lineCap = 'round'; c.beginPath(); c.moveTo(px, gy + Rh * 0.1); c.lineTo(px, gy - ph); c.stroke();
+    const w = Rh * 0.95, wv = reduceMotion ? 0 : Math.sin(t * 4 + ti) * Rh * 0.08;
+    c.beginPath(); c.moveTo(px, gy - ph); c.quadraticCurveTo(px + dir * w * 0.5, gy - ph + Rh * 0.08 + wv, px + dir * w, gy - ph + Rh * 0.32); c.quadraticCurveTo(px + dir * w * 0.5, gy - ph + Rh * 0.55 - wv, px, gy - ph + Rh * 0.62); c.closePath();
+    c.fillStyle = TCOL[ti]; c.fill(); stroked(c, Math.max(1.6, Rh * 0.07));
+  }
+}
+
+// ---- one animal on the rope. Front view; the rope runs across its belly and both paws hold it. ----
+// o: { x, gy, Rh, kind, team, dir (+1 looks right), lean (rad, tilt away from the middle), expr, jump, sx, sy, ropeY, up (arms raised), blink, rot, mud, tear, sweat, look }
+function drawAnimal(c, o) {
+  const Rh = o.Rh, x = o.x, gy = o.gy - (o.jump || 0), tc = TCOL[o.team], td = TDEEP[o.team], lw = Math.max(1.4, Rh * 0.08);
+  const rot = (o.lean || 0) + (o.rot || 0), cs = Math.cos(rot), sn = Math.sin(rot), sx = o.sx || 1, sy = o.sy || 1;
+  const L = (px, py) => [x + (px * sx) * cs - (py * sy) * sn, gy + (px * sx) * sn + (py * sy) * cs];   // local (feet at 0,0) -> screen
+  // shadow
+  if (!o.noShadow) { c.fillStyle = 'rgba(30,70,30,0.28)'; ell(c, x, o.gy + Rh * 0.06, Rh * (1.0 - Math.min(0.4, (o.jump || 0) / (Rh * 4))), Rh * 0.22); c.fill(); }
+  c.save(); c.translate(x, gy); c.rotate(rot); c.scale(sx, sy);
+  // feet
+  for (const sd of [-1, 1]) { ell(c, sd * Rh * 0.46, -Rh * 0.12, Rh * 0.4, Rh * 0.2); c.fillStyle = td; c.fill(); stroked(c, lw); }
+  // torso (the team jersey)
+  ell(c, 0, -Rh * 1.35, Rh * 0.98, Rh * 1.12); c.fillStyle = tc; c.fill();
+  c.save(); ell(c, 0, -Rh * 1.35, Rh * 0.98, Rh * 1.12); c.clip(); c.fillStyle = td; ell(c, Rh * 0.3, -Rh * 0.7, Rh * 1.1, Rh * 0.95); c.fill();
+  c.fillStyle = TLIGHT[o.team]; c.fillRect(-Rh * 1.2, -Rh * 1.85, Rh * 2.4, Rh * 0.28); c.restore();   // a stripe across the chest
+  ell(c, 0, -Rh * 1.35, Rh * 0.98, Rh * 1.12); stroked(c, lw);
+  c.restore();
+  // arms: sleeves from the shoulders down to the paws (drawn in screen space so the paws land exactly on the rope)
+  const hy = o.up ? null : o.ropeY;
+  const hands = [];
+  for (const sd of [-1, 1]) {
+    const sh = L(sd * Rh * 0.78, -Rh * 1.95);
+    const hxy = o.up ? L(sd * Rh * 1.25, -Rh * 3.0 - (o.upWave ? Math.sin(o.upWave + sd) * Rh * 0.15 : 0)) : [x + sd * Rh * 0.98 + (o.hdx || 0), hy + (o.hdy || 0)];
+    hands.push(hxy);
+    c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = Rh * 0.5 + lw * 2; c.beginPath(); c.moveTo(sh[0], sh[1]); c.lineTo(hxy[0], hxy[1]); c.stroke();
+    c.strokeStyle = tc; c.lineWidth = Rh * 0.5; c.beginPath(); c.moveTo(sh[0], sh[1]); c.lineTo(hxy[0], hxy[1]); c.stroke();
+  }
+  // head
+  c.save(); c.translate(x, gy); c.rotate(rot); c.scale(sx, sy);
+  const hdY = -Rh * 2.95;
+  drawHead(c, o.kind, 0, hdY, Rh, { expr: o.expr || 'idle', lx: (o.look || 0) + o.dir * 0.8, ly: 0.2, blink: !!o.blink });
+  if (o.mud) {   // mud on the face
+    c.fillStyle = 'rgba(110,66,34,0.92)';
+    pathCircle(c, -Rh * 0.42, hdY - Rh * 0.55, Rh * 0.2); c.fill(); pathCircle(c, Rh * 0.5, hdY + Rh * 0.2, Rh * 0.26); c.fill(); pathCircle(c, -Rh * 0.12, hdY + Rh * 0.66, Rh * 0.18); c.fill(); pathCircle(c, Rh * 0.12, hdY - Rh * 0.72, Rh * 0.13); c.fill();
+  }
+  if (o.expr === 'sad' && o.tear) drawTear(c, 0, hdY, Rh, o.tear);
+  c.restore();
+  return hands;   // the caller draws the paws after the rope
+}
+function drawPaw(c, x, y, Rh, kind) {
+  pathCircle(c, x, y, Rh * 0.3); c.fillStyle = PAW[kind]; c.fill(); stroked(c, Math.max(1.4, Rh * 0.08));
+}
+function drawSweat(c, x, y, Rh, t) {
+  const k = (t * 1.6) % 1;
+  for (const sd of [-1, 1]) {
+    const yy = y + k * Rh * 0.9, xx = x + sd * Rh * (0.85 + 0.25 * k);
+    c.fillStyle = 'rgba(150,215,255,' + (0.95 - 0.7 * k) + ')';
+    c.beginPath(); c.moveTo(xx, yy - Rh * 0.22); c.quadraticCurveTo(xx + Rh * 0.16, yy + Rh * 0.02, xx, yy + Rh * 0.12); c.quadraticCurveTo(xx - Rh * 0.16, yy + Rh * 0.02, xx, yy - Rh * 0.22); c.fill();
+  }
+}
+function staminaColor(m) { return m.tired ? '#9aa6a0' : m.st > 55 ? '#6fe08a' : m.st > 28 ? '#ffd24a' : '#ff7a5a'; }
+function drawStaminaBar(c, x, y, w, h, m) {
+  rrect(c, x - w / 2, y, w, h, h / 2); c.fillStyle = 'rgba(10,30,18,0.7)'; c.fill();
+  const k = clamp(m.st / 100, 0, 1);
+  if (k > 0.02) { rrect(c, x - w / 2 + 1, y + 1, Math.max(h - 2, (w - 2) * k), h - 2, (h - 2) / 2); c.fillStyle = staminaColor(m); c.fill(); }
+  rrect(c, x - w / 2, y, w, h, h / 2); c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 1; c.stroke();
+}
+
+function exprOf(G, ti, mi) {
+  const mv = mvOf(ti, mi), T = G.teams[ti], m = T.mem[mi];
+  if (G.phase === 'over') return G.winner === ti ? 'happy' : (S.endT > 0.45 + mi * 0.12 ? 'sad' : 'wow');
+  if (mv.until > S.clock) return mv.expr;
+  if (G.cd > 0) return 'idle';
+  if (m.tired) return 'sad';
+  if (G.sm === 'strain' && m.held) return 'push';
+  const dragged = (ti === 0 ? G.x : -G.x);   // > 0: this team is being pulled toward the middle
+  if (dragged > 0.62) return 'wow';
+  if (mv.pull > 0.35 || G.tension > 0.55) return 'push';
+  return 'idle';
+}
+// where the loser lands in the puddle (a little spread out)
+function puddleSpot(ti, mi, n) {
+  const k = mi - (n - 1) / 2;
+  return LAY.cx + clamp(k * LAY.Rh * 0.85 + (ti === 0 ? -1 : 1) * LAY.Rh * 0.15, -LAY.pud * 0.72, LAY.pud * 0.72);
+}
+function renderTeams(c, G, t) {
+  const L = LAY, Rh = L.Rh, gy = L.gy, cx = L.cx, over = G.phase === 'over', et = over ? S.endT : 0;
+  const extra = over ? (G.winner === 0 ? -1 : 1) * L.D * 0.4 * smooth(et / 0.5) : 0;
+  const shift = G.x * L.D + extra;
+  const drop = over ? smooth((et - 0.5) / 0.5) : 0;                            // the rope falls to the ground
+  const ropeY = lerp(L.ropeY, gy - Rh * 0.1, drop);
+  const tension = G.cd > 0 ? 0.15 : G.tension;
+  const front = [0, 0], backX = [0, 0], inner = [0, 0];
+  const bodies = [];
+  for (let ti = 0; ti < 2; ti++) {
+    const T = G.teams[ti], n = T.n, side = ti === 0 ? -1 : 1;
+    const winTeam = over && G.winner === ti, loseTeam = over && G.winner !== ti;
+    for (let mi = n - 1; mi >= 0; mi--) {
+      const mv = mvOf(ti, mi), m = T.mem[mi];
+      let x = cx + side * (L.fb + mi * L.step) + shift, jump = 0, rot = 0, sx = 1, sy = 1, up = false, mud = T.mudT > 0, tear = 0, y0 = gy;
+      let pull = mv.pull;
+      const strainShake = G.sm === 'strain' && m.held && !reduceMotion ? Math.sin(t * 38 + mi * 2 + ti) * Rh * 0.035 : 0;
+      let leanAmt = 0.08 + 0.2 * tension + 0.16 * pull + (G.sm === 'strain' && m.held ? 0.1 : 0) + (m.tired ? 0.05 : 0);
+      if (G.cd > 0) leanAmt = 0.06 + 0.04 * Math.sin(t * 2 + mi);
+      let lean = side * leanAmt;
+      if (winTeam) {
+        up = true; leanAmt = 0; lean = 0;
+        const a = smooth(et / 0.3);
+        jump = (reduceMotion ? 0.3 : Math.abs(Math.sin(et * 7 + mi * 0.8 + ti))) * Rh * 1.0 * a;
+      } else if (loseTeam) {
+        const k = (et - 0.5 - mi * 0.12) / 0.6;
+        if (k < 0) { lean = side * (0.25 + 0.25 * smooth(et / 0.5)); x += side * -1 * 0; rot = 0; }
+        else {
+          const kk = clamp(k, 0, 1), tx = puddleSpot(ti, mi, n);
+          x = lerp(x, tx, smooth(kk)); jump = Math.sin(Math.PI * kk) * Rh * 1.7; lean = side * 0.25 * (1 - kk) + (1 - kk) * 0.5 * -side;
+          rot = (1 - kk) * -side * 0.9;
+          if (k >= 1) {
+            y0 = gy + Rh * 0.5 + (reduceMotion ? 0 : Math.sin(t * 2.2 + mi) * Rh * 0.04); jump = 0; lean = 0; rot = (reduceMotion ? 0 : Math.sin(t * 1.7 + mi * 2) * 0.06); sy = 0.94; mud = true; tear = (t * 0.9 + mi * 0.3) % 1;
+          }
+        }
+      }
+      const arrive = loseTeam && (et - 0.5 - mi * 0.12) >= 1;
+      const bounce = pull > 0 ? 1 - 0.08 * pull : 1;
+      bodies.push({ ti, mi, x: x + strainShake, y: y0, jump, lean, rot, up, mud, tear, sx: 1 / bounce * (arrive ? 1.04 : 1), sy: sy * bounce, expr: exprOf(G, ti, mi), arrive });
+      if (mi === 0) front[ti] = x;
+      if (mi === n - 1) backX[ti] = x;
+    }
+  }
+  // the mud pool is behind the animals that fall in, so draw the animals now and the front lip of the puddle after them
+  const hands = [];
+  const blinkOf = (ti, mi) => ((S.clock * 0.9 + mi * 1.7 + ti * 0.6) % 3.7) < 0.11;
+  // sort so that lower (sunk) animals are drawn last
+  bodies.sort((a, b) => (a.y - b.y) || (a.ti - b.ti));
+  for (const b of bodies) {
+    const mv = mvOf(b.ti, b.mi), kind = KINDS[b.ti][b.mi];
+    const h = drawAnimal(c, { x: b.x, gy: b.y, Rh, kind, team: b.ti, dir: b.ti === 0 ? 1 : -1, lean: b.lean, rot: b.rot, expr: b.expr, jump: b.jump, sx: b.sx, sy: b.sy, ropeY: ropeY + (reduceMotion ? 0 : Math.sin(t * 2 + b.mi + b.ti) * 0), up: b.up, upWave: over ? t * 9 : 0, mud: b.mud, tear: b.tear, blink: blinkOf(b.ti, b.mi), look: mv.look, noShadow: b.arrive });
+    hands.push({ h, b, kind });
+  }
+  // ---- the rope ----
+  const lw = Math.max(1.4, Rh * 0.08), w = Math.max(3.2, Rh * 0.3);
+  const xl = front[0] + Rh * 0.98 * 0 + Rh, xr = front[1] - Rh;   // inner ends: the front animals' inner paws
+  const tailL = backX[0] - Rh * 2.3, tailR = backX[1] + Rh * 2.3;
+  const mx = (front[0] + front[1]) / 2;
+  const slack = clamp(1 - tension * 1.4, 0, 1);
+  const sag = Rh * (0.1 + 0.55 * slack * slack) + (reduceMotion ? 0 : Math.sin(t * 3.1) * Rh * 0.04 * slack) + (over ? Rh * 0.2 * drop : 0);
+  const vib = (G.sm === 'strain' && !reduceMotion) ? Math.sin(t * 46) * Rh * 0.025 : 0;
+  let ex0 = tailL, ex1 = tailR;
+  if (over) { if (G.winner === 0) ex1 = lerp(tailR, cx + L.pud * 0.1, drop); else ex0 = lerp(tailL, cx - L.pud * 0.1, drop); }
+  const ey0 = over && G.winner === 1 ? lerp(ropeY, gy + Rh * 0.2, drop) : ropeY, ey1 = over && G.winner === 0 ? lerp(ropeY, gy + Rh * 0.2, drop) : ropeY;
+  const ropePath = () => {
+    c.beginPath(); c.moveTo(ex0, ey0 + vib);
+    const a = Math.min(xl, mx - 1), b = Math.max(xr, mx + 1);
+    if (over && drop > 0.01) { c.quadraticCurveTo((ex0 + ex1) / 2, ropeY + sag * 2, ex1, ey1); }
+    else { c.lineTo(a, ropeY + vib); c.quadraticCurveTo(mx, ropeY + sag * 2 + vib, b, ropeY - vib); c.lineTo(ex1, ey1); }
+  };
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  ropePath(); c.strokeStyle = INK; c.lineWidth = w + lw * 2; c.stroke();
+  ropePath(); c.strokeStyle = '#e2bd86'; c.lineWidth = w; c.stroke();
+  ropePath(); c.strokeStyle = '#a6794a'; c.lineWidth = w * 0.7; c.setLineDash([w * 0.32, w * 0.5]); c.lineDashOffset = -mx * 0.2; c.stroke(); c.setLineDash([]);
+  // knots at the tails
+  for (const [kx, ky] of [[ex0, ey0], [ex1, ey1]]) { pathCircle(c, kx, ky, w * 0.75); c.fillStyle = '#d3a76b'; c.fill(); stroked(c, lw); }
+  // ---- paws ----
+  for (const hh of hands) for (const p of hh.h) drawPaw(c, p[0], p[1], Rh, hh.kind);
+  // ---- the ribbon on the middle of the rope (this is "the flag") ----
+  if (!(over && drop > 0.6)) {
+    const fy = ropeY + sag + vib, sw = reduceMotion ? 0 : Math.sin(t * 5) * Rh * 0.1 * (0.4 + tension);
+    const rw = Rh * 0.55, rl = Rh * 1.3;
+    for (const sd of [-1, 1]) {
+      c.beginPath(); c.moveTo(mx, fy); c.lineTo(mx + sd * rw, fy + sw * sd * 0.5); c.lineTo(mx + sd * rw * 0.9 + sw * 0.6, fy + rl); c.lineTo(mx + sd * rw * 0.05, fy + rl * 0.82); c.closePath();
+      c.fillStyle = TCOL[sd < 0 ? 0 : 1]; c.fill(); stroked(c, lw);
+    }
+    pathCircle(c, mx, fy, Rh * 0.2); c.fillStyle = '#fff'; c.fill(); stroked(c, lw);
+  }
+  // ---- front lip of the puddle over the animals that sank in ----
+  if (over) {
+    const py = gy + Rh * 0.08;
+    c.save(); c.beginPath(); c.rect(0, gy + Rh * 0.28, LAY.W, LAY.H); c.clip();
+    ell(c, cx, py, L.pud, Rh * 0.62); c.fillStyle = 'rgba(122,74,43,0.88)'; c.fill();
+    c.strokeStyle = 'rgba(60,34,18,0.85)'; c.lineWidth = Math.max(2, Rh * 0.08); c.stroke();
+    c.restore();
+  }
+  // ---- bars and markers above the heads ----
+  if (!over || et < 0.3) {
+    for (const b of bodies) {
+      const T = G.teams[b.ti], m = T.mem[b.mi], mv = mvOf(b.ti, b.mi);
+      const topY = b.y - b.jump - Rh * 4.15;
+      if (G.cd <= 0 || true) drawStaminaBar(c, b.x, topY, Rh * 1.7, Math.max(3.5, Rh * 0.17), m);
+      if (m.tired && !over) drawSweat(c, b.x, topY + Rh * 1.55, Rh, t + b.mi * 0.3);
+      if (G.solo && b.ti === 0 && b.mi === 0 && !over) {   // "me"
+        const yy = topY - Rh * 0.55 + (reduceMotion ? 0 : Math.sin(t * 5) * 2);
+        c.beginPath(); c.moveTo(b.x - Rh * 0.32, yy - Rh * 0.3); c.lineTo(b.x + Rh * 0.32, yy - Rh * 0.3); c.lineTo(b.x, yy + Rh * 0.12); c.closePath(); c.fillStyle = GOLD; c.fill(); stroked(c, Math.max(1.4, Rh * 0.07));
+        outlineText(c, '나', b.x, yy - Rh * 0.75, Math.max(12, Rh * 0.6), GOLD);
+      }
+      if (T.cheerT > 0 && b.mi === 0) { /* cheer sparkle is drawn by particles */ }
+    }
+  }
+  // ---- mud splats on the team that was hit ----
+  return { mx, ropeY: ropeY + sag };
+}
+function renderField(c, G, t) {
+  const hz = renderBackdrop(c, t, G.x * LAY.D);
+  renderSpectators(c, G, t, hz);
+  renderPuddle(c, G, t);
+  renderPoles(c, G, t);
+  return renderTeams(c, G, t);
+}
+
+// =====================================================================
+// RENDER: pads, top bar, banners, particles
+// =====================================================================
+function padClip(c, p, r) { rrect(c, p.x, p.y, p.w, p.h, r); c.clip(); }
+function drawPad(c, p, G, t, rt_) {
+  const T = G.teams[p.ti], m = T.mem[p.mi], kind = KINDS[p.ti][p.mi], rr = Math.min(22, Math.min(p.w, p.h) * 0.2);
+  const down = m.held || (S.padFlash[p.i] || 0) > 0.7;
+  const oy = down ? 3 : 0;
+  const tc = TCOL[p.ti], td = TDEEP[p.ti];
+  const cxp = p.x + p.w / 2, cyp = p.y + p.h * 0.5 + oy, rt = Math.min(p.w, p.h) * 0.23;
+  // shadow + body
+  rrect(c, p.x, p.y + 5, p.w, p.h, rr); c.fillStyle = 'rgba(8,24,14,0.55)'; c.fill();
+  rrect(c, p.x, p.y + oy, p.w, p.h - (down ? 0 : 0), rr);
+  const g = c.createLinearGradient(0, p.y, 0, p.y + p.h); g.addColorStop(0, down ? TLIGHT[p.ti] : tc); g.addColorStop(1, td);
+  c.fillStyle = g; c.fill();
+  c.lineWidth = 3; c.strokeStyle = T.cheerT > 0 ? GOLD : 'rgba(255,255,255,0.85)'; c.stroke();
+  c.save(); padClip(c, { x: p.x, y: p.y + oy, w: p.w, h: p.h }, rr);
+  // flash when this pad was just hit
+  const fl = S.padFlash[p.i] || 0;
+  if (fl > 0) { c.fillStyle = 'rgba(255,255,255,' + 0.38 * fl + ')'; c.fillRect(p.x, p.y, p.w, p.h); }
+  // ---- what the pad asks for right now ----
+  const rtime = G.t + S.acc;
+  const sm = G.sm;
+  if (G.phase === 'play' && G.cd <= 0 && (sm === 'beat' || G.pend.length)) {
+    const R0 = rt + Math.min(rt * 1.9, Math.min(p.w, p.h) * 0.5 - rt - 2);
+    // target
+    const next = G.pend.length ? G.pend[0] : null;
+    const near = next ? Math.abs(next.t - rtime) : 9;
+    pathCircle(c, cxp, cyp, rt); c.fillStyle = 'rgba(255,255,255,' + (0.18 + 0.2 * Math.max(0, 1 - near * 6)) + ')'; c.fill();
+    c.lineWidth = Math.max(3, rt * 0.14); c.strokeStyle = 'rgba(255,255,255,0.95)'; c.stroke();
+    if (sm === 'beat' || sm === 'warn') {
+      for (const b of ringBeats(G, rtime, APPROACH)) {
+        const pr = (b.t - rtime) / APPROACH;
+        if (pr > 1 || pr < -0.28) continue;
+        const rq = b.q ? b.q[p.ti][p.mi] : -1;
+        if (pr > 0) {
+          const r = rt + (R0 - rt) * pr, a = clamp(0.25 + 0.75 * (1 - pr), 0, 1);
+          pathCircle(c, cxp, cyp, r); c.lineWidth = Math.max(3, rt * 0.17); c.strokeStyle = 'rgba(255,255,255,' + a + ')';
+          if (b.q === null || b.q === undefined) c.strokeStyle = 'rgba(255,255,255,' + a * 0.45 + ')';
+          c.stroke();
+        } else {
+          const k = -pr / 0.28;
+          pathCircle(c, cxp, cyp, rt * (1 + 0.5 * k)); c.lineWidth = Math.max(3, rt * 0.17);
+          c.strokeStyle = rq >= 1 ? 'rgba(255,230,120,' + (1 - k) + ')' : 'rgba(40,60,50,' + 0.4 * (1 - k) + ')'; c.stroke();
+        }
+      }
+    }
+  }
+  // strain: hold the pad
+  if (sm === 'warn' || sm === 'strain') {
+    const warn = sm === 'warn';
+    c.fillStyle = 'rgba(30,18,6,' + (warn ? 0.18 : 0.12) + ')'; c.fillRect(p.x, p.y, p.w, p.h);
+    const pulse = reduceMotion ? 0 : 0.5 + 0.5 * Math.sin(t * 9);
+    pathCircle(c, cxp, cyp, rt * (warn ? 1 : 1 + 0.06 * pulse)); c.fillStyle = warn ? 'rgba(255,255,255,0.15)' : (m.held ? 'rgba(255,236,150,0.9)' : 'rgba(255,255,255,0.28)'); c.fill();
+    c.lineWidth = Math.max(3, rt * 0.14); c.strokeStyle = warn ? 'rgba(255,255,255,0.7)' : '#fff'; c.stroke();
+    if (sm === 'strain') {
+      const k = clamp(m.sc / STRAIN_D, 0, 1);
+      c.lineCap = 'round'; c.lineWidth = Math.max(4, rt * 0.22); c.strokeStyle = m.tired ? '#b9c4bd' : '#ffe27a';
+      c.beginPath(); c.arc(cxp, cyp, rt * 1.35, -Math.PI / 2, -Math.PI / 2 + TAU * k); c.stroke();
+    }
+    const fs = Math.max(11, Math.min(rt * 0.62, 26));
+    outlineText(c, warn ? '쉬어요' : (m.held ? '꾹!' : '꾹 눌러!'), cxp, cyp, fs, warn ? '#e9ffe9' : (m.held ? INK : '#fff'), warn ? INK : (m.held ? '#fff6c0' : INK));
+  } else if (m.tired && G.cd <= 0) {
+    c.fillStyle = 'rgba(70,80,76,0.55)'; c.fillRect(p.x, p.y, p.w, p.h);
+    outlineText(c, '쉬어요', cxp, cyp - rt * 0.1, Math.max(12, Math.min(rt * 0.75, 30)), '#e9f0ec', INK);
+    outlineText(c, '힘이 빠졌어요', cxp, cyp + rt * 0.75, Math.max(9, Math.min(rt * 0.42, 15)), '#cfd9d3', INK, FONT_B);
+  }
+  // mud on the pad
+  if (T.mudT > 0) {
+    const a = Math.min(1, T.mudT * 1.2);
+    c.fillStyle = 'rgba(112,66,34,' + 0.88 * a + ')';
+    for (let k = 0; k < 7; k++) { const bx = p.x + p.w * (((k * 53 + p.i * 17) % 100) / 100), by = p.y + p.h * (((k * 37 + p.i * 29) % 100) / 100), br = Math.min(p.w, p.h) * (0.1 + 0.07 * ((k * 7) % 3)); pathCircle(c, bx, by, br); c.fill(); }
+  }
+  c.restore();
+  // little portrait of who this pad belongs to
+  const br = clamp(Math.min(p.w, p.h) * 0.13, 8, 22);
+  const bx = p.x + br * 1.35, by = p.y + br * 1.3 + oy;
+  pathCircle(c, bx, by, br * 1.18); c.fillStyle = 'rgba(255,255,255,0.9)'; c.fill(); stroked(c, 1.6);
+  drawHead(c, kind, bx, by, br, { expr: exprOf(G, p.ti, p.mi), lx: p.ti === 0 ? 0.8 : -0.8, ly: 0.2 });
+  // stamina
+  const sw = p.w - 20, sh = clamp(p.h * 0.075, 6, 10);
+  drawStaminaBar(c, p.x + p.w / 2, p.y + p.h - sh - 7 + oy, sw, sh, m);
+  // key label
+  if (S.kb) {
+    const lbl = G.solo ? '아무 키' : KEYLBL[p.ti][memberSlot(p.ti, p.mi, T.n)];
+    const kw = Math.max(18, 10 + lbl.length * 9);
+    rrect(c, p.x + p.w - kw - 6, p.y + 6 + oy, kw, 20, 6); c.fillStyle = 'rgba(255,255,255,0.9)'; c.fill();
+    c.font = '13px ' + FONT_B; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK; c.fillText(lbl, p.x + p.w - kw / 2 - 6, p.y + 16.5 + oy);
+  }
+  // judgement
+  const pop = S.pops[p.i];
+  if (pop && !m.tired && sm === 'beat') {
+    const k = pop.t / 0.7; if (k < 1) {
+      c.globalAlpha = 1 - k * k; outlineText(c, pop.text, cxp, cyp - k * 14, clamp(rt * 0.62, 13, 26), pop.col); c.globalAlpha = 1;
+    }
+  }
+}
+function drawPads(c, G, t) {
+  if (S.view !== 'play') return;
+  for (const p of LAY.pads) drawPad(c, p, G, t);
+}
+
+// ---- top bar: the rope track ----
+function drawTopBar(c, G, t) {
+  const W = LAY.W, x0 = LAY.sal + 66, x1 = W - LAY.sar - 66, ym = LAY.sat + 21, half = (x1 - x0) / 2, mid = (x0 + x1) / 2, h = 16;
+  rrect(c, x0 - 3, ym - h / 2 - 3, x1 - x0 + 6, h + 6, h / 2 + 3); c.fillStyle = 'rgba(8,24,14,0.72)'; c.fill();
+  const g = c.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, TCOL[0]); g.addColorStop(0.5, '#f3e7c4'); g.addColorStop(1, TCOL[1]);
+  rrect(c, x0, ym - h / 2, x1 - x0, h, h / 2); c.fillStyle = g; c.fill();
+  const th = threshold(G);
+  if (th < 1) {   // sudden death: the ends are shaded away
+    c.fillStyle = 'rgba(8,24,14,0.6)'; c.save(); rrect(c, x0, ym - h / 2, x1 - x0, h, h / 2); c.clip();
+    c.fillRect(x0, ym - h / 2, half * (1 - th), h); c.fillRect(x1 - half * (1 - th), ym - h / 2, half * (1 - th), h); c.restore();
+  }
+  rrect(c, x0, ym - h / 2, x1 - x0, h, h / 2); c.lineWidth = 2; c.strokeStyle = 'rgba(255,255,255,0.9)'; c.stroke();
+  c.strokeStyle = 'rgba(23,38,28,0.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(mid, ym - h / 2); c.lineTo(mid, ym + h / 2); c.stroke();
+  // marker
+  const fx = mid + clamp(G.x, -1, 1) * half * 0.97;
+  c.beginPath(); c.moveTo(fx, ym + h / 2 + 7); c.lineTo(fx - 9, ym - h / 2 - 5); c.lineTo(fx + 9, ym - h / 2 - 5); c.closePath(); c.fillStyle = '#fff'; c.fill(); stroked(c, 2);
+  pathCircle(c, fx, ym, 6); c.fillStyle = G.x < -0.01 ? TCOL[0] : G.x > 0.01 ? TCOL[1] : '#ddd'; c.fill(); stroked(c, 2);
+  // labels
+  const ly = ym + h / 2 + 15;
+  c.font = '14px ' + FONT_D; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 4; c.strokeStyle = INK;
+  const lt = TNAME[0] + (G.solo ? ' · 나' : ''), rtxt = G.solo ? '컴퓨터 Lv.' + (S.level + 1) : TNAME[1];
+  c.textAlign = 'left'; c.strokeText(lt, x0, ly); c.fillStyle = '#ffc08f'; c.fillText(lt, x0, ly);
+  c.textAlign = 'right'; c.strokeText(rtxt, x1, ly); c.fillStyle = '#a9d9ff'; c.fillText(rtxt, x1, ly);
+  // chips
+  const chips = (ti) => {
+    const T = G.teams[ti], out = [];
+    if (T.chain >= 2) out.push({ t: (T.n > 1 ? '합동 ' : '박자 ') + T.chain, bg: '#ffe9a6', fg: INK });
+    if (T.cheerT > 0) out.push({ t: '응원 힘!', bg: '#ffb3d1', fg: INK });
+    if (T.mudT > 0) out.push({ t: '진흙!', bg: '#946037', fg: '#fff' });
+    return out;
+  };
+  for (let ti = 0; ti < 2; ti++) {
+    let x = ti === 0 ? x0 : x1;
+    for (const ch of chips(ti)) {
+      c.font = '13px ' + FONT_D; const w = c.measureText(ch.t).width + 16;
+      const cxx = ti === 0 ? x : x - w;
+      rrect(c, cxx, ly + 11, w, 20, 10); c.fillStyle = ch.bg; c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke();
+      c.fillStyle = ch.fg; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ch.t, cxx + w / 2, ly + 22);
+      x += ti === 0 ? w + 6 : -(w + 6);
+    }
+  }
+}
+
+// ---- banner / countdown / strain meter ----
+function drawBanner(c, G, t) {
+  const W = LAY.W, cx = LAY.cx, by = LAY.top + LAY.sceneH * (LAY.port ? 0.2 : 0.2), Rh = LAY.Rh;
+  const big = clamp(Math.min(W * 0.16, LAY.sceneH * 0.22), 34, 96);
+  if (G.cd > 0) {
+    const n = Math.ceil(G.cd / 0.8), ph = 1 - ((G.cd % 0.8) / 0.8);
+    const sc = 1 + 0.5 * (1 - smooth(ph * 3));
+    c.save(); c.translate(cx, by + big * 0.4); c.scale(sc, sc); outlineText(c, String(n), 0, 0, big * 1.4, n === 1 ? GOLD : PAPER); c.restore();
+    if (S.lvInfo && G.solo) { if (LAY.port) drawLevelInfo(c, G, cx, by + big * 1.55); else { const w = Math.min(LAY.W - 24, 300); drawLevelInfo(c, G, LAY.W - 8 - LAY.sar - w / 2, LAY.padTop + (LAY.padH - 78) / 2); } }
+    return;
+  }
+  if (G.t < 0.8 && !S.banner) outlineText(c, '당겨!', cx, by + big * 0.4, big * (1.1 + 0.4 * (1 - G.t / 0.8)), GOLD);
+  const bn = (G.sm === 'warn' || G.sm === 'strain') ? null : S.banner;
+  if (bn) {
+    const k = bn.t / bn.life; if (k < 1) {
+      const sc = 1 + 0.25 * (1 - smooth(bn.t * 6)), a = k > 0.75 ? 1 - (k - 0.75) * 4 : 1;
+      c.save(); c.globalAlpha = a; c.translate(cx, by + big * 0.4); c.scale(sc, sc);
+      outlineText(c, bn.title, 0, 0, big * (bn.small ? 0.7 : 1), bn.col || GOLD);
+      if (bn.sub) outlineText(c, bn.sub, 0, big * 0.62, clamp(big * 0.3, 14, 26), '#fff', INK, FONT_B);
+      c.restore();
+    }
+  }
+  // strain: warn count + the two teams' holding meters
+  if (G.sm === 'warn' || G.sm === 'strain') {
+    const y = by + big * 0.4;
+    if (G.sm === 'warn') {
+      const left = Math.max(0, G.warnEnd - G.t);
+      outlineText(c, '용쓰기 준비!', cx, y, big * 0.85, '#fff0b0');
+      outlineText(c, '힘을 모아요 · 곧 꾹 누르기', cx, y + big * 0.62, clamp(big * 0.28, 13, 24), '#fff', INK, FONT_B);
+    } else {
+      const left = Math.max(0, G.sEnd - G.t), k = 1 - left / STRAIN_D;
+      outlineText(c, '꾹 눌러요!', cx, y, big * 0.95 * (1 + (reduceMotion ? 0 : 0.05 * Math.sin(t * 14))), '#ffe27a');
+      const bw = Math.min(LAY.W * 0.42, 190), bh = 14, yy = y + big * 0.72;
+      for (let ti = 0; ti < 2; ti++) {
+        const T = G.teams[ti], sc = T.mem.reduce((a, m) => a + m.sc, 0) / (T.n * STRAIN_D);
+        const dir = ti === 0 ? -1 : 1, xs = cx + dir * 6, w = bw * clamp(sc, 0, 1);
+        rrect(c, ti === 0 ? xs - bw : xs, yy, bw, bh, 7); c.fillStyle = 'rgba(8,24,14,0.6)'; c.fill();
+        if (w > 1) { rrect(c, ti === 0 ? xs - w : xs, yy, w, bh, 7); c.fillStyle = TCOL[ti]; c.fill(); }
+        rrect(c, ti === 0 ? xs - bw : xs, yy, bw, bh, 7); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke();
+      }
+    }
+  }
+}
+function drawLevelInfo(c, G, cx, y) {
+  const info = S.lvInfo; if (!info) return;
+  const w = Math.min(LAY.W - 24, 300), h = 78;
+  rrect(c, cx - w / 2, y, w, h, 14); c.fillStyle = 'rgba(8,24,14,0.78)'; c.fill(); c.lineWidth = 2; c.strokeStyle = 'rgba(255,255,255,0.85)'; c.stroke();
+  c.font = '15px ' + FONT_D; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#cfe8ff';
+  c.fillText('컴퓨터 Lv.' + (info.L + 1) + (info.up ? ' · 더 강해졌어요!' : ''), cx, y + 15);
+  const rows = [['정확', info.acc, info.dAcc], ['힘', info.pow, info.dPow], ['회복', info.rec, info.dRec]];
+  const bw = (w - 28) / 3 - 6;
+  rows.forEach((r, i) => {
+    const bx = cx - w / 2 + 14 + i * (bw + 9);
+    c.font = '12.5px ' + FONT_B; c.textAlign = 'left'; c.fillStyle = '#dfeee4'; c.fillText(r[0] + (r[2] > 0.001 ? ' ▲' : ''), bx, y + 38);
+    rrect(c, bx, y + 50, bw, 10, 5); c.fillStyle = 'rgba(255,255,255,0.18)'; c.fill();
+    rrect(c, bx, y + 50, Math.max(8, bw * clamp(r[1], 0, 1)), 10, 5); c.fillStyle = r[2] > 0.001 ? GOLD : TCOL[1]; c.fill();
+  });
+}
+function drawCoach(c, G, t) {
+  if (!S.coach || S.view !== 'play' || G.phase !== 'play') return;
+  const y = LAY.padTop - 50, w = Math.min(LAY.W - 24, 340);
+  c.font = '15px ' + FONT_B; const tw = Math.min(w, c.measureText(S.coach).width + 28);
+  rrect(c, LAY.W / 2 - tw / 2, y - 16, tw, 30, 15); c.fillStyle = 'rgba(8,24,14,0.78)'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.8)'; c.stroke();
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(S.coach, LAY.W / 2, y);
+}
+function drawParts(c) {
+  for (const p of S.parts) {
+    const k = p.life / p.max; c.globalAlpha = clamp(k * 1.5, 0, 1);
+    if (p.type === 'star') { c.fillStyle = p.col; c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + p.rot, r = i % 2 ? p.size * 0.45 : p.size; c.lineTo(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r); } c.closePath(); c.fill(); }
+    else if (p.type === 'conf') { c.save(); c.translate(p.x, p.y); c.rotate(p.rot); c.fillStyle = p.col; c.fillRect(-p.size, -p.size * 0.5, p.size * 2, p.size); c.restore(); }
+    else { pathCircle(c, p.x, p.y, Math.max(0.5, p.size * (p.type === 'mud' ? 0.6 + 0.4 * k : 1))); c.fillStyle = p.col; c.fill(); }
+  }
+  c.globalAlpha = 1;
+  for (const f of S.floats) {
+    const k = f.t / f.life; if (k >= 1) continue;
+    c.globalAlpha = 1 - k * k; outlineText(c, f.text, f.x, f.y - k * (f.rise || 30), f.size || 18, f.col || '#fff'); c.globalAlpha = 1;
+  }
+}
+function render() {
+  const c = ctx, G = curG();
+  c.setTransform(LAY.dpr, 0, 0, LAY.dpr, 0, 0);
+  c.clearRect(0, 0, LAY.W, LAY.H);
+  if (!G) { c.fillStyle = '#7cc8ff'; c.fillRect(0, 0, LAY.W, LAY.H); return; }
+  const t = S.clock;
+  c.save();
+  if (S.shake > 0 && !reduceMotion) c.translate((Math.random() - 0.5) * 7 * S.shake, (Math.random() - 0.5) * 6 * S.shake);
+  renderField(c, G, t);
+  drawParts(c);
+  c.restore();
+  if (S.view === 'play') { drawTopBar(c, G, t); drawBanner(c, G, t); drawCoach(c, G, t); drawPads(c, G, t); }
+  else { drawTopBar(c, G, t); }
+  if (S.flash > 0 && !reduceMotion) { c.fillStyle = 'rgba(255,255,255,' + 0.35 * S.flash + ')'; c.fillRect(0, 0, LAY.W, LAY.H); }
+}
+
+// ---- title mascot: a duck and a panda in a friendly tug ----
+const mctx = el.mascot.getContext('2d');
+function mascotScene(t) {
+  const c = mctx, W = 480, H = 224, Rh = 36, gy = 196;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  const sg = c.createLinearGradient(0, 0, 0, gy); sg.addColorStop(0, '#7cc8ff'); sg.addColorStop(1, '#d8f1ff'); c.fillStyle = sg; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#a5dba0'; c.beginPath(); c.moveTo(0, gy - 20); for (let x = 0; x <= W; x += 20) c.lineTo(x, gy - 34 - 14 * Math.sin(x * 0.02)); c.lineTo(W, gy - 20); c.closePath(); c.fill();
+  cloud(c, 90 + Math.sin(t * 0.3) * 10, 40, 22); cloud(c, 380 - Math.sin(t * 0.25) * 10, 56, 17);
+  const gg = c.createLinearGradient(0, gy - 22, 0, H); gg.addColorStop(0, '#79cf5a'); gg.addColorStop(1, '#58b246'); c.fillStyle = gg; c.fillRect(0, gy - 22, W, H);
+  const cx = W / 2, sway = Math.sin(t * 2.2) * 16, py = gy + 4;
+  ell(c, cx, py + 3, 74, 24); c.fillStyle = '#a7743f'; c.fill();
+  ell(c, cx, py, 66, 20); c.fillStyle = '#80502d'; c.fill(); c.lineWidth = 3; c.strokeStyle = 'rgba(60,34,18,0.8)'; c.stroke();
+  const ropeY = gy - Rh * 1.12, xl = cx - 118 + sway, xr = cx + 118 + sway, hands = [];
+  const lean = 0.16 + 0.08 * Math.sin(t * 4.4);
+  hands.push([drawAnimal(c, { x: xl, gy, Rh, kind: 0, team: 0, dir: 1, lean: -lean, expr: 'push', ropeY, look: 0 }), 0]);
+  hands.push([drawAnimal(c, { x: xr, gy, Rh, kind: 3, team: 1, dir: -1, lean: lean, expr: 'push', ropeY, look: 0 }), 3]);
+  const w = 11;
+  const rp = () => { c.beginPath(); c.moveTo(xl - 90, ropeY); c.lineTo(xl, ropeY); c.quadraticCurveTo(cx + sway, ropeY + 14, xr, ropeY); c.lineTo(xr + 90, ropeY); };
+  c.lineCap = 'round'; rp(); c.strokeStyle = INK; c.lineWidth = w + 4; c.stroke(); rp(); c.strokeStyle = '#e2bd86'; c.lineWidth = w; c.stroke();
+  rp(); c.strokeStyle = '#a6794a'; c.lineWidth = w * 0.7; c.setLineDash([4, 6]); c.stroke(); c.setLineDash([]);
+  for (const hh of hands) for (const p of hh[0]) drawPaw(c, p[0], p[1], Rh, hh[1]);
+  const mx = cx + sway, fy = ropeY + 12;
+  for (const sd of [-1, 1]) { c.beginPath(); c.moveTo(mx, fy); c.lineTo(mx + sd * 20, fy); c.lineTo(mx + sd * 18, fy + 46); c.lineTo(mx + sd * 2, fy + 38); c.closePath(); c.fillStyle = TCOL[sd < 0 ? 0 : 1]; c.fill(); stroked(c, 2.4); }
+  pathCircle(c, mx, fy, 7); c.fillStyle = '#fff'; c.fill(); stroked(c, 2.4);
+}
+
+// =====================================================================
+// EFFECTS + EVENTS
+// =====================================================================
+function burst(x, y, n, cols, speed, life, o) {
+  o = o || {};
+  for (let i = 0; i < n && S.parts.length < 260; i++) {
+    const a = o.up ? -Math.PI / 2 + (Math.random() - 0.5) * (o.spread || 1.6) : Math.random() * TAU, sp = speed * (0.35 + Math.random() * 0.65);
+    S.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: o.g === undefined ? 520 : o.g, life: life * (0.6 + Math.random() * 0.4), max: life, size: (o.size || 4) * (0.6 + Math.random() * 0.8), col: cols[(Math.random() * cols.length) | 0], type: o.type || 'dot', rot: Math.random() * 6, vr: (Math.random() - 0.5) * 10 });
+  }
+}
+function floatText(x, y, text, col, size, life, rise) { if (S.floats.some((f) => f.text === text && f.t < 0.35 && Math.abs(f.x - x) < size * 3)) return; if (S.floats.length < 12) S.floats.push({ x, y, text, col, size, t: 0, life: life || 0.9, rise: rise || 30 }); }
+function memberXY(G, ti, mi) {
+  const L = LAY, side = ti === 0 ? -1 : 1;
+  return { x: L.cx + side * (L.fb + mi * L.step) + G.x * L.D, y: L.gy - L.Rh * 5.2 };
+}
+function teamCenterXY(G, ti) { const a = memberXY(G, ti, 0), b = memberXY(G, ti, G.teams[ti].n - 1); return { x: (a.x + b.x) / 2, y: a.y - LAY.Rh * 1.4 }; }
+function padIndexOf(ti, mi) { for (const p of LAY.pads) if (p.ti === ti && p.mi === mi) return p.i; return -1; }
+function bannerSet(title, sub, col, life, small) { S.banner = { title, sub, col, t: 0, life: life || 1.8, small: !!small }; }
+function stepFx(dt) {
+  const G = curG();
+  S.shake = Math.max(0, S.shake - dt * 3); S.flash = Math.max(0, S.flash - dt * 3);
+  for (const side of S.mv) for (const m of side) if (m) { m.pull = Math.max(0, m.pull - dt * 4.5); }
+  for (let i = 0; i < S.padFlash.length; i++) if (S.padFlash[i] > 0) S.padFlash[i] = Math.max(0, S.padFlash[i] - dt * 4.5);
+  for (const p of S.pops) if (p) p.t += dt;
+  for (let i = S.floats.length - 1; i >= 0; i--) { const f = S.floats[i]; f.t += dt; if (f.t >= f.life) S.floats.splice(i, 1); }
+  if (S.banner) { S.banner.t += dt; if (S.banner.t >= S.banner.life) S.banner = null; }
+  for (let i = S.parts.length - 1; i >= 0; i--) {
+    const p = S.parts[i]; p.life -= dt; if (p.life <= 0) { S.parts.splice(i, 1); continue; }
+    p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.vx *= (1 - dt * 0.6);
+  }
+  if (G && G.phase === 'over') {
+    const wasT = S.endT; S.endT += dt;
+    const lose = 1 - G.winner, n = G.teams[lose].n;
+    for (let mi = 0; mi < n; mi++) {
+      const k = (S.endT - 0.5 - mi * 0.12) / 0.6, k0 = (wasT - 0.5 - mi * 0.12) / 0.6;
+      if (k0 < 1 && k >= 1) {
+        const x = puddleSpot(lose, mi, n);
+        burst(x, LAY.gy, 16, [MUD, MUD2, '#b98a5a', '#fff'], 330, 0.9, { up: true, spread: 2.2, size: LAY.Rh * 0.14 + 2, type: 'mud' });
+        if (!S.endSplash) { S.endSplash = true; Sound.splash(); S.shake = 1; buzz(60); bannerSet('풍덩!', (G.winner === 0 ? TNAME[1] : TNAME[0]) + '이 진흙탕에 빠졌어요', '#ffdca8', 2.2); }
+      }
+      if (k0 < 0 && k >= 0) Sound.tone('triangle', 300, 600, 0.18, 0.08, 0, 0.005, true);
+    }
+    if (!reduceMotion && S.endT > 0.2 && S.endT < 2.2 && Math.random() < dt * 14) {
+      const t0 = teamCenterXY(G, G.winner); burst(t0.x + (Math.random() - 0.5) * LAY.Rh * 5, t0.y - LAY.Rh, 1, [GOLD, '#ff7ab6', '#7fe3b0', '#7fc8ff', '#fff'], 120, 1.4, { type: 'conf', g: 160, size: 4 });
+    }
+  }
+}
+function handleEvents(G, quiet) {
+  const L = LAY, Rh = L.Rh;
+  for (const e of G.ev) {
+    if (quiet) continue;
+    if (e.t === 'count') Sound.count(e.n);
+    else if (e.t === 'go') { Sound.go(); S.shake = 0.3; }
+    else if (e.t === 'beat') { Sound.drum(e.accent); }
+    else if (e.t === 'tap') {
+      const mv = mvOf(e.ti, e.mi), pi = padIndexOf(e.ti, e.mi), human = pi >= 0;
+      if (e.q >= 1) { mv.pull = Math.max(mv.pull, QV[e.q]); mv.look = 0; }
+      if (e.q >= 2) setExpr(e.ti, e.mi, 'push', 0.35);
+      if (pi >= 0) {
+        S.padFlash[pi] = 1;
+        const txt = e.q === 3 ? '완벽!' : e.q === 2 ? '좋아요' : e.q === 1 ? (e.off < 0 ? '빨라요' : '늦었어요') : '엇박!';
+        S.pops[pi] = { text: e.tired && e.q > 0 ? '힘이 없어요' : txt, col: e.q === 3 ? GOLD : e.q === 2 ? '#bff5c8' : e.q === 1 ? '#fff' : '#ffb4b4', t: 0 };
+        if (e.q >= 1) S.tapsSeen++;
+      }
+      // sound: your own pads give full feedback, the others only the voices
+      if (human) { if (e.q > 0) Sound.hit(e.q); else Sound.stray(); }
+      if (e.q === 3 && S.clock - S.ycAt[e.ti] > 0.16) { S.ycAt[e.ti] = S.clock; Sound.yeongcha((e.ti === 0 ? 150 : 185) + e.mi * 14 + (Math.random() - 0.5) * 8, human ? 0.1 : 0.06, false); }
+      else if (!human && e.q >= 1 && S.clock - (S.hitAt || 0) > 0.05) { S.hitAt = S.clock; Sound.hit(e.q); }
+      if (e.q >= 2) {
+        const p = memberXY(G, e.ti, e.mi);
+        burst(p.x + (e.ti === 0 ? 1 : -1) * Rh * 1.1, L.ropeY + Rh * 0.2, e.q === 3 ? 4 : 2, ['#fff', '#ffe9a0', '#d9f5ff'], 120, 0.5, { size: 3, g: 200 });
+        if (e.q === 3 && S.clock - (S.ycFloat || 0) > 0.55) { S.ycFloat = S.clock; floatText(p.x, p.y - Rh * 1.1, '영차!', TCOL[e.ti], clamp(Rh * 0.8, 15, 30), 0.7, 22); }
+      }
+      if (e.q === 0 && human && S.clock - (S.wob || 0) > 0.8) { S.wob = S.clock; floatText(memberXY(G, e.ti, e.mi).x, memberXY(G, e.ti, e.mi).y, '삐끗!', '#ffb4b4', clamp(Rh * 0.7, 14, 26), 0.8, 20); }
+    } else if (e.t === 'sync') {
+      Sound.sync(e.n, e.perfect);
+      const pc = teamCenterXY(G, e.ti);
+      if (e.team && (e.n <= 2 || e.n % 2 === 0)) { floatText(pc.x, pc.y, e.perfect ? '합동 영차!' : '합동!', GOLD, clamp(Rh * 0.9, 16, 34), 0.9, 30); }
+      for (const p of LAY.pads) if (p.ti === e.ti) S.padFlash[p.i] = Math.max(S.padFlash[p.i] || 0, 0.6);
+      if (e.perfect) for (let mi = 0; mi < G.teams[e.ti].n; mi++) setExpr(e.ti, mi, 'happy', 0.4);
+    } else if (e.t === 'cheer') {
+      Sound.cheer(); const pc = teamCenterXY(G, e.ti);
+      bannerSet('응원 힘!', (e.ti === 0 ? TNAME[0] : TNAME[1]) + ' 구경꾼이 신났어요', e.ti === 0 ? '#ffc08f' : '#a9d9ff', 1.6);
+      burst(pc.x, pc.y, 22, [GOLD, '#ff7ab6', '#fff', TCOL[e.ti]], 240, 1.1, { type: 'star', size: 7, g: 120 });
+    } else if (e.t === 'chainBreak') {
+      if (G.teams[e.ti].n > 1 || e.n >= 4) { const pc = teamCenterXY(G, e.ti); floatText(pc.x, pc.y, '흐트러졌어요', '#ffd2c2', clamp(Rh * 0.65, 13, 22), 0.8, 18); }
+      Sound.tone('sine', 300, 200, 0.12, 0.04);
+    } else if (e.t === 'tired') {
+      const p = memberXY(G, e.ti, e.mi); floatText(p.x, p.y - Rh * 0.2, '헉헉', '#cfe8ff', clamp(Rh * 0.75, 14, 26), 0.9, 20);
+      setExpr(e.ti, e.mi, 'sad', 0.6);
+      if (padIndexOf(e.ti, e.mi) >= 0) { Sound.tired(); buzz(30); }
+    } else if (e.t === 'recover') {
+      if (padIndexOf(e.ti, e.mi) >= 0) Sound.recover();
+      const p = memberXY(G, e.ti, e.mi); floatText(p.x, p.y - Rh * 0.2, '휴~', '#d8ffd8', clamp(Rh * 0.65, 13, 22), 0.8, 18);
+    } else if (e.t === 'warn') {
+      Sound.warn();
+    } else if (e.t === 'strainGo') {
+      Sound.strainGo(); S.shake = 0.5; buzz([30, 20, 30]);
+      burst(LAY.cx, LAY.gy, 14, ['#e8d9b0', '#fff'], 180, 0.8, { size: 4, g: 100 });
+    } else if (e.t === 'strainEnd') {
+      const W = e.winner;
+      if (W >= 0) {
+        Sound.mud(); S.shake = 0.8;
+        bannerSet(TNAME[W] + ' 용쓰기 승!', '진흙이 철퍼덕 튀었어요', TCOL[W] === TCOL[0] ? '#ffc08f' : '#a9d9ff', 2.0);
+        const lose = 1 - W, T = G.teams[lose];
+        for (let mi = 0; mi < T.n; mi++) { const p = memberXY(G, lose, mi); burst(p.x, p.y, 7, [MUD, MUD2, '#b98a5a'], 220, 0.9, { size: Rh * 0.12 + 2, type: 'mud' }); setExpr(lose, mi, 'hit', 0.7); }
+      } else bannerSet('용쓰기 비겼어요', '', '#fff', 1.4, true);
+    } else if (e.t === 'sudden') {
+      Sound.sudden(); bannerSet('서든데스!', '결승선이 가까워져요', '#ff9a8a', 2.4);
+    } else if (e.t === 'finish') {
+      S.endT = 0; S.endSplash = false;
+      if (e.winner >= 0) {
+        const solo = G.solo, iWon = e.winner === 0;
+        if (solo && !iWon) Sound.lose(); else Sound.win();
+        const pc = teamCenterXY(G, e.winner);
+        burst(pc.x, pc.y, 26, [GOLD, '#ff7ab6', '#7fe3b0', '#7fc8ff'], 300, 1.6, { type: 'conf', g: 260, up: true, spread: 2.4, size: 4 });
+        S.flash = 0.6; buzz(80);
+      }
+    }
+  }
+  G.ev.length = 0;
+}
+function coachNow(G) {
+  if (S.view !== 'play' || !G || G.phase !== 'play' || G.cd > 0) return '';
+  const hint = S.hintRuns <= 3;
+  if (!hint) return '';
+  if (G.sm === 'warn') return '곧 용쓰기! 손을 떼고 힘을 모아요';
+  if (G.sm === 'strain') return '패드를 꾹 누르고 있어요!';
+  let low = 100, tired = false;
+  for (const p of LAY.pads) { const m = G.teams[p.ti].mem[p.mi]; if (G.solo ? p.ti === 0 : true) { low = Math.min(low, m.st); if (m.tired) tired = true; } }
+  if (S.tapsSeen < 4 && G.t < 14) return '링이 동그라미에 닿을 때 톡!';
+  if (tired) return '힘이 빠졌어요. 손을 떼고 쉬어요';
+  if (low < 32) return '지침 게이지가 줄었어요. 한 박자 쉬어요';
+  return '';
+}
+
+// =====================================================================
+// FLOW: title, match, result
+// =====================================================================
+const MODE_LINES = {
+  solo1: '내가 대표 선수! 컴퓨터 팀과 1대1이에요. 이길 때마다 컴퓨터가 더 정확하고 세져요.',
+  soloN: '내가 앞줄 대표 선수예요. 컴퓨터 팀원이 함께 당기고, 내 패드는 하나뿐이에요. 이길 때마다 상대가 강해져요.',
+  multi1: '둘이서 동시에! 왼쪽 사람은 왼쪽 패드, 오른쪽 사람은 오른쪽 패드를 눌러요.',
+  multiN: '한 팀 여럿이 각자 자기 패드를 동시에 눌러요. 박자를 맞추면 합동 영차 보너스!',
+};
+function newSeed() { S.matchN++; return BASE_SEED !== null ? (BASE_SEED + S.matchN - 1) | 0 : (Math.random() * 4294967295) | 0; }
+function lvStats(lv) { return { acc: (0.16 - lv.sigma) / 0.12, pow: (lv.pw - 0.86) / 0.26, rec: (lv.rec - 0.78) / 0.52 }; }
+function mkMatch(solo, n, level, demo) {
+  const lv = solo ? aiLevel(level, n) : null;
+  const G = newGame({ seed: newSeed(), nL: n, nR: n, noCount: !!demo, pwR: lv ? lv.pw : 1, recR: lv ? lv.rec : 1 });
+  G.solo = solo; G.lv = lv; G.demo = !!demo;
+  const bots = [], all = (k) => Array.from({ length: k }, (_, i) => i);
+  if (demo) { bots.push(makeBot(G, 0, all(n), 'steady', 1)); bots.push(makeBot(G, 1, all(n), 'steady', 2)); }
+  else if (solo) {
+    if (n > 1) bots.push(makeBot(G, 0, all(n).slice(1), 'steady', 1));
+    bots.push(makeBot(G, 1, all(n), lv, 3, (t) => aiWarm(level, t)));
+  }
+  return { G, bots };
+}
+function startDemo() {
+  const r = mkMatch(false, S.size, 0, true);
+  S.demo = r.G; S.demoBots = r.bots; S.demoOverT = 0;
+  S.mv = [[], []]; S.parts.length = 0; S.floats.length = 0; S.banner = null; S.endT = 0; S.endSplash = false; S.acc = 0;
+}
+function setSel(mode, size, save) {
+  S.mode = mode; S.size = size;
+  if (save) { store.set(KEY_MODE, mode); store.set(KEY_SIZE, size); }
+  const solo = mode === 'solo';
+  el.btnSolo.classList.toggle('on', solo); el.btnSolo.setAttribute('aria-checked', solo ? 'true' : 'false');
+  el.btnMulti.classList.toggle('on', !solo); el.btnMulti.setAttribute('aria-checked', !solo ? 'true' : 'false');
+  el.btnS.forEach((b, i) => { b.classList.toggle('on', i + 1 === size); b.setAttribute('aria-checked', i + 1 === size ? 'true' : 'false'); });
+  el.sm[0].textContent = solo ? '내가 대표' : '둘이서';
+  for (let i = 1; i < 4; i++) el.sm[i].textContent = solo ? '컴퓨터 팀원' : (i + 1) + '명씩';
+  el.modeLine.textContent = MODE_LINES[(solo ? 'solo' : 'multi') + (size === 1 ? '1' : 'N')];
+  el.bestLine.hidden = !solo;
+  el.tBest.textContent = S.best > 0 ? S.best + '연승' : '-';
+  el.keyHint.textContent = solo ? '키보드: 아무 글자·스페이스로 톡 · 스페이스·엔터로 시작 · M 소리 · P 쉬기'
+    : '키보드: 왼쪽 팀 ' + KEYLBL[0].slice(0, size).join(' ') + ' · 오른쪽 팀 ' + KEYLBL[1].slice(0, size).join(' ') + ' · 엔터·스페이스로 시작 · M 소리 · P 쉬기';
+}
+function showOnly(name) {
+  el.scrTitle.hidden = name !== 'title'; el.scrOver.hidden = name !== 'over'; el.scrPause.hidden = name !== 'pause';
+  el.hud.hidden = !(name === 'play' || name === 'pause' || name === 'over');
+}
+function resetFx() {
+  S.mv = [[], []]; S.parts.length = 0; S.floats.length = 0; S.banner = null; S.endT = 0; S.endSplash = false; S.pops = []; S.padFlash = []; S.shake = 0; S.flash = 0;
+  S.tapsSeen = 0; S.ycAt = [-9, -9]; S.acc = 0; S.coach = ''; S.downs = {};
+}
+function toTitle() {
+  S.view = 'title'; S.paused = false; S.G = null; S.bots = []; S.streak = 0; S.level = 0; S.series = [0, 0]; S.lvInfo = null;
+  releaseAll(); resetFx(); setSel(S.mode, S.size, false); showOnly('title'); startDemo(); layout(); ambient(false);
+}
+function startMatch() {
+  Sound.ensure();
+  const solo = S.mode === 'solo', n = S.size;
+  const r = mkMatch(solo, n, S.level, false);
+  S.G = r.G; S.bots = r.bots;
+  S.view = 'play'; S.paused = false; S.overT = 0; S.resultShown = false; S.newRecord = false;
+  resetFx();
+  S.hintRuns++; store.set(KEY_HINT, S.hintRuns);
+  if (solo) {
+    const cur = lvStats(r.G.lv), prev = S.level > 0 ? lvStats(aiLevel(S.level - 1, n)) : null;
+    S.lvInfo = { L: S.level, up: S.level > 0, acc: cur.acc, pow: cur.pow, rec: cur.rec, dAcc: prev ? cur.acc - prev.acc : 0, dPow: prev ? cur.pow - prev.pow : 0, dRec: prev ? cur.rec - prev.rec : 0 };
+  } else S.lvInfo = null;
+  releaseAll(); showOnly('play'); layout();
+}
+function ambient(on, k) { Sound.strainLoop(!!on && !S.paused, k || 0); }
+function pauseGame() {
+  if (S.view !== 'play' || S.paused || !S.G || S.G.phase === 'over') return;
+  S.paused = true; releaseAll(); showOnly('pause'); ambient(false);
+}
+function resumeGame() { if (!S.paused) return; S.paused = false; showOnly('play'); }
+function showResult() {
+  const G = S.G; if (!G || S.resultShown) return;
+  S.resultShown = true;
+  const solo = G.solo, win = G.winner === 0, n = G.teams[0].n;
+  let rec = false, line = '', title = '';
+  const T0 = G.teams[0], T1 = G.teams[1];
+  el.rTitle.className = 'res-title';
+  if (solo) {
+    const before = S.streak;
+    if (win) {
+      S.streak++; S.level = Math.min(AI_MAXL, S.streak);
+      if (S.streak > S.best) { S.best = S.streak; store.set(KEY_BEST, S.best); rec = true; }
+      title = '이겼어요!'; el.rTitle.classList.add('win');
+      line = G.reason === 'time' ? '시간이 다 돼서 깃발이 더 가까운 쪽이 이겼어요.' : '컴퓨터 팀을 진흙탕에 풍덩! 다음 판은 컴퓨터가 더 정확하고 힘도 세져요.';
+      el.rBig.textContent = S.streak; el.rBigUnit.textContent = '연승';
+    } else {
+      title = '아쉽게 졌어요';
+      line = before > 0 ? before + '연승에서 멈췄어요. 한 박자 쉬면서 다시 도전해 봐요!' : '박자에 맞춰 톡, 지치기 전에 한 박자 쉬고, 용쓰기엔 꾹! 한 번 더 해 봐요.';
+      el.rBig.textContent = before; el.rBigUnit.textContent = '연승';
+      S.streak = 0; S.level = 0;
+    }
+    el.rBigBox.hidden = false; el.rScoreBox.hidden = true;
+  } else {
+    S.series[G.winner]++;
+    title = TNAME[G.winner] + ' 승!'; el.rTitle.classList.add(G.winner === 0 ? 'L' : 'R');
+    line = G.reason === 'time' ? '시간이 다 돼서 깃발이 더 가까운 쪽이 이겼어요.' : TNAME[G.winner] + '이 줄을 확 당겨서 ' + TNAME[1 - G.winner] + '이 풍덩! 한 판 더 해 볼까요?';
+    el.rBigBox.hidden = true; el.rScoreBox.hidden = false; el.rSL.textContent = S.series[0]; el.rSR.textContent = S.series[1];
+  }
+  S.newRecord = rec;
+  el.rTitle.textContent = title; el.rBadge.hidden = !rec; el.rLine.textContent = line;
+  const tm = solo ? T0 : (T0.bestChain >= T1.bestChain ? T0 : T1);
+  el.rChain.textContent = Math.max(T0.bestChain, solo ? 0 : T1.bestChain) + '번';
+  const tot = (T0.beats * T0.n + (solo ? 0 : T1.beats * T1.n)), hit = T0.hits + (solo ? 0 : T1.hits);
+  el.rSync.textContent = (tot ? Math.round(100 * hit / tot) : 0) + '%';
+  el.rTime.textContent = fmtTime(G.t);
+  el.rBestLine.hidden = !solo; el.rBest.textContent = S.best > 0 ? S.best + '연승' : '-';
+  el.btnAgain.textContent = solo ? (win ? '다음 판 · 컴퓨터 Lv.' + (S.level + 1) : '다시 도전') : '한 판 더!';
+  S.resultInfo = { win, solo };
+  showOnly('over'); ambient(false);
+}
+function again() { startMatch(); }
+
+// =====================================================================
+// INPUT: pointer + touch + mouse, one count per contact, keyboard
+// =====================================================================
+// A finger can arrive as pointer events, touch events, or (on some whiteboards) only emulated mouse events.
+// All paths feed pressAt. Every contact is tracked by its own key (source + id), so any number of fingers work at once and
+// a fast re-tap is always a new press. A press that repeats a press from ANOTHER path at the same spot within 120 ms is the
+// same finger (each source can be the duplicate of a press only once). Mouse presses within 700 ms of touch activity are
+// emulated duplicates.
+const contacts = new Map();   // key -> contact { keys:Set, t, ti, mi }
+const recent = [];            // { t, src, x, y, srcs:Set, ct }
+const holdN = {};             // 'ti:mi' -> number of contacts / keys holding that pad
+let lastTouchAt = -1e9;
+function releaseAll() {
+  contacts.clear(); recent.length = 0; keysDown.clear();
+  for (const k in holdN) delete holdN[k];
+  const G = S.G; if (G) for (const T of G.teams) for (let i = 0; i < T.n; i++) T.mem[i].held = false;
+}
+function ctKey(src, id) { return src + ':' + id; }
+function playable() { return S.view === 'play' && S.G && !S.paused && S.G.phase === 'play'; }
+function sinceTick() { return clamp(S.acc + (performance.now() - S.tickAt) / 1000, 0, 0.06); }
+function padDown(ti, mi) {
+  const G = S.G; if (!G) return;
+  const k = ti + ':' + mi;
+  holdN[k] = (holdN[k] || 0) + 1; S.downs[k] = (S.downs[k] || 0) + 1;
+  tap(G, ti, mi, sinceTick());
+  hold(G, ti, mi, true);
+}
+function padUp(ti, mi) {
+  const G = S.G; const k = ti + ':' + mi;
+  holdN[k] = Math.max(0, (holdN[k] || 0) - 1);
+  if (G && !holdN[k]) hold(G, ti, mi, false);
+}
+function endContact(ct) {
+  if (ct.dead) return; ct.dead = true;
+  for (const k of ct.keys) contacts.delete(k);
+  if (ct.ti >= 0) padUp(ct.ti, ct.mi);
+}
+function pressAt(src, id, x, y, isTouch) {
+  const now = performance.now();
+  if (isTouch) lastTouchAt = now; else if (src === 'mouse' && now - lastTouchAt < 700) return false;
+  Sound.ensure();
+  const k = ctKey(src, id);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const r = recent[i];
+    if (now - r.t > 400) { recent.splice(i, 1); continue; }
+    if (now - r.t < 120 && !r.srcs.has(src) && Math.abs(r.x - x) < 9 && Math.abs(r.y - y) < 9) {   // the same finger seen through another event path
+      r.srcs.add(src);
+      if (r.ct && !r.ct.dead) { r.ct.keys.add(k); contacts.set(k, r.ct); }
+      return false;
+    }
+  }
+  const ex = contacts.get(k); if (ex) endContact(ex);   // the old contact's "up" never came
+  const rec = { t: now, src, x, y, srcs: new Set([src]), ct: null };
+  recent.push(rec);
+  if (!playable()) return false;
+  const z = padAt(x, y); if (!z) return false;
+  const ct = { keys: new Set([k]), t: now, ti: z.ti, mi: z.mi, dead: false };
+  rec.ct = ct; contacts.set(k, ct);
+  padDown(z.ti, z.mi);
+  return true;
+}
+function pressEnd(src, id) {
+  const ct = contacts.get(ctKey(src, id)); if (!ct) return;
+  endContact(ct);
+}
+const isTouchPtr = (e) => e.pointerType !== 'mouse';
+cv.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button > 0) return;   // left button only (touch and pen report 0 or -1)
+  if (pressAt('pointer', e.pointerId, e.clientX, e.clientY, isTouchPtr(e))) e.preventDefault();
+});
+window.addEventListener('pointerup', (e) => pressEnd('pointer', e.pointerId));
+window.addEventListener('pointercancel', (e) => pressEnd('pointer', e.pointerId));
+cv.addEventListener('touchstart', (e) => {
+  lastTouchAt = performance.now();
+  for (const t of e.changedTouches) pressAt('touch', t.identifier, t.clientX, t.clientY, true);
+  if (e.cancelable) e.preventDefault();   // no emulated mouse events, no scrolling
+}, { passive: false });
+window.addEventListener('touchmove', () => { lastTouchAt = performance.now(); }, { passive: true });
+window.addEventListener('touchend', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+window.addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+cv.addEventListener('mousedown', (e) => { if (e.button > 0) return; pressAt('mouse', 0, e.clientX, e.clientY, false); });
+window.addEventListener('mouseup', () => pressEnd('mouse', 0));
+window.addEventListener('blur', () => { /* focus can shift right after a touch starts on some boards: do not pause or release here */ });
+
+// keyboard: every pad has its own key (left team A S D F, right team J K L ;); a solo player can use any of them
+const keysDown = new Map();   // code -> {ti, mi}
+function keyPad(code) {
+  const G = S.G; if (!G) return null;
+  if (G.solo) return SOLO_KEYS.has(code) ? { ti: 0, mi: 0 } : null;
+  for (let ti = 0; ti < 2; ti++) { const s = KEYS[ti].indexOf(code); if (s >= 0 && s < G.teams[ti].n) return { ti, mi: slotMember(ti, s, G.teams[ti].n) }; }
+  return null;
+}
+const GAME_KEYS = new Set([...SOLO_KEYS]);
+window.addEventListener('keydown', (e) => {
+  const code = e.code;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!S.kb && GAME_KEYS.has(code)) { S.kb = true; }
+  const onBtn = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  if (playable()) {
+    const pd = keyPad(code);
+    if (pd) { e.preventDefault(); if (!e.repeat && !keysDown.has(code)) { Sound.ensure(); keysDown.set(code, pd); padDown(pd.ti, pd.mi); } return; }
+  }
+  if (code === 'Space' || code === 'Enter') {
+    if (onBtn) return;   // the browser clicks the focused button itself
+    if (e.repeat) { e.preventDefault(); return; }
+    Sound.ensure();
+    if (S.paused) { e.preventDefault(); resumeGame(); return; }
+    if (S.view === 'title') { e.preventDefault(); startMatch(); return; }
+    if (S.G && S.G.phase === 'over' && S.resultShown) { e.preventDefault(); again(); return; }
+    return;
+  }
+  if (code === 'Escape' || code === 'KeyP') { if (S.paused) resumeGame(); else pauseGame(); return; }
+  if (code === 'KeyM') { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (code === 'KeyR') { if (S.paused || (S.G && S.G.phase === 'over')) { e.preventDefault(); startMatch(); } return; }
+  if (S.view === 'title' && !S.paused) {
+    if (code === 'ArrowLeft' || code === 'ArrowRight') { e.preventDefault(); setSel(S.mode, clamp(S.size + (code === 'ArrowRight' ? 1 : -1), 1, 4), true); Sound.ui(); startDemo(); layout(); return; }
+    if (code === 'ArrowUp' || code === 'ArrowDown') { e.preventDefault(); resetStreakSel(); setSel(S.mode === 'solo' ? 'multi' : 'solo', S.size, true); Sound.ui(); startDemo(); layout(); return; }
+    if (code >= 'Digit1' && code <= 'Digit4') { setSel(S.mode, +code.slice(5), true); Sound.ui(); startDemo(); layout(); return; }
+  }
+});
+window.addEventListener('keyup', (e) => {
+  const pd = keysDown.get(e.code); if (!pd) return;
+  keysDown.delete(e.code); padUp(pd.ti, pd.mi);
+});
+function resetStreakSel() { S.streak = 0; S.level = 0; S.series = [0, 0]; }
+
+// buttons. A tap can come as pointer, touch or mouse events (and a click for keyboards), so every on-screen control
+// listens on all of them; a 120 ms window per control keeps one tap = one action.
+function onTap(node, fn) {
+  let sx = 0, sy = 0, armed = false, lastAt = -1e9;
+  const fire = (e) => { const t = performance.now(); if (t - lastAt < 120) return; lastAt = t; fn(e); };
+  const down = (x, y) => { sx = x; sy = y; armed = true; };
+  const up = (x, y) => { const ok = armed && Math.hypot(x - sx, y - sy) < 16; armed = false; return ok; };
+  node.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button > 0) return; if (e.pointerType !== 'mouse') lastTouchAt = performance.now(); down(e.clientX, e.clientY); });
+  node.addEventListener('pointerup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('touchstart', (e) => { lastTouchAt = performance.now(); const t = e.changedTouches[0]; if (t) down(t.clientX, t.clientY); }, { passive: true });
+  node.addEventListener('touchend', (e) => {
+    lastTouchAt = performance.now();
+    const t = e.changedTouches[0];
+    if (t && up(t.clientX, t.clientY)) fire(e);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  node.addEventListener('mousedown', (e) => { if (e.button <= 0 && performance.now() - lastTouchAt > 700) down(e.clientX, e.clientY); });
+  node.addEventListener('mouseup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('click', (e) => { armed = false; fire(e); });
+}
+function uiMute() {
+  el.btnMute.classList.toggle('muted', Sound.muted);
+  el.btnMute.setAttribute('aria-label', Sound.muted ? '소리 켜기' : '소리 끄기');
+}
+function pickSel(mode, size) {
+  Sound.ensure(); Sound.ui();
+  if (mode !== S.mode || size !== S.size) resetStreakSel();
+  setSel(mode, size, true); startDemo(); layout();
+}
+onTap($('btnStart'), () => { Sound.ensure(); Sound.ui(); startMatch(); });
+onTap(el.btnSolo, () => pickSel('solo', S.size));
+onTap(el.btnMulti, () => pickSel('multi', S.size));
+el.btnS.forEach((b, i) => onTap(b, () => pickSel(S.mode, i + 1)));
+onTap(el.btnAgain, () => { Sound.ensure(); again(); });
+onTap($('btnOverTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap($('btnResume'), () => { Sound.ensure(); resumeGame(); });
+onTap($('btnPauseRestart'), () => { Sound.ensure(); S.streak = 0; S.level = 0; startMatch(); });
+onTap($('btnPauseTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap(el.btnPause, () => { Sound.ensure(); Sound.ui(); pauseGame(); });
+onTap(el.btnMute, () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+// pause when the page is hidden. (No pause on window blur: focus can shift right after a touch starts on some boards.)
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+window.addEventListener('pagehide', () => pauseGame());
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  });
+}
+let lastW = 0, lastH = 0;
+function onResize() {
+  const changed = Math.abs(window.innerWidth - lastW) > 1 || Math.abs(window.innerHeight - lastH) > 1;
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  if (changed) releaseAll();
+  layout();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+
+// =====================================================================
+// LOOP + BOOT
+// =====================================================================
+let lastTs = 0, slowN = 0, slowSum = 0;
+function advanceGame(G, dt, live, bots) {
+  S.acc += dt;
+  let n = 0;
+  while (S.acc >= STEP && n < 12) {
+    for (const b of bots) botStep(G, b);
+    step(G); S.acc -= STEP; n++;
+    if (G.ev.length) handleEvents(G, !live);
+  }
+  if (S.acc > STEP * 12) S.acc = 0;
+}
+function tick(dt) {
+  S.clock += dt; S.tickAt = performance.now();
+  if (S.view === 'play' && S.G && !S.paused) {
+    const G = S.G;
+    if (G.ev.length) handleEvents(G, false);   // taps made since the last frame
+    advanceGame(G, dt, true, S.bots);
+    if (G.phase === 'over') { S.overT += dt; if (S.overT > 2.1 && !S.resultShown) showResult(); }
+    S.coach = coachNow(G);
+    // rope groan + the grunt of a strain
+    if (G.phase === 'play' && G.cd <= 0 && G.tension > 0.5 && S.clock - S.creakAt > 0.85 - 0.4 * G.tension) { S.creakAt = S.clock; Sound.creak(G.tension); }
+    let hs = 0, tot = 0; for (const T of G.teams) for (const m of T.mem) { tot++; if (m.held) hs++; }
+    ambient(G.phase === 'play' && G.sm === 'strain', tot ? hs / tot : 0);
+  } else if (S.view === 'title' && S.demo) {
+    const D = S.demo;
+    if (D.phase === 'over') { S.demoOverT += dt; if (S.demoOverT > 3.2) startDemo(); }
+    else if (!reduceMotion) advanceGame(D, dt, false, S.demoBots);
+  }
+  stepFx(dt);
+}
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  // low-end devices: if frames keep taking too long, render at a lower resolution (2 -> 1.5 -> 1)
+  if (!S.paused && !document.hidden && dt > 0 && dt < 0.5 && dprStep < DPR_STEPS.length - 1) {
+    slowSum += dt; slowN++;
+    if (slowN >= 90) { if (slowSum / slowN > 0.0235 && (window.devicePixelRatio || 1) > DPR_STEPS[dprStep + 1]) { dprStep++; layout(); } slowN = 0; slowSum = 0; }
+  }
+  if (dt < 0) dt = 0; if (dt > 0.05) dt = 0.05;
+  const t0 = performance.now();
+  if (S.paused) { S.clock += dt; render(); }
+  else {
+    tick(dt);
+    if (S.view === 'title') mascotScene(reduceMotion ? 0.4 : S.clock);
+    render();
+  }
+  const ms = performance.now() - t0, P = S.perf;
+  P.ms = P.ms * 0.95 + ms * 0.05; if (ms > P.max) P.max = ms; P.frames++;
+}
+function snapshot() {
+  const G = S.G;
+  return {
+    view: S.view, mode: S.mode, size: S.size, paused: S.paused, level: S.level, streak: S.streak, best: S.best, newRecord: S.newRecord, resultShown: S.resultShown, series: S.series.slice(),
+    phase: G ? G.phase : '', sm: G ? G.sm : '', cd: G ? G.cd : 0, t: G ? G.t : 0, x: G ? G.x : 0, v: G ? G.v : 0, winner: G ? G.winner : -1, reason: G ? G.reason : '',
+    teams: G ? G.teams.map((T) => ({ n: T.n, chain: T.chain, best: T.bestChain, cheerT: T.cheerT, mudT: T.mudT, pull: T.pull, beats: T.beats, hits: T.hits, mem: T.mem.map((m) => ({ st: m.st, tired: m.tired, held: m.held, taps: m.taps, perfect: m.perfect, good: m.good, ok: m.ok, stray: m.stray, sc: m.sc })) })) : [],
+    contacts: contacts.size, holds: Object.assign({}, holdN), downs: Object.assign({}, S.downs), dpr: LAY.dpr, port: LAY.port, solo: G ? G.solo : false,
+    pads: LAY.pads.map((p) => Object.assign({}, p)), zones: LAY.zones.map((z) => Object.assign({}, z)),
+  };
+}
+window.__game = {
+  get state() { return snapshot(); },
+  get layout() { return Object.assign({}, LAY, { pads: LAY.pads.map((x) => Object.assign({}, x)), zones: LAY.zones.map((x) => Object.assign({}, x)) }); },
+  get G() { return S.G; },
+  get perf() { return Object.assign({}, S.perf); },
+  start(o) { o = o || {}; if (o.mode) S.mode = o.mode; if (o.size) S.size = o.size; if (o.level !== undefined) { S.level = o.level; S.streak = o.level; } setSel(S.mode, S.size, false); startMatch(); },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  tapPad(ti, mi) { if (!playable()) return null; return tap(S.G, ti, mi, sinceTick()); },
+  // QA: step the simulation faster than real time (the computer's bots keep playing), and let a bot play the human pads
+  advance(sec) { const G = S.G; if (!G) return; const n = Math.round(sec / STEP); for (let i = 0; i < n; i++) { if (G.phase === 'over') break; for (const b of S.bots) botStep(G, b); step(G); if (G.ev.length) handleEvents(G, false); } },
+  autoplay(preset, salt) {
+    const G = S.G; if (!G) return;
+    S.bots = S.bots.filter((b) => !b.qa);
+    if (!preset) return;
+    const mk = (ti, idx, s) => { const b = makeBot(G, ti, idx, preset, (salt || 0) + s); b.qa = true; S.bots.push(b); };
+    if (G.solo) mk(0, [0], 11); else { mk(0, Array.from({ length: G.teams[0].n }, (_, i) => i), 11); mk(1, Array.from({ length: G.teams[1].n }, (_, i) => i), 12); }
+  },
+  setMatch(o) { const G = S.G; if (!G) return; if (o.x !== undefined) G.x = o.x; if (o.v !== undefined) G.v = o.v; },
+  logic: { newGame, step, tap, hold, simulate, makeBot, botStep, PRESETS, aiLevel, aiWarm, STEP, threshold, WIN, QV },
+};
+
+lastW = window.innerWidth; lastH = window.innerHeight;
+uiMute();
+setSel(S.mode, S.size, false);
+toTitle();
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

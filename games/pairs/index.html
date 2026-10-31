@@ -1,0 +1,2078 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>짝짝</title>
+<meta name="theme-color" content="#1f7a70">
+<meta name="description" content="귀여운 그림 카드 두 장을 짝! 짝! 맞추는 기억력 게임이에요. 라운드가 오를수록 판이 커지고 카드가 자리를 바꿔요. 혼자서, 두 팀 대결, 함께 맞추는 협동 모드가 있어요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* World: a mint-green felt play mat in a cozy play room. Little picture cards lie on it (cat, pig, apple, umbrella ...). The board is drawn on
+   one canvas; the HUD, the team / player chips and the screens are DOM. */
+:root {
+  --felt: #2f8f83;
+  --felt-d: #1c6a61;
+  --ink: #3d2a20;
+  --paper: #fff8ea;
+  --paper-2: #f6e8c8;
+  --muted: #7a6558;
+  --gold: #ffd24a;
+  --gold-d: #d99a12;
+  --coral: #ff6b7d;
+  --coral-d: #d9435a;
+  --good: #52d37a;
+  --bad: #ff6b5e;
+  --hud-bg: rgba(18, 66, 62, 0.9);
+  --dim: #cdeee7;
+  --font-d: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif;
+  --font-b: "Gowun Dodum", "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif;
+  --t0: #ef5350; --t1: #3b82e0; --t2: #f0a81a; --t3: #8a52d8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden; background: var(--felt-d); color: var(--paper);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--felt-d); }
+#cv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; z-index: 1; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- play HUD ---------- */
+#stage { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+#stage > * { position: absolute; }
+#hud { display: flex; align-items: center; gap: 6px; }
+.icon-btn {
+  flex: none; width: 46px; height: 46px; border-radius: 15px; padding: 0; pointer-events: auto;
+  border: 2px solid rgba(255, 248, 234, 0.85); background: var(--hud-bg); color: var(--paper);
+  display: grid; place-items: center; touch-action: manipulation; box-shadow: 0 3px 0 rgba(6, 30, 28, 0.55);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(6, 30, 28, 0.55); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+.pill {
+  flex: 1 1 0; min-width: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px;
+  background: var(--hud-bg); border-radius: 16px; border: 2px solid rgba(255, 210, 74, 0.8); white-space: nowrap; overflow: hidden;
+}
+.pill small { font-family: var(--font-d); font-size: 15px; color: var(--dim); padding-top: 3px; }
+.pill b { font-family: var(--font-d); font-weight: normal; font-size: 26px; line-height: 1; color: var(--gold); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.pill.pop b { animation: pop 0.3s ease-out; }
+#pillB { flex-grow: 1.5; }
+#pillB.long b { font-size: 21px; }
+@keyframes pop { 0% { transform: scale(1.3); } 100% { transform: none; } }
+#btnHint {
+  flex: none; min-width: 58px; height: 46px; border-radius: 15px; padding: 0 10px; pointer-events: auto; display: flex; align-items: center; justify-content: center; gap: 5px;
+  border: 2px solid rgba(255, 248, 234, 0.85); background: var(--hud-bg); color: var(--paper); font-family: var(--font-d); font-size: 16px; touch-action: manipulation;
+  box-shadow: 0 3px 0 rgba(6, 30, 28, 0.55);
+}
+#btnHint svg { width: 20px; height: 20px; flex: none; }
+#btnHint span { display: none; }
+@media (min-width: 520px) { #btnHint span { display: inline; } #btnHint { min-width: 78px; } }
+#btnHint b { font-weight: normal; color: var(--gold); font-size: 19px; padding-top: 2px; }
+#btnHint:active { transform: translateY(2px); }
+#btnHint.none { opacity: 0.45; }
+#btnHint.on { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 210, 74, 0.35), 0 3px 0 rgba(6, 30, 28, 0.55); }
+#stage.dim #hud, #stage.dim #bar { visibility: hidden; }
+#bar {
+  height: 26px; border-radius: 13px; background: rgba(8, 40, 38, 0.72); border: 2px solid rgba(255, 248, 234, 0.8); overflow: hidden; pointer-events: none;
+}
+#barFill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--good); border-radius: 11px; transition: background 0.2s; }
+#barFill.mid { background: #ffd24a; }
+#barFill.low { background: var(--bad); animation: lowT 0.4s ease-in-out infinite alternate; }
+#barFill.t0 { background: var(--t0); } #barFill.t1 { background: var(--t1); }
+@keyframes lowT { from { filter: brightness(1); } to { filter: brightness(1.45); } }
+#barTxt { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-d); font-size: 15px; color: #fff; padding-top: 2px; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55), 0 0 4px rgba(0, 0, 0, 0.5); white-space: nowrap; }
+#barPlus { position: absolute; right: 10px; top: -2px; font-family: var(--font-d); font-size: 18px; color: #fff; opacity: 0; text-shadow: 0 0 6px rgba(0, 0, 0, 0.6); pointer-events: none; }
+#barPlus.on { animation: plusUp 0.9s ease-out; }
+@keyframes plusUp { 0% { opacity: 0; transform: translateY(8px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-12px); } }
+.chip {
+  display: flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: 14px; overflow: hidden; pointer-events: none;
+  background: var(--hud-bg); border: 3px solid var(--c, #888); color: var(--paper); white-space: nowrap; transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.chip .dot { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--c); border: 2px solid rgba(255, 255, 255, 0.85); }
+.chip .nm { font-family: var(--font-d); font-size: 17px; padding-top: 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chip .sc { margin-left: auto; font-family: var(--font-d); font-weight: normal; font-size: 22px; padding-top: 2px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.chip .tg { display: none; font-family: var(--font-d); font-size: 13px; background: var(--c); color: #fff; padding: 2px 8px 0; border-radius: 999px; }
+.chip.on { background: color-mix(in srgb, var(--c) 40%, #12423e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent); }
+.chip.on .tg { display: inline-block; }
+.chip.pop .sc { animation: pop 0.35s ease-out; }
+.chip.side { flex-direction: column; justify-content: center; gap: 4px; padding: 8px 6px; text-align: center; border-radius: 20px; }
+.chip.side .dot { width: 22px; height: 22px; }
+.chip.side .nm { font-size: 22px; }
+.chip.side .sc { margin: 0; font-size: 64px; line-height: 1; }
+.chip.side .tg { font-size: 16px; padding: 4px 12px 1px; }
+.chip.side .tg.ghost { visibility: hidden; display: inline-block; }
+.chip.small { padding: 0 8px; gap: 5px; border-width: 2.5px; border-radius: 12px; }
+.chip.tiny { padding: 0 6px; gap: 4px; }
+.chip.tiny .nm { display: none; }
+.chip.small .nm { font-size: 15px; } .chip.small .sc { font-size: 19px; } .chip.small .dot { width: 11px; height: 11px; }
+#banner { display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; z-index: 8; }
+#banner.on { display: flex; animation: bannerIn 1.15s ease-out forwards; }
+#banner .b1 { font-family: var(--font-d); font-size: min(15vmin, 78px); line-height: 1.1; color: var(--gold); -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 rgba(30, 15, 8, 0.45); white-space: nowrap; }
+#banner .b2 { margin-top: 6px; max-width: 94%; padding: 6px 16px 5px; border-radius: 999px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); font-family: var(--font-d); font-size: min(5vmin, 22px); line-height: 1.25; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+#banner .b2:empty { display: none; }
+@keyframes bannerIn { 0% { opacity: 0; transform: scale(0.6) rotate(-3deg); } 14% { opacity: 1; transform: scale(1.1) rotate(1deg); } 24% { transform: scale(1) rotate(0); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1.05); } }
+body.paused #banner { animation-play-state: paused; }
+
+/* ---------- screens ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 60px) calc(env(safe-area-inset-right, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 16px) calc(env(safe-area-inset-left, 0px) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; background: rgba(10, 52, 48, 0.1);
+}
+.overlay[hidden] { display: none; }
+#scrTitle { background: rgba(10, 52, 48, 0.12); }
+#scrPause { justify-content: center; background: #0f3b37; z-index: 30; }
+#scrOver { background: rgba(10, 52, 48, 0.55); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(420px, 100%); margin: auto;
+  background: var(--paper); color: var(--ink); border: 3px solid var(--ink); border-radius: 26px;
+  box-shadow: 0 8px 0 rgba(6, 30, 28, 0.6); padding: 22px 16px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 9px; background: linear-gradient(90deg, var(--t0) 0 25%, var(--t2) 25% 50%, var(--t1) 50% 75%, var(--t3) 75% 100%); }
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.back {
+  position: absolute; left: calc(env(safe-area-inset-left, 0px) + 10px); top: calc(env(safe-area-inset-top, 0px) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--paper); border: 2px solid rgba(255, 248, 234, 0.85); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.mascot { display: block; width: 190px; height: 128px; margin: 0 auto; }
+.tag-top { display: inline-block; font-size: 13px; letter-spacing: 1px; color: #fff; background: var(--coral-d); padding: 3px 10px 2px; border-radius: 7px; transform: rotate(-2deg); font-weight: 700; }
+.logo { margin: 4px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 64px; line-height: 1.05; letter-spacing: 2px; white-space: nowrap; }
+.logo span { display: inline-block; -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 rgba(61, 42, 32, 0.35); animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 3.2s ease-in-out infinite; }
+.logo span:nth-child(1) { color: #ff6b7d; rotate: -4deg; } .logo span:nth-child(2) { color: #ffd24a; rotate: 4deg; animation-delay: 0.1s, 0.4s; }
+@keyframes logoIn { from { transform: translateY(-30px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.hook { margin: 6px 0 4px; font-size: 15.5px; line-height: 1.45; color: var(--ink); }
+.pick-label { margin: 10px 0 5px; font-size: 13px; color: var(--muted); text-align: left; }
+.modes, .sizes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mode, .size {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 60px; padding: 6px 3px;
+  border-radius: 16px; border: 3px solid rgba(61, 42, 32, 0.25); background: rgba(61, 42, 32, 0.05); color: var(--muted); touch-action: manipulation; font-family: var(--font-b);
+}
+.mode b, .size b { font-family: var(--font-d); font-weight: normal; font-size: 18px; line-height: 1.1; padding-top: 3px; color: var(--ink); white-space: nowrap; }
+.mode small, .size small { font-size: 11.5px; line-height: 1.2; white-space: nowrap; }
+.mode.on, .size.on { border-color: var(--coral-d); background: rgba(255, 107, 125, 0.14); color: var(--ink); box-shadow: 0 0 0 3px rgba(255, 107, 125, 0.25); }
+.mode.on::after, .size.on::after { content: '\2713'; position: absolute; right: -4px; top: -7px; width: 18px; height: 18px; border: 2px solid var(--paper); border-radius: 50%; background: var(--coral-d); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.mode:active, .size:active { transform: translateY(2px); }
+.mode-line { margin: 10px 0 0; font-size: 14px; color: var(--muted); line-height: 1.45; min-height: 5.8em; text-align: left; }
+.mode-line b { color: var(--coral-d); }
+.best-line { margin: 8px auto 0; width: fit-content; padding: 3px 16px 2px; border-radius: 999px; background: #fff; border: 2px solid var(--ink); font-size: 15px; color: var(--ink); font-weight: 700; }
+.best-line b { color: var(--coral-d); font-weight: normal; font-family: var(--font-d); font-size: 21px; }
+.best-line b.none { font-family: var(--font-b); font-weight: 700; font-size: 15px; color: var(--muted); }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 58px; border-radius: 18px;
+  border: 3px solid var(--ink); background: var(--gold); color: var(--ink);
+  font-family: var(--font-d); font-size: 28px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 var(--gold-d); touch-action: manipulation; pointer-events: auto;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--gold-d); }
+.btn.sub { background: var(--paper); color: var(--ink); border: 2.5px solid var(--ink); box-shadow: 0 4px 0 rgba(61, 42, 32, 0.4); font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0; letter-spacing: 0; }
+.btn.sub:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(61, 42, 32, 0.4); }
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, .mode:focus-visible, .size:focus-visible, #btnHint:focus-visible { outline: 3px solid var(--coral); outline-offset: 3px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 .btn.sub { font-size: 16px; min-height: 46px; margin-top: 10px; padding: 0 4px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+.keyhint.desk { display: none; }
+@media (hover: hover) and (pointer: fine) { .keyhint.desk { display: block; } }
+.res-title { margin: 2px 0 0; font-size: 28px; font-weight: normal; font-family: var(--font-d); color: var(--ink); line-height: 1.2; }
+.pause-line { margin: 8px 0 12px; font-size: 16px; color: var(--muted); line-height: 1.45; }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 60px; line-height: 1.1; color: var(--coral-d); font-variant-numeric: tabular-nums; }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 22px; color: var(--ink); margin-left: 4px; }
+.badge { display: inline-block; margin-top: 2px; padding: 4px 16px 5px; border-radius: 12px; background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 21px; border: 2.5px solid var(--ink); animation: wob2 0.9s ease-in-out infinite; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.stats { margin: 10px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stats div { background: rgba(61, 42, 32, 0.07); border: 1px solid rgba(61, 42, 32, 0.25); border-radius: 12px; padding: 5px 2px 4px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 19px; color: var(--ink); margin-top: 1px; white-space: nowrap; }
+.rank { list-style: none; margin: 10px 0 4px; padding: 0; display: grid; gap: 8px; }
+.rank li { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 16px; background: rgba(61, 42, 32, 0.06); border: 3px solid var(--tc, rgba(61, 42, 32, 0.3)); text-align: left; }
+.rank li.first { background: rgba(255, 210, 74, 0.35); }
+.rank .rk { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--tc, #888); color: #fff; display: grid; place-items: center; font-family: var(--font-d); font-size: 20px; padding-top: 3px; }
+.rank .nm { flex: 1; min-width: 0; font-family: var(--font-d); font-size: 20px; line-height: 1.15; }
+.rank .nm small { display: block; font-family: var(--font-b); font-size: 12.5px; color: var(--muted); }
+.rank .sc { font-family: var(--font-d); font-size: 30px; color: var(--coral-d); white-space: nowrap; }
+.goal { margin: 6px 0 0; font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+.goal b { color: var(--coral-d); font-weight: 700; }
+.seed { margin: 6px 0 0; font-size: 11px; color: var(--muted); opacity: 0.8; }
+
+@media (max-width: 380px) { .logo { font-size: 56px; } .mode b, .size b { font-size: 16.5px; } .mode small, .size small { font-size: 10.5px; } }
+@media (max-height: 760px) { .mascot { height: 100px; width: 148px; } .logo { font-size: 54px; } .hook { font-size: 14.5px; } .mode-line { min-height: 5.2em; font-size: 13.5px; } }
+@media (max-height: 640px) { .mascot, .tag-top { display: none; } }
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding: calc(env(safe-area-inset-top, 0px) + 8px) calc(env(safe-area-inset-right, 0px) + 120px) calc(env(safe-area-inset-bottom, 0px) + 12px) calc(env(safe-area-inset-left, 0px) + 120px); }
+  .card { padding: 14px 16px 12px; width: min(640px, 100%); }
+  .mascot, .tag-top, .keyhint { display: none; }
+  .logo { font-size: 40px; margin-top: 6px; }
+  .hook { margin: 2px 0 2px; font-size: 14px; }
+  .pick-label { margin: 6px 0 3px; font-size: 12px; }
+  .mode, .size { min-height: 46px; padding: 3px 4px; }
+  .mode small, .size small { display: none; }
+  .mode b, .size b { font-size: 18px; }
+  .mode-line { margin-top: 6px; min-height: 0; font-size: 12.5px; }
+  .res-title { font-size: 22px; } .res-big { font-size: 42px; }
+  .stats { margin: 6px 0 2px; } .stats b { font-size: 17px; }
+  .rank { gap: 5px; margin: 6px 0 2px; } .rank li { padding: 4px 10px; } .rank .rk { width: 32px; height: 32px; font-size: 17px; }
+  .btn { min-height: 48px; font-size: 22px; } .btn.sub { min-height: 42px; margin-top: 6px; font-size: 15px; }
+  .row2 .btn.sub { min-height: 42px; }
+  .pause-line { margin: 4px 0 6px; font-size: 14px; }
+  .goal { margin-top: 2px; font-size: 13px; }
+  .badge { font-size: 16px; padding: 2px 12px 3px; }
+  .back { min-height: 40px; }
+}
+@media (max-height: 540px) and (orientation: landscape) and (max-width: 760px) {
+  .overlay { padding-left: calc(env(safe-area-inset-left, 0px) + 14px); padding-right: calc(env(safe-area-inset-right, 0px) + 14px); padding-top: calc(env(safe-area-inset-top, 0px) + 52px); }
+  .best-line { display: none; }
+}
+@media (min-width: 600px) and (min-height: 700px) { .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+@media (min-width: 900px) and (min-height: 760px) { .card { width: min(500px, 100%); } .mascot { width: 230px; height: 154px; } .hook { font-size: 17px; } .mode-line { font-size: 15px; } }
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card, .pill.pop b, .chip.pop .sc, #barFill.low, #barPlus.on { animation: none; }
+  #banner.on { animation: none; opacity: 1; }
+}
+/* 큰 버튼 고정: 카드가 화면보다 길면 카드 안쪽이 스크롤되고, 시작·다시 하기 버튼은 화면 아래에 늘 붙어 있어요 */
+.card { overflow: clip; }
+.card .dock { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); z-index: 3; margin: 0 -16px; padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 10px); background: rgb(255,248,234); }
+.card .dock .btn { margin-top: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="짝짝 카드판"></canvas>
+  <div id="probe"></div>
+  <div class="sr" id="live" role="status" aria-live="polite"></div>
+
+  <div id="stage" hidden>
+    <div id="hud">
+      <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+      </button>
+      <div class="pill" id="pillA"><small id="pAl">라운드</small><b id="pAv">1</b></div>
+      <div class="pill" id="pillB"><b id="pBv">0</b><small id="pBl">점</small></div>
+      <button id="btnHint" type="button" aria-label="힌트">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>
+        <span>힌트</span><b id="hintN">1</b>
+      </button>
+      <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+      </button>
+    </div>
+    <div id="bar"><i id="barFill"></i><span id="barTxt"></span><span id="barPlus"></span></div>
+    <div class="chip" id="chip0"><i class="dot"></i><span class="nm"></span><span class="tg">차례</span><b class="sc">0</b></div>
+    <div class="chip" id="chip1"><i class="dot"></i><span class="nm"></span><span class="tg">차례</span><b class="sc">0</b></div>
+    <div class="chip" id="chip2"><i class="dot"></i><span class="nm"></span><span class="tg">차례</span><b class="sc">0</b></div>
+    <div class="chip" id="chip3"><i class="dot"></i><span class="nm"></span><span class="tg">차례</span><b class="sc">0</b></div>
+    <div id="banner"><div class="b1"></div><div class="b2"></div></div>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot" id="mascotT" width="380" height="256" aria-hidden="true"></canvas>
+      <span class="tag-top">짝 맞추기 기억력 게임</span>
+      <h1 class="logo" aria-label="짝짝"><span>짝</span><span>짝</span></h1>
+      <p class="hook">같은 그림 카드 두 장을 찾아 짝! 짝!<br>판이 커지고 카드가 자리를 바꿔요.</p>
+      <p class="pick-label">누구와 할까요?</p>
+      <div class="modes" role="radiogroup" aria-label="모드 고르기">
+        <button class="mode on" id="btnSolo" type="button" role="radio" aria-checked="true"><b>혼자서</b><small>시간 제한 라운드</small></button>
+        <button class="mode" id="btnTeam" type="button" role="radio" aria-checked="false"><b>두 팀 짝짝</b><small>번갈아 한 쌍씩</small></button>
+        <button class="mode" id="btnCoop" type="button" role="radio" aria-checked="false"><b>같이 짝짝</b><small>2~4명 동시에</small></button>
+      </div>
+      <p class="pick-label" id="plLabel" hidden>몇 명이 함께 할까요?</p>
+      <div class="sizes" id="plRow" role="radiogroup" aria-label="인원" hidden>
+        <button class="size on" id="btnP2" type="button" role="radio" aria-checked="true"><b>2명</b><small>둘이서</small></button>
+        <button class="size" id="btnP3" type="button" role="radio" aria-checked="false"><b>3명</b><small>셋이서</small></button>
+        <button class="size" id="btnP4" type="button" role="radio" aria-checked="false"><b>4명</b><small>넷이서</small></button>
+      </div>
+      <p class="mode-line" id="modeLine"></p>
+      <p class="best-line" id="bestLine">내 최고 기록 <b id="tBest" class="none">아직 없어요</b></p>
+      <div class="dock">
+        <button class="btn" id="btnStart" type="button">시작하기</button>
+      </div>
+      <p class="keyhint desk">카드는 마우스나 터치로 눌러요 · P 일시정지 · M 소리</p>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card">
+      <h2 class="res-title">잠깐 쉬어요</h2>
+      <p class="pause-line">카드는 잠깐 가려 뒀어요.<br>준비되면 계속해요. 시간은 멈춰 있어요.</p>
+      <div class="dock">
+        <button class="btn" id="btnResume" type="button">계속하기</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnPauseRestart" type="button">처음부터 다시</button>
+        <button class="btn sub" id="btnPauseTitle" type="button">모드 고르기</button>
+      </div>
+      <button class="btn sub" id="btnMuteP" type="button">소리 끄기</button>
+      <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+      <p class="keyhint desk">P · Esc로 계속하고, R로 처음부터 해요</p>
+    </div>
+  </section>
+
+  <!-- result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <h2 class="res-title" id="rTitle" role="status">결과</h2>
+      <div class="res-big" id="rBigBox"><span id="rBig">0</span><small id="rBigUnit">점</small></div>
+      <div class="badge" id="rBadge" hidden>새 기록이에요!</div>
+      <ol class="rank" id="rRank" hidden></ol>
+      <p class="goal" id="rLine"></p>
+      <div class="stats" id="rStats">
+        <div><span id="rS1l">도달 라운드</span><b id="rS1">1</b></div>
+        <div><span id="rS2l">맞춘 짝</span><b id="rS2">0</b></div>
+        <div><span id="rS3l">최고 연속</span><b id="rS3">0</b></div>
+      </div>
+      <p class="best-line" id="rBestLine">최고 기록 <b id="rBest" class="none">아직 없어요</b></p>
+      <div class="dock">
+        <button class="btn" id="btnAgain" type="button" style="margin-top:12px">다시 하기</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnOverTitle" type="button">모드 고르기</button>
+        <a class="btn sub" href="../../index.html">← 게임 목록</a>
+      </div>
+      <p class="keyhint desk">Enter · R 키로도 다시 할 수 있어요</p>
+      <p class="seed" id="rSeed" hidden></p>
+    </div>
+  </section>
+</div>
+<script>
+'use strict';
+(() => {
+//#LOGIC-START
+// ---------------------------------------------------------------------
+// Pure game logic: no DOM, no audio, no wall clock, no unseeded randomness. A game moves only through update(G, dt) (fixed STEP inside)
+// and tap(G, slot), so it is deterministic for (seed, input sequence) and can be run from Node.
+// A board is cols x rows slots. Each slot holds one card {uid, pic, kind, st}. kind: 'real' | 'grump' (a real card that frowns when
+// turned and costs a little time) | 'fake' (looks like pic `pic` but has no partner and never matches). st: 0 face down, 1 face up
+// (preview / picked / showing a miss), 2 matched.
+// Modes:
+//   solo : rounds in a row. Every round has a time bar; a match gives time back, a miss swaps the two wrong cards (from round 3),
+//          some face-down cards swap by themselves every few seconds (from round 5), fakes (round 4+), grumps (round 6+).
+//          Time out = game over. Score = points; record = score.
+//   team : 2 teams, 3 rounds, same board. Teams take turns turning one pair (a turn is 10-15 s). Most pairs wins.
+//   coop : 2-4 players, 3 stages, one shared time bar, everyone flips at the same time. The board is cut into colored zones
+//          (zone = slot band); a player can only turn cards in the own zone, and the partners of a pair mostly sit in different
+//          zones. A single turned card stays up for HOLD_COOP s so that someone else can match it ("cross match").
+// ---------------------------------------------------------------------
+const STEP = 1 / 60;
+const NPIC = 20;
+const INTRO_T = 1.0, CLEAR_T = 1.7;
+const MISS_HOLD = 0.8, MISS_HOLD_TEAM = 1.4, MISS_EARLY = 0.3;   // seconds a wrong pair stays face up (solo can tap on after MISS_EARLY)
+const HOLD_COOP = 4.0;           // a lone turned card in coop stays up this long
+const COOP_MISS_PEN = 1.5;       // seconds a wrong pair costs in coop (spamming taps is not free)
+const GRUMP_PEN = 0.8;           // seconds a frowning card costs (solo / coop time bar, team turn timer)
+const TEAM_ROUNDS = 3, COOP_STAGES = 3;
+const HINT_GLOW = 1.8, WARN_T = 0.75, SOLO_HINT_START = 1, SOLO_HINT_MAX = 2;
+const PTS_MATCH = 100, PTS_COMBO = 25, PTS_COMBO_MAX = 9, PTS_ROUND = 150, PTS_SEC = 10, PTS_PERFECT = 200;
+const CARRY = 0.3, CARRY_MAX = 6;   // part of the time left that carries into the next round
+const TEAM_NAME = ['빨강 팀', '파랑 팀'];
+const PLAYER_NAME = ['빨강', '파랑', '노랑', '보라'];
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashSeed(a, b) { let h = (a ^ Math.imul(b | 0, 0x9E3779B1)) | 0; h = Math.imul(h ^ h >>> 15, 0x85EBCA6B); h = Math.imul(h ^ h >>> 13, 0xC2B2AE35); return (h ^ h >>> 16) >>> 0; }
+function shuffle(arr, rng) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+const range = (n) => Array.from({ length: n }, (_, i) => i);
+
+// ---- difficulty tables ---------------------------------------------------------
+// solo: cols, rows, fakes, grumps, time limit (s), preview (s), swap on miss, auto-swap every (s), auto-swap cards
+const SOLO_TABLE = [
+  [2, 2, 0, 0, 18, 1.6, 0, 0, 0],    // 1: 4 cards, 2 pairs: very easy
+  [2, 3, 0, 0, 20, 2.0, 0, 0, 0],    // 2: 6 cards
+  [3, 4, 0, 0, 24, 2.8, 1, 0, 0],    // 3: 12 cards, wrong cards swap places
+  [4, 4, 2, 0, 26, 3.2, 1, 0, 0],    // 4: 16 cards, two winking fakes
+  [4, 5, 2, 0, 28, 3.6, 1, 9, 2],    // 5: 20 cards, two cards swap by themselves
+  [4, 6, 2, 2, 31, 4.0, 1, 8, 2],    // 6: 24 cards, frowning cards
+  [5, 6, 2, 2, 35, 4.2, 1, 7, 4],    // 7: 30 cards
+  [5, 6, 4, 3, 37, 4.4, 1, 6, 4],    // 8+: 30 cards, 4 fakes
+];
+// team: cols, rows, fakes, grumps, preview, swap on miss, auto-swap every, auto-swap cards, turn seconds
+const TEAM_TABLE = [
+  [2, 4, 0, 0, 2.4, 0, 0, 0, 15],
+  [3, 4, 0, 0, 3.2, 1, 0, 0, 12],
+  [4, 4, 2, 1, 3.8, 1, 10, 2, 10],
+];
+// coop: cards per stage for 2, 3, 4 players
+const COOP_N = [[8, 12, 12], [12, 16, 20], [16, 20, 24]];
+const GRID = { 4: [2, 2], 6: [2, 3], 8: [2, 4], 12: [3, 4], 16: [4, 4], 20: [4, 5], 24: [4, 6], 30: [5, 6] };
+
+function soloCfg(round) {
+  const r = SOLO_TABLE[Math.min(round, SOLO_TABLE.length) - 1], extra = Math.max(0, round - SOLO_TABLE.length);
+  const n = r[0] * r[1];
+  return {
+    cols: r[0], rows: r[1], n, fakes: r[2], grumps: r[3], pairs: (n - r[2]) / 2, limit: r[4], preview: r[5], missSwap: !!r[6],
+    perEvery: r[7] ? Math.max(4.2, r[7] - extra * 0.3) : 0, perCount: r[8], recover: round <= 2 ? 3.0 : round <= 4 ? 1.8 : round <= 6 ? 1.2 : 1.0, turnT: 0,
+  };
+}
+function teamCfg(round) {
+  const r = TEAM_TABLE[Math.min(round, TEAM_ROUNDS) - 1], n = r[0] * r[1];
+  return { cols: r[0], rows: r[1], n, fakes: r[2], grumps: r[3], pairs: (n - r[2]) / 2, limit: 0, preview: r[4], missSwap: !!r[5], perEvery: r[6], perCount: r[7], recover: 0, turnT: r[8] };
+}
+function coopCfg(stage, players) {
+  const n = COOP_N[stage - 1][players - 2], g = GRID[n];
+  const fakes = stage === 3 ? 2 : 0;
+  return {
+    cols: g[0], rows: g[1], n, fakes, grumps: stage === 3 ? 1 : 0, pairs: (n - fakes) / 2, limit: Math.round(8 + (n - fakes) / 2 * 2.2), preview: 2.4 + stage * 0.5,
+    missSwap: stage >= 2, perEvery: stage === 3 ? 9 : 0, perCount: 2, recover: 1.2, turnT: 0,
+  };
+}
+function cfgFor(G) { return G.mode === 'solo' ? soloCfg(G.round) : G.mode === 'team' ? teamCfg(G.round) : coopCfg(G.round, G.players); }
+function zoneOf(G, slot) { return G.mode === 'coop' ? Math.min(G.players - 1, Math.floor(slot * G.players / G.n)) : 0; }
+
+// ---- board -------------------------------------------------------------------------
+function buildBoard(G, cfg) {
+  const rng = mulberry32(hashSeed(G.seed, 1000 + G.round));
+  const pics = shuffle(range(NPIC), rng).slice(0, cfg.pairs);
+  const mk = (pic, kind) => ({ uid: ++G.uidN, pic, kind, st: 0, by: -1 });
+  const grumpPics = new Set(shuffle(pics, rng).slice(0, cfg.grumps));
+  const pairsL = pics.map((pic) => [mk(pic, 'real'), mk(pic, grumpPics.has(pic) ? 'grump' : 'real')]);
+  const fakePics = shuffle(pics, rng);
+  const fakes = [];
+  for (let i = 0; i < cfg.fakes; i++) fakes.push(mk(fakePics[i % fakePics.length], 'fake'));
+  if (G.mode !== 'coop') {
+    const all = [];
+    for (const p of pairsL) all.push(p[0], p[1]);
+    for (const f of fakes) all.push(f);
+    return shuffle(all, rng);
+  }
+  // coop: spread the partners of a pair over different zones
+  const slots = new Array(cfg.n).fill(null);
+  const zs = [];
+  for (let z = 0; z < G.players; z++) zs.push([]);
+  for (let s = 0; s < cfg.n; s++) zs[zoneOf(G, s)].push(s);
+  for (let z = 0; z < G.players; z++) zs[z] = shuffle(zs[z], rng);
+  const take = (z, card) => { slots[zs[z].pop()] = card; };
+  for (const p of shuffle(pairsL, rng)) {
+    const order = range(G.players).map((z) => ({ z, k: zs[z].length + rng() * 0.5 })).filter((o) => zs[o.z].length > 0).sort((a, b) => b.k - a.k);
+    const za = order[0].z;
+    const other = order.find((o) => o.z !== za);
+    take(za, p[0]);
+    take(other ? other.z : za, p[1]);
+  }
+  for (const f of fakes) { const o = range(G.players).filter((z) => zs[z].length > 0); take(o[Math.floor(rng() * o.length)], f); }
+  return slots;
+}
+
+// ---- game --------------------------------------------------------------------------
+function newGame(o) {
+  o = o || {};
+  const mode = o.mode === 'team' || o.mode === 'coop' ? o.mode : 'solo';
+  const players = mode === 'coop' ? Math.max(2, Math.min(4, o.players | 0 || 2)) : mode === 'team' ? 2 : 1;
+  const seed = (o.seed === undefined || o.seed === null ? 12345 : o.seed) | 0;
+  const G = {
+    mode, players, seed, rng: mulberry32(hashSeed(seed, 77)), uidN: 0, acc: 0, t: 0,
+    round: 0, phase: 'intro', pt: 0, cfg: null, cols: 0, rows: 0, n: 0, pairs: 0, found: 0, cards: [],
+    first: -1, misses: [], turn: 0, turnT: 0,
+    score: new Array(mode === 'team' ? 2 : mode === 'coop' ? players : 1).fill(0), pairsBy: new Array(players).fill(0),
+    time: 0, barMax: 1, limit: 0, combo: 0, bestCombo: 0, roundMiss: 0, hints: mode === 'solo' ? SOLO_HINT_START : 0, hintGlow: null,
+    perT: 0, perPlan: null, pl: [], ev: [], over: false, outcome: '', winner: -2, win: false, reached: 0,
+    stat: { matches: 0, misses: 0, cross: 0, swapsMiss: 0, swapsAuto: 0, grumps: 0, fakeMiss: 0, timeouts: 0, hintsUsed: 0, taps: 0, perfect: 0 },
+  };
+  startRound(G);
+  return G;
+}
+function emit(G, e) { G.ev.push(e); if (G.ev.length > 600) G.ev.splice(0, 200); }
+
+function startRound(G) {
+  const prevLeft = G.time;
+  G.round++;
+  const cfg = cfgFor(G);
+  G.cfg = cfg; G.cols = cfg.cols; G.rows = cfg.rows; G.n = cfg.n; G.pairs = cfg.pairs; G.found = 0;
+  G.cards = buildBoard(G, cfg);
+  G.first = -1; G.misses = []; G.hintGlow = null; G.perPlan = null; G.roundMiss = 0; G.combo = 0;
+  G.pl = []; for (let i = 0; i < G.players; i++) G.pl.push({ picks: [], holdT: 0 });
+  G.perT = cfg.perEvery;
+  if (G.mode !== 'team') {
+    G.limit = cfg.limit;
+    G.time = cfg.limit + (G.round > 1 ? Math.min(prevLeft * CARRY, CARRY_MAX) : 0);
+    G.barMax = G.time;
+  }
+  if (G.mode === 'team') { G.turn = (G.round - 1) % 2; G.turnT = cfg.turnT; }
+  if (G.mode === 'solo' && G.round > 1 && G.round % 3 === 0) G.hints = Math.min(SOLO_HINT_MAX, G.hints + 1);
+  if (G.mode === 'coop') G.hints = 1;
+  G.phase = 'intro'; G.pt = INTRO_T;
+  emit(G, { t: 'round', round: G.round });
+}
+
+const isPair = (a, b) => !!a && !!b && a !== b && a.kind !== 'fake' && b.kind !== 'fake' && a.pic === b.pic;
+
+function flip(G, slot, who) {
+  const c = G.cards[slot];
+  c.st = 1;
+  emit(G, { t: 'flip', slot, uid: c.uid, who, kind: c.kind });
+  if (c.kind === 'grump') {
+    G.stat.grumps++;
+    if (G.mode === 'team') G.turnT = Math.max(0.5, G.turnT - GRUMP_PEN); else G.time -= GRUMP_PEN;
+    emit(G, { t: 'grump', slot, uid: c.uid });
+  }
+}
+function doMatch(G, sa, sb, whoA, whoB) {
+  const a = G.cards[sa], b = G.cards[sb];
+  a.st = 2; b.st = 2; a.by = whoA; b.by = whoB;
+  if (G.hintGlow && (G.hintGlow.a === sa || G.hintGlow.b === sa || G.hintGlow.a === sb || G.hintGlow.b === sb)) G.hintGlow = null;
+  G.found++; G.stat.matches++;
+  if (G.mode === 'solo') {
+    G.combo++; if (G.combo > G.bestCombo) G.bestCombo = G.combo;
+    const pts = PTS_MATCH + Math.min(G.combo - 1, PTS_COMBO_MAX) * PTS_COMBO;
+    G.score[0] += pts;
+    G.time = Math.min(G.barMax, G.time + G.cfg.recover);
+    emit(G, { t: 'match', a: sa, b: sb, who: 0, whoB: 0, pts, combo: G.combo });
+  } else if (G.mode === 'team') {
+    G.score[whoA]++; G.pairsBy[whoA]++;
+    emit(G, { t: 'match', a: sa, b: sb, who: whoA, whoB: whoA, pts: 1 });
+  } else {
+    G.score[whoA]++; if (whoB !== whoA) G.score[whoB]++;
+    G.pairsBy[whoA]++; if (whoB !== whoA) G.pairsBy[whoB]++;
+    G.time = Math.min(G.barMax, G.time + G.cfg.recover);
+    emit(G, { t: 'match', a: sa, b: sb, who: whoA, whoB, pts: 1, cross: whoA !== whoB });
+  }
+  if (G.found >= G.pairs) roundClear(G);
+}
+function doMiss(G, sa, sb, who) {
+  const a = G.cards[sa], b = G.cards[sb];
+  G.misses.push({ a: sa, b: sb, age: 0, who });
+  G.stat.misses++; G.roundMiss++;
+  const fake = a.kind === 'fake' || b.kind === 'fake';
+  if (fake) G.stat.fakeMiss++;
+  if (G.mode === 'solo') G.combo = 0;
+  if (G.mode === 'coop') G.time -= COOP_MISS_PEN;
+  emit(G, { t: 'miss', a: sa, b: sb, who, fake });
+  if (G.mode === 'team') { G.turn ^= 1; G.turnT = G.cfg.turnT; }
+}
+function swapSlots(G, a, b, why) {
+  const t = G.cards[a]; G.cards[a] = G.cards[b]; G.cards[b] = t;
+  if (why === 'miss') G.stat.swapsMiss++; else G.stat.swapsAuto++;
+  if (G.hintGlow) for (const k of ['a', 'b']) { if (G.hintGlow[k] === a) G.hintGlow[k] = b; else if (G.hintGlow[k] === b) G.hintGlow[k] = a; }
+  emit(G, { t: 'swap', a, b, why });
+}
+function resolveMiss(G, m) {
+  const i = G.misses.indexOf(m); if (i >= 0) G.misses.splice(i, 1);
+  const a = G.cards[m.a], b = G.cards[m.b];
+  if (a.st === 1) a.st = 0;
+  if (b.st === 1) b.st = 0;
+  emit(G, { t: 'unflip', slots: [m.a, m.b] });
+  if (G.cfg.missSwap) swapSlots(G, m.a, m.b, 'miss');
+}
+function roundClear(G) {
+  G.phase = 'clear'; G.pt = CLEAR_T; G.misses = []; G.first = -1; G.hintGlow = null; G.perPlan = null;
+  for (const p of G.pl) { p.picks = []; p.holdT = 0; }
+  let bonus = 0;
+  if (G.mode === 'solo') {
+    bonus = G.round * PTS_ROUND + Math.floor(Math.max(0, G.time)) * PTS_SEC;
+    if (G.roundMiss === 0) { bonus += PTS_PERFECT; G.stat.perfect++; }
+    G.score[0] += bonus;
+  }
+  emit(G, { t: 'clear', round: G.round, bonus, perfect: G.roundMiss === 0 });
+}
+function finish(G, outcome) {
+  G.over = true; G.phase = 'over'; G.outcome = outcome; G.misses = []; G.first = -1;
+  if (G.mode === 'team') G.winner = G.score[0] > G.score[1] ? 0 : G.score[1] > G.score[0] ? 1 : -1;
+  if (G.mode === 'coop') G.win = outcome === 'win';
+  G.reached = G.round;
+  emit(G, { t: 'over', outcome });
+}
+
+// A tap on a slot. Returns { k: 'ignored' | 'wait' | 'first' | 'match' | 'miss' | 'cross' }.
+function tap(G, slot) {
+  if (G.over || G.phase !== 'play') return { k: 'ignored' };
+  const c = G.cards[slot];
+  if (!c || c.st !== 0) return { k: 'ignored' };
+  G.stat.taps++;
+  if (G.mode === 'coop') return tapCoop(G, slot, c);
+  if (G.misses.length) {
+    const m = G.misses[0];
+    if (G.mode === 'team' || m.age < MISS_EARLY) return { k: 'wait' };
+    while (G.misses.length) resolveMiss(G, G.misses[0]);
+  }
+  const who = G.mode === 'team' ? G.turn : 0;
+  flip(G, slot, who);
+  if (G.first < 0) { G.first = slot; return { k: 'first' }; }
+  const fs = G.first; G.first = -1;
+  if (isPair(G.cards[fs], c)) {
+    doMatch(G, fs, slot, who, who);
+    if (G.mode === 'team') { G.turn ^= 1; G.turnT = G.cfg.turnT; }
+    return { k: 'match' };
+  }
+  doMiss(G, fs, slot, who);
+  return { k: 'miss' };
+}
+function findHeld(G, card, who) {
+  for (let q = 0; q < G.players; q++) {
+    if (q === who) continue;
+    const p = G.pl[q];
+    if (p.picks.length === 1 && isPair(G.cards[p.picks[0]], card)) return { who: q, slot: p.picks[0] };
+  }
+  return null;
+}
+function tapCoop(G, slot, c) {
+  const who = zoneOf(G, slot), pl = G.pl[who];
+  flip(G, slot, who);
+  if (pl.picks.length === 0) {
+    const o = findHeld(G, c, who);
+    if (o) { G.pl[o.who].picks = []; G.stat.cross++; doMatch(G, slot, o.slot, who, o.who); return { k: 'cross' }; }
+    pl.picks = [slot]; pl.holdT = 0;
+    return { k: 'first' };
+  }
+  const fs = pl.picks[0];
+  if (isPair(G.cards[fs], c)) { pl.picks = []; doMatch(G, fs, slot, who, who); return { k: 'match' }; }
+  const o = findHeld(G, c, who);
+  if (o) { G.pl[o.who].picks = []; G.stat.cross++; doMatch(G, slot, o.slot, who, o.who); return { k: 'cross' }; }
+  pl.picks = [];
+  doMiss(G, fs, slot, who);
+  return { k: 'miss' };
+}
+
+// a hint makes a matching pair glow (no picture is shown). With one card already turned, its partner glows.
+function useHint(G) {
+  if (G.over || G.phase !== 'play' || G.hints <= 0 || G.hintGlow) return null;
+  let pick = null;
+  const open = [];
+  for (let i = 0; i < G.n; i++) if (G.cards[i].st === 1 && G.cards[i].kind !== 'fake' && !G.misses.some((m) => m.a === i || m.b === i)) open.push(i);
+  for (const s of open) {
+    const partner = G.cards.findIndex((c, j) => c.st === 0 && isPair(G.cards[s], c) && j !== s);
+    if (partner >= 0) { pick = [s, partner]; break; }
+  }
+  if (!pick) {
+    const downs = [];
+    for (let i = 0; i < G.n; i++) if (G.cards[i].st === 0 && G.cards[i].kind !== 'fake') downs.push(i);
+    const order = shuffle(downs, G.rng);
+    for (const s of order) {
+      const partner = downs.find((j) => j !== s && isPair(G.cards[s], G.cards[j]));
+      if (partner !== undefined) { pick = [s, partner]; break; }
+    }
+  }
+  if (!pick) return null;
+  G.hints--; G.stat.hintsUsed++;
+  G.hintGlow = { a: pick[0], b: pick[1], t: HINT_GLOW };
+  emit(G, { t: 'hint', a: pick[0], b: pick[1] });
+  return G.hintGlow;
+}
+
+function planAutoSwap(G) {
+  const cand = [];
+  for (let i = 0; i < G.n; i++) if (G.cards[i].st === 0) cand.push(i);
+  const want = Math.floor(G.cfg.perCount / 2), plan = [];
+  if (G.mode === 'coop') {
+    const byZ = range(G.players).map(() => []);
+    for (const s of cand) byZ[zoneOf(G, s)].push(s);
+    const zs = shuffle(range(G.players).filter((z) => byZ[z].length >= 2), G.rng);
+    for (let k = 0; k < want && zs.length; k++) {
+      const z = zs[k % zs.length], l = shuffle(byZ[z], G.rng);
+      if (l.length >= 2) { plan.push([l[0], l[1]]); byZ[z] = l.slice(2); }
+    }
+  } else {
+    const l = shuffle(cand, G.rng);
+    for (let k = 0; k < want && l.length >= 2; k++) plan.push([l.pop(), l.pop()]);
+  }
+  return plan;
+}
+
+function step(G) {
+  if (G.over) return;
+  G.t += STEP;
+  const cfg = G.cfg;
+  if (G.phase === 'intro') {
+    G.pt -= STEP;
+    if (G.pt <= 0) { G.phase = 'preview'; G.pt = cfg.preview; for (const c of G.cards) c.st = 1; emit(G, { t: 'preview', dur: cfg.preview }); }
+  } else if (G.phase === 'preview') {
+    G.pt -= STEP;
+    if (G.pt <= 0) {
+      G.phase = 'play'; for (const c of G.cards) c.st = 0; G.perT = cfg.perEvery;
+      emit(G, { t: 'go' });
+    }
+  } else if (G.phase === 'clear') {
+    G.pt -= STEP;
+    if (G.pt <= 0) {
+      if (G.mode === 'solo') startRound(G);
+      else if (G.round >= (G.mode === 'team' ? TEAM_ROUNDS : COOP_STAGES)) finish(G, G.mode === 'team' ? 'done' : 'win');
+      else startRound(G);
+    }
+  } else if (G.phase === 'play') {
+    // wrong pairs
+    for (let i = G.misses.length - 1; i >= 0; i--) {
+      const m = G.misses[i]; m.age += STEP;
+      if (m.age >= (G.mode === 'team' ? MISS_HOLD_TEAM : MISS_HOLD)) resolveMiss(G, m);
+    }
+    if (G.hintGlow) { G.hintGlow.t -= STEP; if (G.hintGlow.t <= 0) G.hintGlow = null; }
+    if (G.mode === 'coop') {
+      for (let q = 0; q < G.players; q++) {
+        const p = G.pl[q];
+        if (p.picks.length === 1) {
+          p.holdT += STEP;
+          if (p.holdT >= HOLD_COOP) { const c = G.cards[p.picks[0]]; if (c.st === 1) c.st = 0; emit(G, { t: 'unflip', slots: [p.picks[0]], timeout: true }); p.picks = []; }
+        }
+      }
+    }
+    if (G.mode === 'team') {
+      if (!G.misses.length) {
+        G.turnT -= STEP;
+        if (G.turnT <= 0) {
+          G.stat.timeouts++;
+          if (G.first >= 0) { const c = G.cards[G.first]; if (c.st === 1) c.st = 0; emit(G, { t: 'unflip', slots: [G.first], timeout: true }); G.first = -1; }
+          emit(G, { t: 'turnout', team: G.turn });
+          G.turn ^= 1; G.turnT = cfg.turnT;
+        }
+      }
+    } else {
+      const before = Math.ceil(G.time);
+      G.time -= STEP;
+      if (G.time > 0 && Math.ceil(G.time) !== before && G.time <= 5) emit(G, { t: 'tick', left: Math.ceil(G.time) });
+      if (G.time <= 0) { G.time = 0; finish(G, 'timeout'); return; }
+    }
+    // cards that swap by themselves
+    if (cfg.perEvery > 0) {
+      G.perT -= STEP;
+      if (!G.perPlan && G.perT <= WARN_T) {
+        const plan = planAutoSwap(G);
+        if (plan.length) { G.perPlan = plan; emit(G, { t: 'warn', slots: plan.reduce((a, p) => a.concat(p), []) }); } else G.perT = cfg.perEvery;
+      }
+      if (G.perT <= 0) {
+        if (G.perPlan) for (const p of G.perPlan) if (G.cards[p[0]].st === 0 && G.cards[p[1]].st === 0) swapSlots(G, p[0], p[1], 'auto');
+        G.perPlan = null; G.perT = cfg.perEvery + (G.rng() - 0.5);
+      }
+    }
+  }
+}
+function update(G, dt) {
+  G.acc += dt;
+  let n = 0;
+  while (G.acc >= STEP - 1e-9 && n < 900) { G.acc -= STEP; step(G); n++; if (G.over) { G.acc = 0; break; } }
+}
+// slot -> player color zone (coop) for the view, and a small ranking helper
+function teamResult(G) { return G.winner; }
+function totalPairs(G) { let s = 0; for (const x of G.pairsBy) s += x; return s; }
+//#LOGIC-END
+
+// =====================================================================
+// ART: 20 little pictures drawn in a 100 x 100 box. Every picture has a face, and the face has moods:
+//   normal | happy (matched) | wink (the fake cards) | grump (frowning card)
+// =====================================================================
+const TAU = Math.PI * 2;
+const INK = '#4b372c';
+const PIC_BG = ['#ffe9d0', '#e3efff', '#fde6f1', '#ffe3e8', '#fff0d8', '#e4f6d8', '#fff5c4', '#dff0ff', '#ffe6d2', '#e9f3ec',
+  '#efe5f8', '#d9efff', '#ffe5e0', '#ffe1e6', '#e3f6e6', '#fff6c2', '#fce4f3', '#efe3fb', '#e2edff', '#dff3ff'];
+const PIC_NAME = ['고양이', '강아지', '토끼', '아기 돼지', '곰', '개구리', '병아리', '펭귄', '여우', '판다', '부엉이', '고래', '사과', '딸기', '수박', '바나나', '아이스크림', '컵케이크', '풍선', '우산'];
+
+function fillStroke(c, fill) { if (fill) { c.fillStyle = fill; c.fill(); } c.stroke(); }
+function ell(c, x, y, rx, ry, fill, rot) { c.beginPath(); c.ellipse(x, y, rx, ry, rot || 0, 0, TAU); fillStroke(c, fill); }
+function circ(c, x, y, r, fill) { ell(c, x, y, r, r, fill); }
+function poly(c, pts, fill) { c.beginPath(); c.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]); c.closePath(); fillStroke(c, fill); }
+function dot(c, x, y, r, col) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fillStyle = col; c.fill(); }
+function soft(c, x, y, rx, ry, col, rot) { c.beginPath(); c.ellipse(x, y, rx, ry, rot || 0, 0, TAU); c.fillStyle = col; c.fill(); }
+function line(c, pts, w, col) {
+  c.save(); c.beginPath(); c.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+  c.lineWidth = w; c.strokeStyle = col || INK; c.stroke(); c.restore();
+}
+function shape(c, fn, fill) { c.beginPath(); fn(c); fillStroke(c, fill); }
+
+// o: x (center), ex (half distance between eyes), ey, er (eye radius), my (mouth y), mw (mouth half width), mood, cheek, cheekCol, mouth (false: no mouth when normal/happy), white (eyes on a dark patch)
+function face(c, o) {
+  const mood = o.mood || 'normal', x = o.x === undefined ? 50 : o.x, ex = o.ex, ey = o.ey, s = o.er || 4, my = o.my, mw = o.mw || 5;
+  const Lx = x - ex, Rx = x + ex;
+  c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = INK;
+  if (o.cheek !== false) {
+    const cc = o.cheekCol || 'rgba(255,110,140,.5)';
+    soft(c, Lx - s * 1.7, ey + s * 2.3, s * 1.5, s * 0.95, cc); soft(c, Rx + s * 1.7, ey + s * 2.3, s * 1.5, s * 0.95, cc);
+  }
+  const eyeBall = (px, py, r) => {
+    if (o.white) { dot(c, px, py, r * 1.15, '#fff'); dot(c, px + r * 0.1, py + r * 0.15, r * 0.7, INK); dot(c, px - r * 0.15, py - r * 0.2, r * 0.28, '#fff'); return; }
+    dot(c, px, py, r, INK); dot(c, px - r * 0.33, py - r * 0.4, r * 0.4, '#fff'); dot(c, px + r * 0.32, py + r * 0.38, r * 0.18, 'rgba(255,255,255,.7)');
+  };
+  const eyeArc = (px, py, r) => { c.beginPath(); c.arc(px, py + r * 0.6, r * 1.15, Math.PI * 1.1, Math.PI * 1.9); c.lineWidth = 2.8; c.strokeStyle = o.white ? '#fff' : INK; c.stroke(); c.strokeStyle = INK; };
+  if (mood === 'happy') { eyeArc(Lx, ey, s); eyeArc(Rx, ey, s); }
+  else if (mood === 'wink') { eyeBall(Lx, ey, s); eyeArc(Rx, ey, s); }
+  else if (mood === 'grump') {
+    eyeBall(Lx, ey + s * 0.1, s * 0.9); eyeBall(Rx, ey + s * 0.1, s * 0.9);
+    c.lineWidth = 3; c.strokeStyle = o.white ? '#fff' : INK;
+    c.beginPath(); c.moveTo(Lx - s * 1.7, ey - s * 3.1); c.lineTo(Lx + s * 1.4, ey - s * 1.5); c.stroke();
+    c.beginPath(); c.moveTo(Rx + s * 1.7, ey - s * 3.1); c.lineTo(Rx - s * 1.4, ey - s * 1.5); c.stroke();
+    c.strokeStyle = INK;
+  } else { eyeBall(Lx, ey, s); eyeBall(Rx, ey, s); }
+  // mouth
+  c.lineWidth = 2.6;
+  if (mood === 'happy' && o.mouth !== false) {
+    c.beginPath(); c.moveTo(x - mw, my - mw * 0.35); c.quadraticCurveTo(x, my + mw * 1.9, x + mw, my - mw * 0.35); c.closePath();
+    c.fillStyle = '#7a2e3a'; c.fill(); c.stroke();
+    soft(c, x, my + mw * 0.75, mw * 0.5, mw * 0.32, '#ff8fa5');
+  } else if (mood === 'wink') {
+    c.beginPath(); c.moveTo(x - mw, my - mw * 0.3); c.quadraticCurveTo(x, my + mw * 1.2, x + mw, my - mw * 0.3); c.closePath();
+    c.fillStyle = '#7a2e3a'; c.fill(); c.stroke();
+    c.beginPath(); c.ellipse(x + mw * 0.45, my + mw * 0.95, mw * 0.5, mw * 0.65, 0.25, 0, TAU); c.fillStyle = '#ff7f9e'; c.fill(); c.lineWidth = 2; c.stroke();
+    c.beginPath(); c.moveTo(x + mw * 0.45, my + mw * 0.45); c.lineTo(x + mw * 0.45, my + mw * 1.3); c.lineWidth = 1.4; c.stroke();
+  } else if (mood === 'grump') {
+    c.beginPath(); c.arc(x, my + mw * 0.95, mw * 0.95, Math.PI * 1.18, Math.PI * 1.82); c.stroke();
+    // anger mark
+    const ax = x + ex * 1.35, ay = ey - s * 4.0, r = s * 1.5;
+    c.strokeStyle = '#e5382c'; c.lineWidth = 2.6;
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) { c.beginPath(); c.moveTo(ax + sx * r * 0.28, ay + sy * r); c.quadraticCurveTo(ax + sx * r, ay + sy * r, ax + sx * r, ay + sy * r * 0.28); c.stroke(); }
+    c.strokeStyle = INK;
+  } else if (o.mouth !== false) {
+    c.beginPath(); c.arc(x, my - mw * 0.55, mw, Math.PI * 0.18, Math.PI * 0.82); c.stroke();
+  }
+  c.restore();
+}
+
+const PICS = [
+  // 0 cat
+  (c, m) => {
+    poly(c, [20, 42, 24, 12, 45, 30], '#ffa04d'); poly(c, [80, 42, 76, 12, 55, 30], '#ffa04d');
+    poly(c, [26, 36, 28, 21, 38, 31], '#ffb7c5'); poly(c, [74, 36, 72, 21, 62, 31], '#ffb7c5');
+    ell(c, 50, 57, 35, 29, '#ffa04d');
+    for (const [x1, y1, x2, y2] of [[50, 30, 50, 38], [41, 31, 42, 38], [59, 31, 58, 38]]) line(c, [x1, y1, x2, y2], 3, '#d9702a');
+    ell(c, 50, 70, 14, 9.5, '#fff6ea');
+    poly(c, [46.5, 62.5, 53.5, 62.5, 50, 67], '#ff8fa3');
+    for (const s of [-1, 1]) { line(c, [50 + s * 22, 66, 50 + s * 38, 61], 2, INK); line(c, [50 + s * 22, 71, 50 + s * 38, 73], 2, INK); }
+    face(c, { mood: m, ex: 17, ey: 54, er: 4.4, my: 73, mw: 4 });
+  },
+  // 1 dog
+  (c, m) => {
+    ell(c, 19, 50, 12, 23, '#8f5b39', 0.28); ell(c, 81, 50, 12, 23, '#8f5b39', -0.28);
+    ell(c, 50, 54, 32, 30, '#f6dcb4');
+    soft(c, 62, 46, 11, 12, '#b27a4f');
+    ell(c, 50, 68, 18, 13, '#fff4e2');
+    ell(c, 50, 61, 7.5, 5, INK); soft(c, 48, 59.5, 2.6, 1.4, 'rgba(255,255,255,.7)');
+    line(c, [50, 65, 50, 70], 2.4, INK);
+    if (m === 'normal') { ell(c, 50, 79, 5, 6.5, '#ff8fa5'); }
+    face(c, { mood: m, ex: 16, ey: 48, er: 4.4, my: 73, mw: 6, mouth: m !== 'normal' });
+    if (m === 'normal') { c.save(); c.lineWidth = 2.4; c.beginPath(); c.arc(44.5, 70, 5.5, 0.1 * Math.PI, 0.9 * Math.PI); c.stroke(); c.beginPath(); c.arc(55.5, 70, 5.5, 0.1 * Math.PI, 0.9 * Math.PI); c.stroke(); c.restore(); }
+  },
+  // 2 rabbit
+  (c, m) => {
+    ell(c, 35, 24, 10.5, 25, '#fffdfb', -0.1); ell(c, 65, 24, 10.5, 25, '#fffdfb', 0.1);
+    soft(c, 35, 26, 5, 17, '#ffc0d0', -0.1); soft(c, 65, 26, 5, 17, '#ffc0d0', 0.1);
+    ell(c, 50, 64, 33, 28, '#fffdfb');
+    ell(c, 50, 66.5, 3.6, 2.6, '#ff8aa5');
+    face(c, { mood: m, ex: 16, ey: 60, er: 4.4, my: 72, mw: 4.4 });
+    if (m === 'normal') { c.save(); c.lineWidth = 2.2; c.fillStyle = '#fff'; c.beginPath(); c.rect(47, 74, 6, 7); c.fill(); c.stroke(); line(c, [50, 74, 50, 81], 1.6, INK); c.restore(); }
+  },
+  // 3 pig
+  (c, m) => {
+    poly(c, [20, 38, 28, 12, 46, 28], '#ff9db1'); poly(c, [80, 38, 72, 12, 54, 28], '#ff9db1');
+    ell(c, 50, 57, 36, 31, '#ffb6c4');
+    ell(c, 50, 66, 16, 12, '#ff94ac');
+    ell(c, 44.5, 66, 2.4, 3.6, INK); ell(c, 55.5, 66, 2.4, 3.6, INK);
+    face(c, { mood: m, ex: 18, ey: 48, er: 4.4, my: 82, mw: 5.5, mouth: m !== 'normal' });
+    if (m === 'normal') { c.save(); c.lineWidth = 2.4; c.beginPath(); c.arc(50, 77.5, 5.5, 0.2 * Math.PI, 0.8 * Math.PI); c.stroke(); c.restore(); }
+  },
+  // 4 bear
+  (c, m) => {
+    circ(c, 24, 28, 11.5, '#a7693c'); circ(c, 76, 28, 11.5, '#a7693c'); soft(c, 24, 29, 6, 6, '#e0a673'); soft(c, 76, 29, 6, 6, '#e0a673');
+    ell(c, 50, 57, 34, 31, '#b97c4a');
+    ell(c, 50, 68, 16, 12.5, '#f3d7b2');
+    ell(c, 50, 62, 6, 4.2, INK); soft(c, 48.5, 60.8, 2.2, 1.2, 'rgba(255,255,255,.7)');
+    face(c, { mood: m, ex: 17, ey: 49, er: 4.4, my: 74, mw: 5 });
+    line(c, [50, 66, 50, 70], 2.4, INK);
+  },
+  // 5 frog
+  (c, m) => {
+    ell(c, 50, 64, 40, 28, '#7ccf5a');
+    circ(c, 29, 36, 14, '#8ad967'); circ(c, 71, 36, 14, '#8ad967');
+    soft(c, 50, 79, 22, 8, '#d3f3b0');
+    dot(c, 46, 52, 1.6, INK); dot(c, 54, 52, 1.6, INK);
+    soft(c, 17, 64, 6, 4, 'rgba(255,110,140,.55)'); soft(c, 83, 64, 6, 4, 'rgba(255,110,140,.55)');
+    face(c, { mood: m, ex: 21, ey: 36, er: 5.2, my: 62, mw: 14, cheek: false });
+    if (m === 'normal') {} 
+  },
+  // 6 chick
+  (c, m) => {
+    ell(c, 20, 62, 9, 14, '#ffc928', 0.45); ell(c, 80, 62, 9, 14, '#ffc928', -0.45);
+    ell(c, 40, 89, 7, 3.4, '#ff9a2e'); ell(c, 60, 89, 7, 3.4, '#ff9a2e');
+    ell(c, 50, 55, 34, 32, '#ffd93b');
+    ell(c, 44, 22, 3.2, 8, '#ffd93b', -0.5); ell(c, 50, 20, 3.2, 9, '#ffd93b', 0); ell(c, 56, 22, 3.2, 8, '#ffd93b', 0.5);
+    poly(c, [43, 59, 57, 59, 50, 67], '#ff9a2e');
+    face(c, { mood: m, ex: 17, ey: 51, er: 4.6, my: 74, mw: 4.5, mouth: false });
+    if (m === 'grump') {} 
+  },
+  // 7 penguin
+  (c, m) => {
+    ell(c, 15, 62, 7.5, 19, '#34495e', 0.3); ell(c, 85, 62, 7.5, 19, '#34495e', -0.3);
+    ell(c, 38, 91, 9, 4, '#ff9a2e'); ell(c, 62, 91, 9, 4, '#ff9a2e');
+    ell(c, 50, 54, 33, 37, '#34495e');
+    ell(c, 50, 66, 23, 26, '#fff');
+    circ(c, 39, 44, 12, '#fff'); circ(c, 61, 44, 12, '#fff'); soft(c, 50, 48, 14, 10, '#fff');
+    poly(c, [44, 52, 56, 52, 50, 60], '#ff9a2e');
+    face(c, { mood: m, ex: 11, ey: 44, er: 4, my: 69, mw: 4.5, mouth: false, cheekCol: 'rgba(255,120,150,.45)' });
+  },
+  // 8 fox
+  (c, m) => {
+    poly(c, [16, 44, 20, 8, 46, 30], '#f2893a'); poly(c, [84, 44, 80, 8, 54, 30], '#f2893a');
+    poly(c, [22, 33, 21, 17, 32, 27], INK); poly(c, [78, 33, 79, 17, 68, 27], INK);
+    shape(c, (p) => { p.moveTo(10, 52); p.quadraticCurveTo(12, 30, 50, 30); p.quadraticCurveTo(88, 30, 90, 52); p.quadraticCurveTo(88, 68, 50, 92); p.quadraticCurveTo(12, 68, 10, 52); p.closePath(); }, '#f6993f');
+    shape(c, (p) => { p.moveTo(12, 56); p.quadraticCurveTo(30, 70, 50, 92); p.quadraticCurveTo(70, 70, 88, 56); p.quadraticCurveTo(70, 66, 50, 64); p.quadraticCurveTo(30, 66, 12, 56); p.closePath(); }, '#fff6ea');
+    ell(c, 50, 82, 4.6, 3.4, INK);
+    face(c, { mood: m, ex: 19, ey: 51, er: 4.4, my: 73, mw: 4.2 });
+  },
+  // 9 panda
+  (c, m) => {
+    circ(c, 22, 27, 12, '#3a3a44'); circ(c, 78, 27, 12, '#3a3a44');
+    ell(c, 50, 57, 35, 31, '#fffefb');
+    ell(c, 34, 53, 9.5, 12, '#3a3a44', 0.45); ell(c, 66, 53, 9.5, 12, '#3a3a44', -0.45);
+    ell(c, 50, 65, 6, 4.4, '#3a3a44');
+    face(c, { mood: m, ex: 17, ey: 52, er: 3.6, my: 74, mw: 5, white: true, cheek: false });
+    soft(c, 20, 70, 6, 4, 'rgba(255,110,140,.5)'); soft(c, 80, 70, 6, 4, 'rgba(255,110,140,.5)');
+    // the face() eyes are white on the dark patches; the mouth must be dark on white
+    line(c, [50, 69, 50, 72], 2.4, INK);
+  },
+  // 10 owl
+  (c, m) => {
+    poly(c, [22, 30, 26, 8, 42, 22], '#9a6a42'); poly(c, [78, 30, 74, 8, 58, 22], '#9a6a42');
+    ell(c, 15, 62, 8, 19, '#85583a', 0.3); ell(c, 85, 62, 8, 19, '#85583a', -0.3);
+    ell(c, 42, 91, 7, 3.4, '#ff9a2e'); ell(c, 58, 91, 7, 3.4, '#ff9a2e');
+    ell(c, 50, 56, 34, 35, '#a9764d');
+    ell(c, 50, 72, 21, 17, '#f3dcb8');
+    c.save(); c.lineWidth = 2; for (const [x, y] of [[42, 68], [50, 66], [58, 68], [46, 76], [54, 76]]) { c.beginPath(); c.arc(x, y, 3.6, 0.1 * Math.PI, 0.9 * Math.PI); c.stroke(); } c.restore();
+    circ(c, 35, 44, 15, '#fff8e8'); circ(c, 65, 44, 15, '#fff8e8');
+    poly(c, [45.5, 51, 54.5, 51, 50, 59], '#ff9a2e');
+    face(c, { mood: m, ex: 15, ey: 44, er: 5.6, my: 67, mw: 4, cheek: false, mouth: false });
+    if (m === 'happy') {} 
+  },
+  // 11 whale
+  (c, m) => {
+    c.save();
+    for (const [x, y, rot] of [[18, 66, 0.6], [82, 66, -0.6]]) ell(c, x, y, 9, 15, '#4d98dd', rot);
+    shape(c, (p) => { p.moveTo(38, 34); p.quadraticCurveTo(30, 22, 18, 24); p.quadraticCurveTo(26, 30, 28, 40); p.closePath(); }, '#4d98dd');
+    ell(c, 50, 60, 40, 30, '#5ba7e8');
+    c.save(); c.beginPath(); c.ellipse(50, 60, 40, 30, 0, 0, TAU); c.clip(); soft(c, 50, 88, 46, 22, '#d9edfb'); c.restore();
+    c.beginPath(); c.ellipse(50, 60, 40, 30, 0, 0, TAU); c.stroke();
+    // spout
+    c.lineWidth = 3.4; c.strokeStyle = '#7cc4f3'; c.beginPath(); c.moveTo(50, 30); c.lineTo(50, 18); c.moveTo(50, 18); c.quadraticCurveTo(42, 8, 36, 14); c.moveTo(50, 18); c.quadraticCurveTo(58, 8, 64, 14); c.stroke();
+    c.restore();
+    face(c, { mood: m, ex: 17, ey: 54, er: 4.6, my: 66, mw: 8 });
+  },
+  // 12 apple
+  (c, m) => {
+    shape(c, (p) => { p.moveTo(50, 33); p.bezierCurveTo(60, 23, 90, 30, 87, 58); p.bezierCurveTo(85, 82, 66, 94, 50, 87); p.bezierCurveTo(34, 94, 15, 82, 13, 58); p.bezierCurveTo(10, 30, 40, 23, 50, 33); p.closePath(); }, '#ee4b4b');
+    line(c, [50, 33, 53, 15], 4.6, INK); line(c, [50, 33, 53, 15], 2.4, '#8a5a38');
+    ell(c, 66, 19, 12, 5.6, '#62c14c', -0.45);
+    soft(c, 27, 48, 4.5, 9, 'rgba(255,255,255,.55)', 0.5);
+    face(c, { mood: m, ex: 16, ey: 59, er: 4.6, my: 72, mw: 5.5, cheekCol: 'rgba(255,200,210,.7)' });
+  },
+  // 13 strawberry
+  (c, m) => {
+    shape(c, (p) => { p.moveTo(50, 92); p.bezierCurveTo(20, 78, 8, 54, 13, 40); p.bezierCurveTo(18, 27, 36, 28, 50, 32); p.bezierCurveTo(64, 28, 82, 27, 87, 40); p.bezierCurveTo(92, 54, 80, 78, 50, 92); p.closePath(); }, '#ff4f64');
+    for (const [x, y] of [[24, 46], [76, 46], [27, 64], [73, 64], [38, 78], [62, 78], [50, 84], [34, 38], [66, 38]]) ell(c, x, y, 1.9, 3, '#ffe28a', 0.2);
+    ell(c, 36, 28, 11, 5.4, '#4fbf5a', -0.4); ell(c, 64, 28, 11, 5.4, '#4fbf5a', 0.4); ell(c, 50, 23, 5.4, 10, '#43b052', 0);
+    face(c, { mood: m, ex: 15, ey: 54, er: 4.6, my: 67, mw: 5.5, cheekCol: 'rgba(255,200,210,.7)' });
+  },
+  // 14 watermelon
+  (c, m) => {
+    c.save();
+    c.beginPath(); c.arc(50, 28, 47, 0, Math.PI); c.closePath(); c.fillStyle = '#3fa34d'; c.fill(); c.stroke();
+    c.beginPath(); c.arc(50, 28, 41, 0, Math.PI); c.closePath(); c.fillStyle = '#eaf8d9'; c.fill(); c.lineWidth = 1.5; c.stroke();
+    c.beginPath(); c.arc(50, 28, 37, 0, Math.PI); c.closePath(); c.fillStyle = '#ff5a6a'; c.fill();
+    c.restore();
+    for (const [x, y, r] of [[24, 40, 0.3], [76, 40, -0.3], [34, 69, 0.6], [66, 69, -0.6]]) ell(c, x, y, 2.4, 4, INK, r);
+    face(c, { mood: m, ex: 13, ey: 48, er: 4.4, my: 59, mw: 5.5, cheekCol: 'rgba(255,230,235,.7)' });
+  },
+  // 15 banana
+  (c, m) => {
+    shape(c, (p) => { p.moveTo(24, 20); p.bezierCurveTo(8, 56, 26, 92, 80, 85); p.bezierCurveTo(92, 83, 92, 70, 80, 68); p.bezierCurveTo(62, 66, 60, 48, 60, 28); p.bezierCurveTo(60, 14, 28, 8, 24, 20); p.closePath(); }, '#ffd93b');
+    poly(c, [20, 22, 28, 14, 36, 17, 30, 24], '#8a5a38');
+    ell(c, 84, 77, 6, 4.8, '#8a5a38', 0.2);
+    line(c, [36, 40, 30, 62, 40, 80], 2, 'rgba(190,140,20,.55)');
+    face(c, { mood: m, ex: 8.5, ey: 58, er: 3.8, my: 70, mw: 4.8, cheekCol: 'rgba(255,130,120,.55)' });
+  },
+  // 16 ice cream
+  (c, m) => {
+    poly(c, [29, 58, 71, 58, 50, 96], '#e9b266');
+    c.save(); c.lineWidth = 1.6; c.strokeStyle = 'rgba(120,70,20,.55)';
+    for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(50 + i * 9, 58); c.lineTo(50 + i * 3, 90); c.stroke(); }
+    c.beginPath(); c.moveTo(34, 66); c.lineTo(66, 66); c.moveTo(39, 76); c.lineTo(61, 76); c.stroke(); c.restore();
+    shape(c, (p) => { p.moveTo(24, 50); p.bezierCurveTo(14, 20, 86, 20, 76, 50); p.bezierCurveTo(78, 62, 68, 62, 66, 56); p.bezierCurveTo(62, 66, 54, 62, 52, 58); p.bezierCurveTo(48, 66, 40, 62, 38, 56); p.bezierCurveTo(34, 64, 22, 62, 24, 50); p.closePath(); }, '#ffb3d1');
+    circ(c, 50, 14, 6, '#e8334a'); line(c, [50, 8, 56, 2], 2.2, '#5b8a3a');
+    for (const [x, y, col] of [[32, 36, '#fff'], [68, 34, '#6ec1ff'], [38, 24, '#ffe14d'], [64, 24, '#fff']]) line(c, [x, y, x + 3, y + 2], 2.4, col);
+    face(c, { mood: m, ex: 12, ey: 42, er: 4.2, my: 51, mw: 4.8, cheekCol: 'rgba(255,90,120,.4)' });
+  },
+  // 17 cupcake
+  (c, m) => {
+    poly(c, [27, 62, 73, 62, 66, 94, 34, 94], '#76cce6');
+    c.save(); c.lineWidth = 1.8; c.strokeStyle = 'rgba(40,110,140,.6)'; for (const x of [38, 46, 54, 62]) { c.beginPath(); c.moveTo(x - 1 + (x - 50) * 0.2, 64); c.lineTo(x + (x - 50) * 0.1, 92); c.stroke(); } c.restore();
+    ell(c, 50, 54, 34, 20, '#ffd1dc');
+    ell(c, 50, 36, 22, 12, '#ffc0d0');
+    ell(c, 50, 24, 12, 8, '#ffb0c4');
+    circ(c, 50, 14, 5.2, '#e8334a');
+    for (const [x, y, col] of [[30, 46, '#fff6a8'], [70, 46, '#a8e0ff'], [38, 58, '#c9a8ff'], [64, 30, '#fff']]) line(c, [x, y, x + 2.4, y + 2], 2.2, col);
+    face(c, { mood: m, ex: 14, ey: 50, er: 4.2, my: 60, mw: 5, cheekCol: 'rgba(255,110,140,.4)' });
+  },
+  // 18 balloon
+  (c, m) => {
+    c.save(); c.lineWidth = 2.2; c.beginPath(); c.moveTo(50, 80); c.bezierCurveTo(42, 86, 58, 92, 49, 99); c.stroke(); c.restore();
+    ell(c, 50, 42, 31, 36, '#ff5d73');
+    poly(c, [45, 81, 55, 81, 50, 75], '#ff5d73');
+    soft(c, 35, 27, 5, 10, 'rgba(255,255,255,.55)', 0.5);
+    face(c, { mood: m, ex: 14, ey: 45, er: 4.6, my: 57, mw: 5.5, cheekCol: 'rgba(255,220,225,.7)' });
+  },
+  // 19 umbrella
+  (c, m) => {
+    c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+    c.lineWidth = 6.6; c.strokeStyle = INK; c.beginPath(); c.moveTo(50, 52); c.lineTo(50, 82); c.arc(43, 82, 7, 0, Math.PI * 0.95); c.stroke();
+    c.lineWidth = 3; c.strokeStyle = '#8a5a38'; c.beginPath(); c.moveTo(50, 52); c.lineTo(50, 82); c.arc(43, 82, 7, 0, Math.PI * 0.95); c.stroke();
+    c.restore();
+    c.save();
+    const dome = (p) => { p.moveTo(8, 56); p.bezierCurveTo(6, 16, 94, 16, 92, 56); p.quadraticCurveTo(84, 46, 75, 56); p.quadraticCurveTo(62.5, 46, 50, 56); p.quadraticCurveTo(37.5, 46, 25, 56); p.quadraticCurveTo(16, 46, 8, 56); p.closePath(); };
+    c.beginPath(); dome(c); c.fillStyle = '#ffb72b'; c.fill();
+    c.save(); c.beginPath(); dome(c); c.clip();
+    c.fillStyle = '#ff7a59';
+    for (const [x1, x2] of [[-20, 25], [50, 75]]) { c.beginPath(); c.moveTo(50, 8); c.lineTo(x1, 62); c.lineTo(x2, 62); c.closePath(); c.fill(); }
+    c.lineWidth = 2; for (const x of [25, 50, 75]) { c.beginPath(); c.moveTo(50, 12); c.lineTo(x, 54); c.stroke(); }
+    c.restore();
+    c.beginPath(); dome(c); c.stroke();
+    c.restore();
+    line(c, [50, 17, 50, 8], 3.2, INK);
+    face(c, { mood: m, ex: 15, ey: 34, er: 4.2, my: 45, mw: 5.2, cheekCol: 'rgba(255,255,255,.45)' });
+  },
+];
+
+// one picture into a w x h box at (x, y). `mood` and `fake` look: the fake card is the same picture winking with its tongue out.
+function drawPic(c, pic, mood, x, y, size) {
+  c.save();
+  c.translate(x, y); c.scale(size / 100, size / 100);
+  c.lineWidth = 3.2; c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK;
+  PICS[pic](c, mood);
+  c.restore();
+}
+
+// card faces and backs, drawn once per size
+function rrPath(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+function paintFace(c, w, h, pic, mood) {
+  const r = Math.min(w, h) * 0.16;
+  rrPath(c, 1.5, 1.5, w - 3, h - 3, r); c.fillStyle = '#fffdf6'; c.fill();
+  c.save(); rrPath(c, 1.5, 1.5, w - 3, h - 3, r); c.clip();
+  const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, PIC_BG[pic]); g.addColorStop(1, '#ffffff');
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  const s = Math.min(w, h) * 0.9;
+  drawPic(c, pic, mood, (w - s) / 2, (h - s) / 2 + h * 0.01, s);
+  if (mood === 'wink') {   // the fake card's little tell: a sparkle in the corner
+    const sx = w * 0.82, sy = h * 0.15, r = Math.min(w, h) * 0.09;
+    c.beginPath(); for (let i = 0; i < 8; i++) { const rr = i % 2 ? r * 0.42 : r, an = i * Math.PI / 4 - Math.PI / 2; c.lineTo(sx + Math.cos(an) * rr, sy + Math.sin(an) * rr); } c.closePath();
+    c.fillStyle = '#ffd24a'; c.fill(); c.lineWidth = Math.max(1.2, w * 0.02); c.strokeStyle = '#6b4a3a'; c.lineJoin = 'round'; c.stroke();
+  }
+  c.restore();
+  rrPath(c, 1.5, 1.5, w - 3, h - 3, r); c.lineWidth = Math.max(2, w * 0.035); c.strokeStyle = '#6b4a3a'; c.stroke();
+}
+const BACK_COL = [['#ff9aa8', '#f2677d'], ['#ff7a6b', '#e24b4b'], ['#6aa8ff', '#3b72e0'], ['#ffd45a', '#f0a81a'], ['#c08cff', '#8a52d8']];   // 0 plain, 1.. players
+function paintBack(c, w, h, zone) {
+  const col = BACK_COL[zone] || BACK_COL[0], r = Math.min(w, h) * 0.16;
+  rrPath(c, 1.5, 1.5, w - 3, h - 3, r);
+  const g = c.createLinearGradient(0, 0, w, h); g.addColorStop(0, col[0]); g.addColorStop(1, col[1]); c.fillStyle = g; c.fill();
+  c.save(); rrPath(c, 1.5, 1.5, w - 3, h - 3, r); c.clip();
+  // diagonal lattice
+  c.strokeStyle = 'rgba(255,255,255,.22)'; c.lineWidth = Math.max(1, w * 0.03);
+  const st = Math.max(8, Math.min(w, h) * 0.26);
+  for (let k = -h; k < w + h; k += st) { c.beginPath(); c.moveTo(k, 0); c.lineTo(k + h, h); c.stroke(); c.beginPath(); c.moveTo(k + h, 0); c.lineTo(k, h); c.stroke(); }
+  c.restore();
+  // inner frame
+  const m = Math.min(w, h) * 0.09;
+  rrPath(c, m, m, w - 2 * m, h - 2 * m, r * 0.7); c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = Math.max(1.5, w * 0.03); c.setLineDash([w * 0.05, w * 0.045]); c.stroke(); c.setLineDash([]);
+  // a paw print
+  const cx = w / 2, cy = h / 2, u = Math.min(w, h) * 0.2;
+  c.fillStyle = 'rgba(255,255,255,.92)';
+  c.beginPath(); c.ellipse(cx, cy + u * 0.35, u * 0.95, u * 0.75, 0, 0, TAU); c.fill();
+  for (const [dx, dy, rr] of [[-1.15, -0.5, 0.36], [-0.42, -1.15, 0.38], [0.42, -1.15, 0.38], [1.15, -0.5, 0.36]]) { c.beginPath(); c.ellipse(cx + dx * u * 0.9, cy + dy * u * 0.75, u * rr, u * rr * 1.2, dx * 0.25, 0, TAU); c.fill(); }
+  rrPath(c, 1.5, 1.5, w - 3, h - 3, r); c.lineWidth = Math.max(2, w * 0.035); c.strokeStyle = '#6b4a3a'; c.stroke();
+}
+
+// =====================================================================
+// VIEW: everything from here on touches the DOM, the canvas or the audio
+// =====================================================================
+const KEY_BEST = 'arcade.pairs.best';        // solo record: score (a plain number)
+const KEY_MUTE = 'arcade.pairs.muted';
+const KEY_MODE = 'arcade.pairs.mode';        // 'solo' | 'team' | 'coop'
+const KEY_PLAYERS = 'arcade.pairs.players';  // coop: 2..4
+const PCOL = ['#ef5350', '#3b82e0', '#f0a81a', '#8a52d8'];
+const OKCOL = '#52d37a';
+
+const QS = new URLSearchParams(location.search);
+const seedParam = QS.get('seed');
+const BASE_SEED = seedParam !== null && seedParam !== '' ? (+seedParam | 0) : null;
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function readNum(k) { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function vib(p) { try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ } }
+const vr = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only: never touches the game logic
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const fmtNum = (n) => Math.round(n).toLocaleString('ko-KR');
+
+// =====================================================================
+// AUDIO (all synthesized with Web Audio)
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.55;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 1);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.55, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  tone(type, f0, f1, dur, vol, delay, attack, pri) {
+    if (!this.ok() || (!pri && this.voices >= 16)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.005));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type, pri, f1) {
+    if (!this.ok() || (!pri && this.voices >= 16)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+      if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(t, Math.random() * 0.9); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  // card turning: a soft paper flick
+  flip() { this.noise(0.05, 3200, 1.1, 0.16, 0, 'bandpass', true); this.tone('triangle', 520, 760, 0.07, 0.07, 0, 0.004, true); },
+  // 딩동: a pair!
+  match(who) {
+    const f = [880, 988, 1047, 1175][who | 0] || 880;
+    this.tone('triangle', f, f, 0.16, 0.13, 0, 0.004, true);
+    this.tone('triangle', f * 1.5, f * 1.5, 0.4, 0.12, 0.1, 0.004, true);
+    this.tone('sine', f * 3, f * 3, 0.25, 0.04, 0.1, 0.004);
+  },
+  cross() {
+    [0, 4, 7, 12].forEach((s, i) => { const f = 698 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.2, 0.1, i * 0.07, 0.004, true); });
+    this.tone('sine', 2093, 2093, 0.3, 0.05, 0.25, 0.004);
+  },
+  miss() { this.tone('square', 230, 130, 0.2, 0.06, 0, 0.004, true); this.tone('sawtooth', 160, 95, 0.28, 0.05, 0.07, 0.004, true); },
+  fake() { this.tone('sine', 700, 1500, 0.1, 0.09, 0, 0.004, true); this.tone('sine', 1500, 520, 0.2, 0.09, 0.1, 0.004, true); this.miss(); },
+  grump() { this.tone('sawtooth', 150, 80, 0.28, 0.08, 0, 0.01, true); this.tone('square', 110, 70, 0.3, 0.05, 0.02, 0.01, true); },
+  swap() { this.noise(0.2, 600, 0.8, 0.14, 0, 'bandpass', true, 3000); this.tone('triangle', 300, 560, 0.16, 0.07, 0.02, 0.01); },
+  warn() { this.tone('triangle', 640, 640, 0.07, 0.07, 0, 0.004, true); this.tone('triangle', 800, 800, 0.07, 0.07, 0.1, 0.004, true); },
+  // time warning
+  tick() { this.tone('square', 1500, 1500, 0.04, 0.06, 0, 0.002, true); },
+  tickLast() { this.tone('square', 1900, 1900, 0.07, 0.08, 0, 0.002, true); },
+  plus() { this.tone('sine', 900, 1400, 0.09, 0.06, 0, 0.004); },
+  hint() { [0, 4, 7, 12].forEach((s, i) => { const f = 880 * Math.pow(2, s / 12); this.tone('sine', f, f, 0.22, 0.07, i * 0.07, 0.004, true); }); },
+  go() { this.tone('triangle', 660, 660, 0.12, 0.09, 0, 0.004, true); this.tone('triangle', 990, 990, 0.2, 0.09, 0.1, 0.004, true); },
+  round() { this.tone('triangle', 523, 523, 0.12, 0.09, 0, 0.004, true); this.tone('triangle', 784, 784, 0.18, 0.09, 0.1, 0.004, true); },
+  turn() { this.tone('sine', 740, 740, 0.08, 0.07, 0, 0.004, true); },
+  clear() { [0, 4, 7, 12, 7, 12, 16].forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.2, 0.1, i * 0.085, 0.005, true); this.tone('sine', f * 2, f * 2, 0.14, 0.04, i * 0.085, 0.004); }); },
+  over() { this.tone('sine', 880, 660, 0.35, 0.1, 0, 0.005, true); this.tone('sine', 660, 440, 0.45, 0.1, 0.18, 0.005, true); },
+  win() { [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.22, 0.1, i * 0.08, 0.005, true); }); },
+  ui() { this.tone('sine', 880, 1100, 0.06, 0.08, 0, 0.005, true); },
+};
+
+// =====================================================================
+// STATE + DOM
+// =====================================================================
+const app = $('app');
+const S = {
+  view: 'title', mode: 'solo', players: 2, paused: false, G: null, clock: 0, sig: '', gameNo: 0,
+  resultShown: false, overT: 0, best: 0, newRecord: false, perf: { ms: 0, max: 0, frames: 0 },
+  W: 1, H: 1, dpr: 1, wide: false, board: null, grid: null, sprites: new Map(), sprKey: '', spW: 1, spH: 1, bg: null, bgKey: '',
+  V: new Map(), visKey: '', parts: [], floats: [], rings: [], kcur: 0, kb: false, taps: 0, dirty: true, bannerT: 0, lastBar: '', lastPlus: 0,
+  previewLeft: 0, lastTick: -1, mascot: null, lastHint: 0, msg: '', msgT: 0,
+};
+const el = {
+  cv: $('cv'), stage: $('stage'), hud: $('hud'), btnPause: $('btnPause'), btnMute: $('btnMute'), btnHint: $('btnHint'), hintN: $('hintN'),
+  pillA: $('pillA'), pAl: $('pAl'), pAv: $('pAv'), pillB: $('pillB'), pBv: $('pBv'), pBl: $('pBl'),
+  bar: $('bar'), barFill: $('barFill'), barTxt: $('barTxt'), barPlus: $('barPlus'),
+  chips: [0, 1, 2, 3].map((i) => { const n = $('chip' + i); return { node: n, nm: n.querySelector('.nm'), sc: n.querySelector('.sc'), tg: n.querySelector('.tg'), dot: n.querySelector('.dot') }; }),
+  banner: $('banner'), b1: $('banner').children[0], b2: $('banner').children[1], live: $('live'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrOver: $('scrOver'), mascot: $('mascotT'),
+  btnSolo: $('btnSolo'), btnTeam: $('btnTeam'), btnCoop: $('btnCoop'), btnP: [$('btnP2'), $('btnP3'), $('btnP4')], plRow: $('plRow'), plLabel: $('plLabel'),
+  modeLine: $('modeLine'), bestLine: $('bestLine'), tBest: $('tBest'),
+};
+const ctx = el.cv.getContext('2d');
+
+function setText(n, s) { if (n._t !== s) { n._t = s; n.textContent = s; } }
+function setCls(n, name, on) { const c = n._c || (n._c = {}); on = !!on; if (c[name] !== on) { c[name] = on; n.classList.toggle(name, on); } }
+function setStyle(n, prop, v) { const c = n._s || (n._s = {}); if (c[prop] !== v) { c[prop] = v; n.style[prop] = v; } }
+function setBox(n, r) { setStyle(n, 'left', Math.round(r.x) + 'px'); setStyle(n, 'top', Math.round(r.y) + 'px'); setStyle(n, 'width', Math.round(r.w) + 'px'); if (r.h !== undefined) setStyle(n, 'height', Math.round(r.h) + 'px'); }
+const easeOutBack = (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+
+// =====================================================================
+// LAYOUT
+// =====================================================================
+let dprCap = 2;
+function layoutSig() { return window.innerWidth + 'x' + window.innerHeight + ':' + S.view + ':' + (S.G ? S.G.mode + S.G.players + ':' + S.G.round : S.mode); }
+function fitGrid(cols, rows, bx, by, bw, bh, preferT) {
+  let best = null;
+  bx += 8; by += 8; bw -= 16; bh -= 16;
+  for (const T of preferT ? [true, false] : [false, true]) {
+    const dc = T ? rows : cols, dr = T ? cols : rows;
+    const gap = clamp(Math.min(bw / dc, bh / dr) * 0.09, 5, 14);
+    let cw = (bw - (dc - 1) * gap) / dc, ch = (bh - (dr - 1) * gap) / dr;
+    if (ch > cw / 0.72) ch = cw / 0.72;
+    if (cw > ch * 1.05) cw = ch * 1.05;
+    if (cw > 170) { cw = 170; ch = Math.min(ch, 236); }   // a few big cards should not become giant
+    cw = Math.floor(cw); ch = Math.floor(ch);
+    const area = cw * ch;
+    if (!best || area > best.area * (preferT ? 1.18 : 1.04)) best = { T, dc, dr, cw, ch, gap, area };
+  }
+  best.ox = bx + (bw - (best.dc * best.cw + (best.dc - 1) * best.gap)) / 2;
+  best.oy = by + (bh - (best.dr * best.ch + (best.dr - 1) * best.gap)) / 2;
+  return best;
+}
+function layout() {
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+  S.W = W; S.H = H; S.dpr = dpr;
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  if (el.cv.width !== pw || el.cv.height !== ph) { el.cv.width = pw; el.cv.height = ph; }
+  S.bgKey = ''; S.dirty = true;
+  S.sig = layoutSig();
+  if (S.view !== 'play' || !S.G) return;
+  const G = S.G, mode = G.mode;
+  const pcs = getComputedStyle($('probe'));
+  const sat = parseFloat(pcs.paddingTop) || 0, sab = parseFloat(pcs.paddingBottom) || 0, sal = parseFloat(pcs.paddingLeft) || 0, sar = parseFloat(pcs.paddingRight) || 0;
+  const m = 8, x0 = sal + m, x1 = W - sar - m, y0 = sat + m, y1 = H - sab - m;
+  const wide = W / H >= 1.25;
+  S.wide = wide;
+  const availW = Math.max(100, x1 - x0);
+  const team = mode === 'team', coop = mode === 'coop';
+  el.btnHint.hidden = team;
+  // HUD + bar: a centered strip (on big screens not wider than 620 px)
+  const hudW = Math.min(availW, 620), hudX = x0 + (availW - hudW) / 2;
+  setBox(el.hud, { x: hudX, y: y0, w: hudW });
+  const hudH = el.hud.offsetHeight || 46;
+  setBox(el.bar, { x: hudX, y: y0 + hudH + 6, w: hudW, h: 26 });
+  let top = y0 + hudH + 6 + 26 + 8;
+  let bx0 = x0, bx1 = x1;
+  const chipRects = [null, null, null, null];
+  if (team && wide) {
+    const sideW = clamp(availW * 0.17, 118, 230), ph2 = Math.min(y1 - top, 230);
+    const cy = top + ((y1 - top) - ph2) / 2;
+    chipRects[0] = { x: x0, y: cy, w: sideW, h: ph2 }; chipRects[1] = { x: x1 - sideW, y: cy, w: sideW, h: ph2 };
+    bx0 = x0 + sideW + 10; bx1 = x1 - sideW - 10;
+  } else if (team) {
+    const cw = (availW - 8) / 2;
+    chipRects[0] = { x: x0, y: top, w: cw, h: 50 }; chipRects[1] = { x: x0 + cw + 8, y: top, w: cw, h: 50 };
+    top += 58;
+  } else if (coop) {
+    const n = G.players, cw = (hudW - (n - 1) * 6) / n;
+    for (let i = 0; i < n; i++) chipRects[i] = { x: hudX + i * (cw + 6), y: top, w: cw, h: 34 };
+    S.chipW = cw;
+    top += 40;
+  }
+  for (let i = 0; i < 4; i++) {
+    const n = el.chips[i].node, r = chipRects[i];
+    if (!r) { n.style.display = 'none'; continue; }
+    n.style.display = '';
+    setBox(n, r);
+    setCls(n, 'side', team && wide); setCls(n, 'small', coop);
+  }
+  const board = { x: bx0, y: top, w: Math.max(60, bx1 - bx0), h: Math.max(60, y1 - top) };
+  S.board = board;
+  setBox(el.banner, { x: board.x, y: board.y, w: board.w, h: board.h });
+  S.grid = fitGrid(G.cols, G.rows, board.x, board.y, board.w, board.h, coop && wide);
+  const key = S.grid.cw + 'x' + S.grid.ch + '@' + dpr;
+  if (key !== S.sprKey) { S.sprKey = key; S.sprites.clear(); S.spW = Math.round(S.grid.cw * dpr); S.spH = Math.round(S.grid.ch * dpr); }
+  for (const v of S.V.values()) v.snap = true;
+}
+
+// slot <-> screen. Logic cells are cols x rows; on a wide screen the board may be turned (transposed) so cards stay big.
+function cellOf(slot) { const G = S.G, c = slot % G.cols, r = Math.floor(slot / G.cols); return S.grid.T ? { dx: r, dy: c } : { dx: c, dy: r }; }
+function slotRect(slot) { const g = S.grid, k = cellOf(slot); return { x: g.ox + k.dx * (g.cw + g.gap), y: g.oy + k.dy * (g.ch + g.gap), w: g.cw, h: g.ch }; }
+function slotAt(x, y) {
+  const G = S.G, g = S.grid; if (!G || !g) return -1;
+  const px = g.cw + g.gap, py = g.ch + g.gap;
+  const fx = (x - g.ox + g.gap / 2) / px, fy = (y - g.oy + g.gap / 2) / py;
+  const dx = Math.floor(fx), dy = Math.floor(fy);
+  if (dx < 0 || dy < 0 || dx >= g.dc || dy >= g.dr) return -1;
+  return g.T ? dx * G.cols + dy : dy * G.cols + dx;
+}
+
+// =====================================================================
+// SPRITES + BACKGROUND
+// =====================================================================
+function faceSprite(pic, mood) {
+  const k = 'f' + pic + mood; let s = S.sprites.get(k);
+  if (!s) {
+    s = document.createElement('canvas'); s.width = S.spW; s.height = S.spH;
+    const c = s.getContext('2d'); c.scale(S.spW / S.grid.cw, S.spH / S.grid.ch); paintFace(c, S.grid.cw, S.grid.ch, pic, mood); S.sprites.set(k, s);
+  }
+  return s;
+}
+function backSprite(zone) {
+  const k = 'b' + zone; let s = S.sprites.get(k);
+  if (!s) {
+    s = document.createElement('canvas'); s.width = S.spW; s.height = S.spH;
+    const c = s.getContext('2d'); c.scale(S.spW / S.grid.cw, S.spH / S.grid.ch); paintBack(c, S.grid.cw, S.grid.ch, zone); S.sprites.set(k, s);
+  }
+  return s;
+}
+function buildBg() {
+  const W = S.W, H = S.H, c = document.createElement('canvas');
+  c.width = el.cv.width; c.height = el.cv.height;
+  const x = c.getContext('2d'); x.scale(S.dpr, S.dpr);
+  const g = x.createRadialGradient(W / 2, H * 0.38, 0, W / 2, H * 0.38, Math.max(W, H) * 0.85);
+  g.addColorStop(0, '#3ca898'); g.addColorStop(1, '#1b6860');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // felt weave
+  x.strokeStyle = 'rgba(255,255,255,0.045)'; x.lineWidth = 1;
+  for (let k = -H; k < W + H; k += 7) { x.beginPath(); x.moveTo(k, 0); x.lineTo(k + H, H); x.stroke(); }
+  x.strokeStyle = 'rgba(0,0,0,0.04)';
+  for (let k = -H; k < W + H; k += 7) { x.beginPath(); x.moveTo(k + H, 0); x.lineTo(k, H); x.stroke(); }
+  // big soft polka dots
+  x.fillStyle = 'rgba(255,255,255,0.05)';
+  const st = Math.max(70, Math.min(W, H) * 0.2);
+  for (let r = 0, yy = 20; yy < H + st; yy += st, r++) for (let xx = (r % 2) * st / 2; xx < W + st; xx += st) { x.beginPath(); x.arc(xx, yy, st * 0.16, 0, TAU); x.fill(); }
+  S.bg = c; S.bgKey = W + 'x' + H + '@' + S.dpr;
+}
+
+// =====================================================================
+// CARD VISUALS
+// =====================================================================
+function resetVisuals(G) {
+  S.V.clear(); S.parts.length = 0; S.floats.length = 0; S.rings.length = 0;
+  S.visKey = S.gameNo + ':' + G.round;
+  S.dirty = true;
+}
+function makeVis(card, slot, idx) {
+  const r = slotRect(slot);
+  const v = { x: r.x + r.w / 2, y: r.y + r.h / 2, tx: 0, ty: 0, flip: card.st >= 1 ? 1 : 0, shake: 0, pop: 0, grump: 0, warn: 0, miss: 0, col: null, born: S.clock + (idx || 0) * 0.025, snap: false, fade: 0 };
+  S.V.set(card.uid, v);
+  return v;
+}
+function colorOfFlip(G, who) { return G.mode === 'solo' ? '#ffd24a' : PCOL[who] || '#fff'; }
+function cardMood(G, card, v) {
+  if (card.st === 2) return 'happy';
+  if (card.kind === 'fake') return 'wink';
+  if (card.kind === 'grump' && v.grump > 0) return 'grump';
+  return 'normal';
+}
+function drawCard(G, slot, card, v, moving) {
+  const g = S.grid, c = ctx, w = g.cw, h = g.ch, rad = Math.min(w, h) * 0.16;
+  let sc = 1;
+  const age = S.clock - v.born;
+  if (age < 0.4 && !reduceMotion) { const t = clamp(age / 0.35, 0, 1); if (age < 0) return; sc = easeOutBack(t); }
+  if (v.pop > 0 && !reduceMotion) sc *= 1 + 0.14 * Math.sin(clamp(v.pop / 0.5, 0, 1) * Math.PI);
+  if (moving) sc *= 1.06;
+  if (card.st === 2) sc *= 0.95;
+  const f = v.flip, sx = Math.max(0.001, Math.abs(Math.cos(f * Math.PI)));
+  const ox = v.shake > 0 ? Math.sin(v.shake * 55) * 4 * (v.shake / 0.45) : 0;
+  const rot = v.warn > 0 && !reduceMotion ? Math.sin(S.clock * 36 + slot) * 0.09 : 0;
+  let alpha = 1;
+  if (G.phase === 'clear' && card.kind === 'fake' && card.st !== 2) alpha = Math.max(0, 1 - v.fade / 0.6);
+  if (alpha <= 0.01) return;
+  c.save();
+  c.globalAlpha = alpha;
+  c.translate(v.x + ox, v.y - Math.sin(f * Math.PI) * h * 0.05);
+  c.rotate(rot);
+  c.scale(sx * sc, sc);
+  if (card.st !== 2) { c.fillStyle = 'rgba(6,40,34,0.3)'; rrPath(c, -w / 2 + 1, -h / 2 + h * 0.05, w - 2, h - 2, rad); c.fill(); }
+  const face = f > 0.5;
+  const spr = face ? faceSprite(card.pic, cardMood(G, card, v)) : backSprite(G.mode === 'coop' ? Math.min(G.players - 1, Math.floor(slot * G.players / G.n)) + 1 : 0);
+  c.drawImage(spr, -w / 2, -h / 2, w, h);
+  // colored frame
+  let col = null;
+  if (card.st === 2) col = G.mode === 'solo' ? OKCOL : PCOL[card.by] || OKCOL;
+  else if (card.st === 1 && G.phase === 'play') col = v.col || '#ffd24a';
+  if (card.st === 2 && face) {
+    rrPath(c, -w / 2 + 2, -h / 2 + 2, w - 4, h - 4, rad); c.globalAlpha = alpha * 0.26; c.fillStyle = col; c.fill(); c.globalAlpha = alpha;
+    rrPath(c, -w / 2 + 2, -h / 2 + 2, w - 4, h - 4, rad); c.lineWidth = Math.max(3, w * 0.06); c.strokeStyle = col; c.stroke();
+    const br = Math.max(9, Math.min(w, h) * 0.17), bx = w / 2 - br * 1.05, by = -h / 2 + br * 1.05;
+    c.beginPath(); c.arc(bx, by, br, 0, TAU); c.fillStyle = col; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke();
+    c.beginPath(); c.moveTo(bx - br * 0.45, by + br * 0.02); c.lineTo(bx - br * 0.1, by + br * 0.38); c.lineTo(bx + br * 0.48, by - br * 0.34); c.lineWidth = Math.max(2, br * 0.28); c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#fff'; c.stroke();
+  } else if (col && face) { rrPath(c, -w / 2 + 2, -h / 2 + 2, w - 4, h - 4, rad); c.lineWidth = Math.max(3, w * 0.06); c.strokeStyle = col; c.stroke(); }
+  if (v.miss > 0 && face) { rrPath(c, -w / 2 + 2, -h / 2 + 2, w - 4, h - 4, rad); c.lineWidth = Math.max(3, w * 0.06); c.strokeStyle = 'rgba(255,90,80,' + Math.min(1, v.miss / 0.3) + ')'; c.stroke(); }
+  // coop: how long a lone card stays up
+  if (G.mode === 'coop' && card.st === 1 && G.phase === 'play') {
+    for (let q = 0; q < G.players; q++) {
+      const p = G.pl[q];
+      if (p.picks.length === 1 && p.picks[0] === slot) {
+        const left = clamp(1 - p.holdT / HOLD_COOP, 0, 1);
+        c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(-w / 2 + w * 0.12, h / 2 - h * 0.1, w * 0.76, Math.max(4, h * 0.035));
+        c.fillStyle = PCOL[q]; c.fillRect(-w / 2 + w * 0.12, h / 2 - h * 0.1, w * 0.76 * left, Math.max(4, h * 0.035));
+      }
+    }
+  }
+  c.restore();
+}
+function drawBoard(dt) {
+  const G = S.G, g = S.grid, c = ctx;
+  if (!g) return;
+  if (S.visKey !== S.gameNo + ':' + G.round) resetVisuals(G);
+  const b = S.board;
+  c.fillStyle = 'rgba(6,50,44,0.22)'; rrPath(c, g.ox - 8, g.oy - 8, g.dc * g.cw + (g.dc - 1) * g.gap + 16, g.dr * g.ch + (g.dr - 1) * g.gap + 16, 20); c.fill();
+  const stat = [], mov = [];
+  const k = reduceMotion ? 1 : 1 - Math.exp(-dt * 15), fs = reduceMotion ? 1 : dt / 0.2;
+  for (let s = 0; s < G.n; s++) {
+    const card = G.cards[s];
+    let v = S.V.get(card.uid); if (!v) v = makeVis(card, s, s);
+    const r = slotRect(s); v.tx = r.x + r.w / 2; v.ty = r.y + r.h / 2;
+    if (v.snap) { v.x = v.tx; v.y = v.ty; v.snap = false; }
+    v.x += (v.tx - v.x) * k; v.y += (v.ty - v.y) * k;
+    const dist = Math.abs(v.tx - v.x) + Math.abs(v.ty - v.y);
+    if (dist < 0.5) { v.x = v.tx; v.y = v.ty; }
+    const tg = card.st >= 1 ? 1 : 0;
+    if (v.flip < tg) v.flip = Math.min(tg, v.flip + fs); else if (v.flip > tg) v.flip = Math.max(tg, v.flip - fs);
+    if (v.shake > 0) v.shake = Math.max(0, v.shake - dt);
+    if (v.pop > 0) v.pop = Math.max(0, v.pop - dt);
+    if (v.grump > 0) v.grump = Math.max(0, v.grump - dt);
+    if (v.miss > 0) v.miss = Math.max(0, v.miss - dt);
+    if (v.warn > 0) v.warn = Math.max(0, v.warn - dt);
+    if (G.phase === 'clear' && card.kind === 'fake') v.fade += dt; else v.fade = 0;
+    const isMoving = dist > 2, mid = v.flip > 0.02 && v.flip < 0.98;
+    (isMoving || mid || v.pop > 0 ? mov : stat).push([s, card, v, isMoving]);
+  }
+  for (const it of stat) drawCard(G, it[0], it[1], it[2], false);
+  for (const it of mov) drawCard(G, it[0], it[1], it[2], it[3]);
+  // hint glow
+  if (G.hintGlow) {
+    const pulse = 0.55 + 0.45 * Math.sin(S.clock * 9);
+    for (const s of [G.hintGlow.a, G.hintGlow.b]) {
+      const v = S.V.get(G.cards[s].uid); if (!v) continue;
+      c.save(); c.translate(v.x, v.y);
+      rrPath(c, -g.cw / 2 - 3, -g.ch / 2 - 3, g.cw + 6, g.ch + 6, Math.min(g.cw, g.ch) * 0.19);
+      c.lineWidth = 6; c.strokeStyle = 'rgba(255,224,110,' + (0.5 + 0.5 * pulse) + ')'; c.stroke();
+      c.lineWidth = 2.5; c.strokeStyle = '#fff'; c.stroke();
+      c.restore();
+    }
+  }
+  // keyboard cursor
+  if (S.kb && G.phase === 'play' && G.mode !== 'coop') {
+    const r = slotRect(clamp(S.kcur, 0, G.n - 1));
+    c.save(); rrPath(c, r.x - 4, r.y - 4, r.w + 8, r.h + 8, Math.min(r.w, r.h) * 0.2); c.setLineDash([8, 6]); c.lineWidth = 3; c.strokeStyle = '#fff'; c.stroke(); c.restore();
+  }
+  // touch ripples
+  for (let i = S.rings.length - 1; i >= 0; i--) {
+    const r = S.rings[i]; r.t += dt;
+    if (r.t > 0.4) { S.rings.splice(i, 1); continue; }
+    c.save(); c.globalAlpha = 1 - r.t / 0.4; c.beginPath(); c.arc(r.x, r.y, 10 + r.t * 70, 0, TAU); c.lineWidth = 3; c.strokeStyle = r.col; c.stroke(); c.restore();
+  }
+  // particles
+  for (let i = S.parts.length - 1; i >= 0; i--) {
+    const p = S.parts[i]; p.t += dt;
+    if (p.t >= p.life) { S.parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.rot += p.vr * dt;
+    const a = 1 - p.t / p.life;
+    c.save(); c.globalAlpha = a; c.translate(p.x, p.y); c.rotate(p.rot);
+    if (p.kind === 'star') { c.fillStyle = p.col; c.beginPath(); for (let k2 = 0; k2 < 10; k2++) { const rr = k2 % 2 ? p.s * 0.45 : p.s; const an = k2 * Math.PI / 5 - Math.PI / 2; c.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); } c.closePath(); c.fill(); }
+    else { c.fillStyle = p.col; c.beginPath(); c.arc(0, 0, p.s * 0.5, 0, TAU); c.fill(); }
+    c.restore();
+  }
+  for (let i = S.floats.length - 1; i >= 0; i--) {
+    const f = S.floats[i]; f.t += dt;
+    if (f.t >= f.life) { S.floats.splice(i, 1); continue; }
+    const a = f.t < 0.15 ? f.t / 0.15 : 1 - Math.max(0, (f.t - f.life * 0.55) / (f.life * 0.45));
+    c.save(); c.globalAlpha = clamp(a, 0, 1); c.font = f.size + 'px "Jua", "Gowun Dodum", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+    c.lineWidth = f.size * 0.22; c.strokeStyle = '#3d2a20'; c.strokeText(f.text, f.x, f.y - f.t * 38); c.fillStyle = f.col; c.fillText(f.text, f.x, f.y - f.t * 38); c.restore();
+  }
+}
+function burst(x, y, col, n) {
+  if (reduceMotion) return;
+  for (let i = 0; i < n; i++) {
+    const an = vr(0, TAU), sp = vr(60, 190);
+    S.parts.push({ x, y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp - 70, t: 0, life: vr(0.45, 0.9), s: vr(5, 10), col: Math.random() < 0.6 ? col : '#fff6b0', kind: Math.random() < 0.6 ? 'star' : 'dot', rot: vr(0, 6), vr: vr(-6, 6) });
+  }
+}
+function floatText(x, y, text, col, size) { S.floats.push({ x, y, text, col: col || '#ffd24a', size: size || 24, t: 0, life: 0.95 }); }
+
+function render(dt) {
+  const W = S.W, H = S.H, c = ctx;
+  if (S.bgKey !== W + 'x' + H + '@' + S.dpr) buildBg();
+  c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+  c.drawImage(S.bg, 0, 0, W, H);
+  if (S.view === 'play' && S.G) drawBoard(dt);
+}
+
+// the title mascot: two matching pig cards giving each other a high five
+function mascotScene(t) {
+  const cv = el.mascot, c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  if (!S.mascot) {
+    S.mascot = [];
+    for (const mood of ['normal', 'happy']) { const s = document.createElement('canvas'); s.width = 150; s.height = 200; const x = s.getContext('2d'); paintFace(x, 150, 200, 3, mood); S.mascot.push(s); }
+    const s2 = document.createElement('canvas'); s2.width = 150; s2.height = 200; paintBack(s2.getContext('2d'), 150, 200, 0); S.mascot.push(s2);
+  }
+  const happy = reduceMotion ? 1 : (t % 4.2) > 2.0;
+  const bob = reduceMotion ? 0 : Math.sin(t * 3) * 4;
+  c.save(); c.translate(W / 2, H * 0.55);
+  // a card back peeking behind
+  c.save(); c.translate(0, -8); c.rotate(0.02); c.globalAlpha = 0.95; c.drawImage(S.mascot[2], -45, -62, 90, 120); c.restore();
+  for (const s of [-1, 1]) {
+    c.save(); c.translate(s * 78, bob * s + 6); c.rotate(s * (happy ? 0.2 : 0.12) + (happy && !reduceMotion ? Math.sin(t * 14) * 0.03 : 0));
+    c.fillStyle = 'rgba(6,40,34,0.25)'; rrPath(c, -52, -66 + 8, 104, 138, 18); c.fill();
+    c.drawImage(S.mascot[happy ? 1 : 0], -52, -66, 104, 138);
+    c.restore();
+  }
+  if (happy) { // sparks between the cards
+    for (let i = 0; i < 5; i++) { const an = i * 1.25 + t * 2; c.fillStyle = i % 2 ? '#ffd24a' : '#ff6b7d'; c.beginPath(); c.arc(Math.cos(an) * 20, -10 + Math.sin(an) * 24, 4, 0, TAU); c.fill(); }
+  }
+  c.restore();
+}
+
+// =====================================================================
+// EVENTS from the logic -> sounds, particles, banners
+// =====================================================================
+const TIPS_SOLO = {
+  1: '같은 그림 두 장을 찾아요!', 2: '잘 보고 외워 두면 쉬워요', 3: '틀리면 두 장이 자리를 바꿔요!', 4: '윙크하는 가짜 카드를 조심해요!',
+  5: '가끔 카드가 몰래 자리를 바꿔요!', 6: '찡그린 카드는 시간을 깎아요!', 7: '판이 가장 커졌어요!', 8: '가짜 카드가 더 늘었어요!',
+};
+const TIPS_COOP = { 1: '내 색 카드만 눌러요! 짝은 다른 색에 있어요', 2: '틀리면 두 장이 자리를 바꿔요', 3: '가짜 카드와 몰래 바꾸기를 조심해요!' };
+function showBanner(b1, b2) {
+  el.b1.textContent = b1; el.b2.textContent = b2 || '';
+  el.banner.classList.remove('on'); void el.banner.offsetWidth; el.banner.classList.add('on');
+  S.bannerT = 1.15;
+}
+function showToast(text, dur) { S.msg = text; S.msgT = dur || 1.6; }
+function say(text) { setText(el.live, text); }
+function cardCenter(slot) { const r = slotRect(slot); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; }
+function visOf(G, slot) { const c = G.cards[slot]; return c ? S.V.get(c.uid) : null; }
+function whoColor(G, who) { return G.mode === 'solo' ? OKCOL : PCOL[who] || OKCOL; }
+function handleEvents(G) {
+  const evs = G.ev.splice(0);
+  for (const e of evs) {
+    switch (e.t) {
+      case 'round': {
+        Sound.round();
+        if (G.mode === 'solo') showBanner(e.round + '라운드', TIPS_SOLO[Math.min(e.round, 9)] || '카드가 점점 빨리 자리를 바꿔요!');
+        else if (G.mode === 'team') showBanner(e.round + '라운드', TEAM_NAME[G.turn] + ' 먼저!' + (e.round === 2 ? ' 틀린 카드는 자리를 바꿔요' : e.round === 3 ? ' 가짜 카드도 있어요' : ''));
+        else showBanner(e.round + '단계', TIPS_COOP[e.round] || '');
+        say(el.b1.textContent + ' ' + el.b2.textContent);
+        break;
+      }
+      case 'preview': S.previewLeft = e.dur; for (const c of G.cards) { const v = S.V.get(c.uid); if (v && !reduceMotion) v.pop = 0; } Sound.flip(); break;
+      case 'go': Sound.go(); if (G.mode !== 'team') showToast('짝을 찾아요!', 1.2); break;
+      case 'flip': {
+        const v = S.V.get(e.uid); if (v) v.col = colorOfFlip(G, e.who);
+        Sound.flip();
+        break;
+      }
+      case 'grump': {
+        const v = S.V.get(e.uid); if (v) v.grump = 0.8;
+        Sound.grump();
+        const p = cardCenter(e.slot), gr = S.grid;
+        floatText(p.x, p.y - gr.ch / 2 - 6, G.mode === 'team' ? '-1초' : '-' + GRUMP_PEN + '초', '#ff9a8e', 22);
+        vib(20);
+        break;
+      }
+      case 'match': {
+        for (const s of [e.a, e.b]) {
+          const v = visOf(G, s), p = cardCenter(s);
+          if (v) { v.pop = 0.5; v.shake = 0; v.col = null; }
+          burst(p.x, p.y, whoColor(G, s === e.a ? e.who : e.whoB), 9);
+        }
+        const pa = cardCenter(e.a), pb = cardCenter(e.b), mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+        if (e.cross) { Sound.cross(); floatText(mx, my, '함께 맞췄어요!', '#ffe14d', 24); say('함께 짝을 맞췄어요'); }
+        else Sound.match(G.mode === 'solo' ? 0 : e.who);
+        if (G.mode === 'solo') {
+          floatText(mx, my, '+' + e.pts, '#ffe14d', 26);
+          if (e.combo >= 3) floatText(mx, my + 28, e.combo + '연속!', '#ff9fb0', 20);
+          setCls(el.pillB, 'pop', false); void el.pillB.offsetWidth; setCls(el.pillB, 'pop', true);
+        }
+        if (G.mode !== 'team') { el.barPlus.textContent = '+' + G.cfg.recover.toFixed(1).replace('.0', '') + '초'; el.barPlus.classList.remove('on'); void el.barPlus.offsetWidth; el.barPlus.classList.add('on'); }
+        const ch = G.mode === 'team' ? el.chips[e.who] : G.mode === 'coop' ? el.chips[e.who] : null;
+        if (ch) { setCls(ch.node, 'pop', false); void ch.node.offsetWidth; setCls(ch.node, 'pop', true); }
+        if (G.mode === 'coop' && e.whoB !== e.who) { const c2 = el.chips[e.whoB]; setCls(c2.node, 'pop', false); void c2.node.offsetWidth; setCls(c2.node, 'pop', true); }
+        vib(12);
+        break;
+      }
+      case 'miss': {
+        for (const s of [e.a, e.b]) { const v = visOf(G, s); if (v) { v.shake = 0.45; v.miss = 0.5; } }
+        if (e.fake) { Sound.fake(); const p = cardCenter(e.b); floatText(p.x, p.y, '가짜 카드!', '#ff9a8e', 22); say('가짜 카드예요'); } else Sound.miss();
+        vib(e.fake ? [20, 40, 20] : 20);
+        break;
+      }
+      case 'swap': {
+        Sound.swap();
+        for (const s of [e.a, e.b]) { const p = cardCenter(s); burst(p.x, p.y, '#ffffff', 4); const v = visOf(G, s); if (v) v.warn = 0; }
+        break;
+      }
+      case 'warn': { Sound.warn(); for (const s of e.slots) { const v = visOf(G, s); if (v) v.warn = 0.8; } break; }
+      case 'tick': if (e.left <= 3) Sound.tickLast(); else Sound.tick(); break;
+      case 'turnout': showToast(TEAM_NAME[e.team] + ' 시간이 다 됐어요! 차례를 넘겨요', 1.8); Sound.turn(); break;
+      case 'unflip': if (G.mode === 'team' && !e.timeout) Sound.turn(); break;
+      case 'hint': Sound.hint(); break;
+      case 'clear': {
+        Sound.clear();
+        if (G.mode === 'solo') showBanner(e.perfect ? '완벽해요!' : '성공!', '시간 보너스 +' + e.bonus + '점');
+        else showBanner('모두 찾았어요!', G.mode === 'team' ? '다음 라운드로 가요' : '다음 단계로 가요');
+        for (let i = 0; i < 4; i++) burst(S.board.x + vr(0.1, 0.9) * S.board.w, S.board.y + vr(0.15, 0.7) * S.board.h, ['#ffd24a', '#ff6b7d', '#6fe0a0', '#8fc4ff'][i], 10);
+        vib([20, 40, 20]);
+        say('모두 찾았어요');
+        break;
+      }
+      case 'over': {
+        if (e.outcome === 'timeout') { Sound.over(); showBanner('시간 끝!', ''); } else Sound.win();
+        say(e.outcome === 'timeout' ? '시간이 다 됐어요' : '끝났어요');
+        break;
+      }
+    }
+  }
+}
+
+// =====================================================================
+// HUD
+// =====================================================================
+function barText(G) {
+  if (S.msgT > 0 && S.msg && G.phase === 'play') return S.msg;
+  if (G.phase === 'intro') return G.mode === 'team' ? TEAM_NAME[G.turn] + ' 먼저!' : '준비!';
+  if (G.phase === 'preview') return '잘 보고 외워요! ' + Math.max(1, Math.ceil(G.pt - 1e-6));
+  if (G.phase === 'clear') return '성공!';
+  if (G.over) return '끝!';
+  if (G.mode === 'team') return G.misses.length ? '틀렸어요! 잘 봐 둬요' : TEAM_NAME[G.turn] + ' 차례 · ' + Math.max(0, Math.ceil(G.turnT - 1e-6)) + '초';
+  return '남은 시간 ' + Math.max(0, Math.ceil(G.time - 1e-6)) + '초';
+}
+function refreshHud() {
+  const G = S.G; if (!G) return;
+  const mode = G.mode;
+  if (mode === 'solo') { setText(el.pAl, '라운드'); setText(el.pAv, String(G.round)); setText(el.pBv, fmtNum(G.score[0])); setText(el.pBl, '점'); setCls(el.pillB, 'long', G.score[0] >= 10000); }
+  else if (mode === 'team') { setText(el.pAl, '라운드'); setText(el.pAv, G.round + '/' + TEAM_ROUNDS); setText(el.pBv, String(G.pairs - G.found)); setText(el.pBl, '쌍 남음'); }
+  else { setText(el.pAl, '단계'); setText(el.pAv, G.round + '/' + COOP_STAGES); setText(el.pBv, String(G.pairs - G.found)); setText(el.pBl, '쌍 남음'); }
+  // hint
+  if (mode !== 'team') {
+    setText(el.hintN, String(G.hints));
+    setCls(el.btnHint, 'none', G.hints <= 0 || G.phase !== 'play');
+    setCls(el.btnHint, 'on', !!G.hintGlow);
+  }
+  // bar
+  let frac = 1, cls = '';
+  if (G.phase === 'preview') { frac = G.pt / G.cfg.preview; cls = 'mid'; }
+  else if (G.phase === 'play' || G.phase === 'over') {
+    if (mode === 'team') { frac = G.cfg.turnT ? G.turnT / G.cfg.turnT : 1; cls = 't' + G.turn; }
+    else { frac = G.time / G.barMax; cls = frac < 0.25 ? 'low' : frac < 0.5 ? 'mid' : ''; }
+  }
+  frac = clamp(frac, 0, 1);
+  setStyle(el.barFill, 'width', (frac * 100).toFixed(1) + '%');
+  for (const c of ['mid', 'low', 't0', 't1']) setCls(el.barFill, c, cls === c);
+  setText(el.barTxt, barText(G));
+  // chips
+  if (mode === 'team') {
+    for (let i = 0; i < 2; i++) {
+      const c = el.chips[i];
+      setText(c.nm, TEAM_NAME[i]); setText(c.sc, String(G.score[i]));
+      const on = G.phase === 'play' && G.turn === i;
+      setCls(c.node, 'on', on); setCls(c.tg, 'ghost', !on && S.wide);
+      c.node.style.setProperty('--c', PCOL[i]);
+      c.tg.style.display = on || S.wide ? '' : 'none';
+    }
+  } else if (mode === 'coop') {
+    for (let i = 0; i < G.players; i++) {
+      const c = el.chips[i];
+      const tiny = (S.chipW || 200) < 118;
+      setText(c.nm, tiny ? '' : PLAYER_NAME[i]); setText(c.sc, G.score[i] + '쌍'); 
+      setCls(c.node, 'tiny', tiny);
+      c.node.style.setProperty('--c', PCOL[i]);
+      c.tg.style.display = 'none';
+      const held = G.pl[i] && G.pl[i].picks.length === 1;
+      setCls(c.node, 'on', held);
+    }
+  }
+}
+
+// =====================================================================
+// SCREENS
+// =====================================================================
+function uiMute() {
+  el.btnMute.classList.toggle('muted', Sound.muted);
+  el.btnMute.setAttribute('aria-label', Sound.muted ? '소리 켜기' : '소리 끄기');
+  setText($('btnMuteP'), Sound.muted ? '소리 켜기' : '소리 끄기');
+}
+const MODE_LINES = {
+  solo: '<b>시간 안에</b> 같은 그림 두 장을 찾아요. 라운드가 오를수록 판이 커지고, 틀리면 두 장이 <b>자리를 바꿔요</b>. 짝을 맞추면 시간이 조금 돌아와요!',
+  team: '같은 판을 두 팀이 <b>번갈아 한 쌍씩</b> 뒤집어요. 짝을 더 많이 모은 팀이 이겨요! 한 쌍을 뒤집을 때마다 차례가 넘어가고, 시간이 넘으면 차례가 넘어가요.',
+  coop: '2~4명이 <b>동시에</b> 각자 자기 색 카드를 눌러요. 짝이 다른 색 카드에 숨어 있어서, 본 그림을 <b>서로 말로 알려 줘야</b> 해요!',
+};
+function setSel(mode) {
+  S.mode = mode; store.set(KEY_MODE, mode);
+  for (const [m, b] of [['solo', el.btnSolo], ['team', el.btnTeam], ['coop', el.btnCoop]]) { b.classList.toggle('on', m === mode); b.setAttribute('aria-checked', m === mode ? 'true' : 'false'); }
+  el.plRow.hidden = mode !== 'coop'; el.plLabel.hidden = mode !== 'coop';
+  el.modeLine.innerHTML = MODE_LINES[mode];
+  el.bestLine.hidden = mode !== 'solo';
+}
+function setPlayers(n) {
+  S.players = clamp(n, 2, 4); store.set(KEY_PLAYERS, S.players);
+  el.btnP.forEach((b, i) => { b.classList.toggle('on', i + 2 === S.players); b.setAttribute('aria-checked', i + 2 === S.players ? 'true' : 'false'); });
+}
+function updateBestUI() {
+  const has = S.best > 0;
+  el.tBest.textContent = has ? fmtNum(S.best) + '점' : '아직 없어요'; el.tBest.classList.toggle('none', !has);
+  $('rBest').textContent = has ? fmtNum(S.best) + '점' : '아직 없어요'; $('rBest').classList.toggle('none', !has);
+}
+function toTitle() {
+  S.view = 'title'; S.G = null; S.paused = false; S.resultShown = false;
+  el.stage.hidden = true; el.scrTitle.hidden = false; el.scrPause.hidden = true; el.scrOver.hidden = true;
+  document.body.classList.remove('paused');
+  releaseAll(); S.V.clear(); S.visKey = '';
+  setSel(S.mode); setPlayers(S.players); updateBestUI(); layout(); S.dirty = true;
+}
+function startGame(o) {
+  o = o || {};
+  S.mode = o.mode === 'team' || o.mode === 'coop' ? o.mode : o.mode === 'solo' ? 'solo' : S.mode;
+  if (o.players) S.players = clamp(o.players | 0, 2, 4);
+  S.gameNo++;
+  const seed = o.seed !== undefined ? o.seed : BASE_SEED !== null ? BASE_SEED + S.gameNo - 1 : (Math.random() * 2147483647) | 0;
+  S.G = newGame({ mode: S.mode, players: S.players, seed });
+  S.view = 'play'; S.paused = false; S.resultShown = false; S.overT = 0; S.newRecord = false; S.bannerT = 0; S.msgT = 0; S.msg = '';
+  el.scrTitle.hidden = true; el.scrPause.hidden = true; el.scrOver.hidden = true; el.stage.hidden = false;
+  el.banner.classList.remove('on'); el.stage.classList.remove('dim');
+  document.body.classList.remove('paused');
+  releaseAll(); S.V.clear(); S.visKey = ''; S.kcur = 0; S.previewLeft = 0;
+  layout(); handleEvents(S.G); refreshHud(); S.dirty = true;
+}
+function playable() { const G = S.G; return !!G && S.view === 'play' && !S.paused && !G.over && G.phase === 'play' && !S.resultShown; }
+function pauseGame() {
+  const G = S.G;
+  if (S.view !== 'play' || !G || G.over || S.paused || S.resultShown) return;
+  S.paused = true; document.body.classList.add('paused'); releaseAll();
+  el.scrPause.hidden = false; uiMute();
+}
+function resumeGame() { if (!S.paused) return; S.paused = false; document.body.classList.remove('paused'); el.scrPause.hidden = true; S.dirty = true; }
+function showResult() {
+  const G = S.G; if (!G) return;
+  S.resultShown = true; releaseAll(); el.stage.classList.add('dim');
+  const mode = G.mode;
+  const rBig = $('rBigBox'), rank = $('rRank'), stats = $('rStats'), badge = $('rBadge');
+  badge.hidden = true; rank.hidden = true; rBig.hidden = false; $('rBestLine').hidden = mode !== 'solo';
+  $('rSeed').hidden = BASE_SEED === null; $('rSeed').textContent = '시드 ' + G.seed;
+  if (mode === 'solo') {
+    const score = G.score[0];
+    if (score > S.best) { S.best = score; store.set(KEY_BEST, String(score)); S.newRecord = true; }
+    $('rTitle').textContent = '시간이 다 됐어요!';
+    $('rBig').textContent = fmtNum(score); $('rBigUnit').textContent = '점';
+    badge.hidden = !S.newRecord;
+    $('rLine').innerHTML = '<b>' + G.reached + '라운드</b>까지 갔어요! ' + (G.reached >= 8 ? '정말 대단한 기억력이에요!' : G.reached >= 5 ? '다음엔 더 멀리 가 봐요.' : '외워 둔 그림을 떠올리며 다시 도전해요.');
+    $('rS1l').textContent = '도달 라운드'; $('rS1').textContent = G.reached + '라운드';
+    $('rS2l').textContent = '맞춘 짝'; $('rS2').textContent = G.stat.matches + '쌍';
+    $('rS3l').textContent = '최고 연속'; $('rS3').textContent = G.bestCombo + '연속';
+  } else if (mode === 'team') {
+    const w = G.winner;
+    $('rTitle').textContent = w < 0 ? '비겼어요!' : TEAM_NAME[w] + ' 승리!';
+    rBig.hidden = true; rank.hidden = false;
+    const order = [0, 1].sort((a, b) => G.score[b] - G.score[a] || a - b);
+    rank.innerHTML = order.map((t, i) => '<li class="' + (w >= 0 && t === w ? 'first' : '') + '" style="--tc:' + PCOL[t] + '"><span class="rk">' + (w < 0 ? '=' : i + 1) + '</span><span class="nm">' + TEAM_NAME[t] + '<small>' + (w >= 0 && t === w ? '짝을 가장 많이 모았어요' : w < 0 ? '똑같이 모았어요' : '다음엔 이겨 봐요') + '</small></span><span class="sc">' + G.score[t] + '쌍</span></li>').join('');
+    $('rLine').textContent = w < 0 ? '두 팀이 똑같이 모았어요. 한 판 더 해서 가려 봐요!' : '세 라운드 동안 짝을 모은 결과예요.';
+    $('rS1l').textContent = '맞춘 짝'; $('rS1').textContent = (G.score[0] + G.score[1]) + '쌍';
+    $('rS2l').textContent = '틀린 횟수'; $('rS2').textContent = G.stat.misses + '번';
+    $('rS3l').textContent = '시간 초과'; $('rS3').textContent = G.stat.timeouts + '번';
+  } else {
+    const win = G.win;
+    $('rTitle').textContent = win ? '모두 맞췄어요!' : '시간이 다 됐어요';
+    $('rBig').textContent = win ? String(Math.ceil(G.time)) : G.round + '/' + COOP_STAGES; $('rBigUnit').textContent = win ? '초 남았어요' : '단계에서 멈췄어요';
+    $('rLine').innerHTML = win ? '<b>' + G.players + '명</b>이 말로 알려 주며 모든 짝을 찾았어요!' : '보인 그림을 서로 더 크게 말해 주면 쉬워져요. 다시 해 봐요!';
+    $('rS1l').textContent = '맞춘 짝'; $('rS1').textContent = G.stat.matches + '쌍';
+    $('rS2l').textContent = '함께 맞춘 짝'; $('rS2').textContent = G.stat.cross + '쌍';
+    $('rS3l').textContent = '틀린 횟수'; $('rS3').textContent = G.stat.misses + '번';
+  }
+  updateBestUI();
+  el.scrOver.hidden = false;
+  say($('rTitle').textContent);
+}
+
+// =====================================================================
+// INPUT: a tap can arrive as pointer, touch or mouse events (or only emulated mouse events on some boards), so all three paths feed
+// pressAt(). Every finger is a contact (pointer id / touch identifier), a short de-dupe window makes one tap = one flip, and every
+// way a finger can leave (up, cancel, window changes, pause) cleans the contacts up. Several fingers can tap at the same time.
+// =====================================================================
+const contacts = new Map(), recent = [];
+let lastTouchAt = -1e9;
+const ctKey = (src, id) => src + ':' + id;
+function endContact(ct) { if (ct.dead) return; ct.dead = true; for (const k of ct.keys) contacts.delete(k); }
+function releaseAll() { for (const ct of Array.from(contacts.values())) endContact(ct); contacts.clear(); recent.length = 0; }
+function doTap(slot, x, y) {
+  const G = S.G; if (!G) return { k: 'ignored' };
+  const zone = G.mode === 'coop' ? zoneOf(G, slot) : G.mode === 'team' ? G.turn : 0;
+  const r = tap(G, slot);
+  S.taps++;
+  handleEvents(G);
+  if (r.k !== 'ignored') S.rings.push({ x, y, t: 0, col: G.mode === 'solo' ? '#ffffff' : PCOL[zone] });
+  return r;
+}
+function pressAt(src, id, x, y, isTouch, ts) {
+  const now = performance.now();
+  if (isTouch) lastTouchAt = now; else if (src === 'mouse' && now - lastTouchAt < 700) return false;
+  Sound.ensure();
+  const k = ctKey(src, id);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const r = recent[i];
+    if (now - r.t > 400) { recent.splice(i, 1); continue; }
+    if (now - r.t < 120 && !r.srcs.has(src) && Math.abs(r.x - x) < 9 && Math.abs(r.y - y) < 9) {   // the same finger seen through another event path
+      r.srcs.add(src);
+      if (r.ct && !r.ct.dead) { r.ct.keys.add(k); contacts.set(k, r.ct); }
+      return false;
+    }
+  }
+  const ex = contacts.get(k); if (ex) endContact(ex);   // the old contact's "up" never came
+  const rec = { t: now, src, x, y, srcs: new Set([src]), ct: null };
+  recent.push(rec);
+  if (!playable()) return false;
+  const slot = slotAt(x, y); if (slot < 0) return false;
+  const ct = { keys: new Set([k]), t: now, x, y, dead: false };
+  rec.ct = ct; contacts.set(k, ct);
+  doTap(slot, x, y);
+  return true;
+}
+function pressEnd(src, id) { const ct = contacts.get(ctKey(src, id)); if (ct) endContact(ct); }
+const cvEl = el.cv;
+cvEl.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button > 0) return;   // left button only (touch and pen report 0 or -1)
+  if (pressAt('pointer', e.pointerId, e.clientX, e.clientY, e.pointerType !== 'mouse', e.timeStamp) && e.cancelable) e.preventDefault();
+});
+window.addEventListener('pointerup', (e) => pressEnd('pointer', e.pointerId));
+window.addEventListener('pointercancel', (e) => pressEnd('pointer', e.pointerId));
+cvEl.addEventListener('touchstart', (e) => {
+  lastTouchAt = performance.now();
+  for (const t of e.changedTouches) pressAt('touch', t.identifier, t.clientX, t.clientY, true, e.timeStamp);
+  if (e.cancelable) e.preventDefault();   // no emulated mouse events, no scrolling
+}, { passive: false });
+window.addEventListener('touchmove', () => { lastTouchAt = performance.now(); }, { passive: true });
+window.addEventListener('touchend', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+window.addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+cvEl.addEventListener('mousedown', (e) => { if (e.button > 0) return; pressAt('mouse', 0, e.clientX, e.clientY, false, e.timeStamp); });
+window.addEventListener('mouseup', () => pressEnd('mouse', 0));
+window.addEventListener('blur', () => { /* focus can shift right after a touch starts on some boards: do not pause or release here */ });
+
+// keyboard: arrows move a cursor, Space / Enter turns the card (solo and team)
+function slotFromCell(dx, dy) { const G = S.G; return S.grid.T ? dx * G.cols + dy : dy * G.cols + dx; }
+const MOVE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+window.addEventListener('keydown', (e) => {
+  const code = e.code;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const onBtn = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  const G = S.G;
+  if (playable() && G.mode !== 'coop') {
+    const mv = MOVE[code];
+    if (mv) {
+      e.preventDefault(); S.kb = true;
+      const k = cellOf(clamp(S.kcur, 0, G.n - 1)), g = S.grid;
+      S.kcur = slotFromCell(clamp(k.dx + mv[0], 0, g.dc - 1), clamp(k.dy + mv[1], 0, g.dr - 1));
+      return;
+    }
+    if ((code === 'Enter' || code === 'Space') && !onBtn) { e.preventDefault(); if (!e.repeat) { S.kb = true; Sound.ensure(); const c = cardCenter(S.kcur); doTap(clamp(S.kcur, 0, G.n - 1), c.x, c.y); } return; }
+    if (code === 'KeyH') { e.preventDefault(); doHint(); return; }
+  } else if (playable() && code === 'KeyH') { e.preventDefault(); doHint(); return; }
+  if (code === 'Enter' || code === 'Space') {
+    if (onBtn) return;   // the browser clicks the focused button itself
+    if (e.repeat) { e.preventDefault(); return; }
+    Sound.ensure();
+    if (S.paused) { e.preventDefault(); resumeGame(); return; }
+    if (S.view === 'title') { e.preventDefault(); onStart(); return; }
+    if (S.G && S.G.over && S.resultShown) { e.preventDefault(); onStart(); return; }
+    return;
+  }
+  if (code === 'Escape' || code === 'KeyP') { if (S.paused) resumeGame(); else pauseGame(); return; }
+  if (code === 'KeyM') { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (code === 'KeyR') { if (S.paused || (S.G && S.G.over && S.resultShown)) { e.preventDefault(); onStart(); } return; }
+  if (S.view === 'title' && !S.paused && (code === 'ArrowLeft' || code === 'ArrowRight')) {
+    e.preventDefault(); const modes = ['solo', 'team', 'coop']; setSel(modes[clamp(modes.indexOf(S.mode) + (code === 'ArrowRight' ? 1 : -1), 0, 2)]); Sound.ui();
+  }
+  if (S.view === 'title' && !S.paused && S.mode === 'coop' && (code === 'ArrowUp' || code === 'ArrowDown')) { e.preventDefault(); setPlayers(S.players + (code === 'ArrowDown' ? 1 : -1)); Sound.ui(); }
+});
+
+// buttons: a 120 ms window per control keeps one tap = one action
+let lastBtnAt = -1e9;
+function onTap(node, fn) {
+  let sx = 0, sy = 0, armed = false, lastAt = -1e9;
+  const fire = (e) => { const t = performance.now(); if (t - lastAt < 120) return; lastAt = t; fn(e); };
+  const down = (x, y) => { sx = x; sy = y; armed = true; };
+  const up = (x, y) => { const ok = armed && Math.hypot(x - sx, y - sy) < 16; armed = false; return ok; };
+  node.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button > 0) return; if (e.pointerType !== 'mouse') lastTouchAt = performance.now(); down(e.clientX, e.clientY); });
+  node.addEventListener('pointerup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('pointercancel', () => { armed = false; });
+  node.addEventListener('touchstart', (e) => { lastTouchAt = performance.now(); const t = e.changedTouches[0]; if (t) down(t.clientX, t.clientY); }, { passive: true });
+  node.addEventListener('touchend', (e) => {
+    lastTouchAt = performance.now();
+    const t = e.changedTouches[0];
+    if (t && up(t.clientX, t.clientY)) fire(e);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  node.addEventListener('touchcancel', () => { armed = false; }, { passive: true });
+  node.addEventListener('mousedown', (e) => { if (e.button <= 0 && performance.now() - lastTouchAt > 700) down(e.clientX, e.clientY); });
+  node.addEventListener('mouseup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('click', (e) => { armed = false; fire(e); });
+}
+function onStart() { Sound.ensure(); Sound.ui(); startGame(); }
+function pickMode(m) { Sound.ensure(); Sound.ui(); setSel(m); }
+function doHint() {
+  const G = S.G; if (!G || !playable() || G.mode === 'team') return;
+  if (G.hints <= 0) { showToast('힌트를 다 썼어요', 1.4); return; }
+  if (!useHint(G)) { showToast('지금은 힌트를 쓸 수 없어요', 1.4); return; }
+  handleEvents(G);
+}
+onTap($('btnStart'), () => onStart());
+onTap(el.btnSolo, () => pickMode('solo'));
+onTap(el.btnTeam, () => pickMode('team'));
+onTap(el.btnCoop, () => pickMode('coop'));
+el.btnP.forEach((b, i) => onTap(b, () => { Sound.ensure(); Sound.ui(); setPlayers(i + 2); }));
+onTap($('btnAgain'), () => { Sound.ensure(); startGame(); });
+onTap($('btnOverTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap($('btnResume'), () => { Sound.ensure(); resumeGame(); });
+onTap($('btnPauseRestart'), () => { Sound.ensure(); startGame(); });
+onTap($('btnPauseTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap($('btnMuteP'), () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+onTap(el.btnPause, () => { Sound.ensure(); Sound.ui(); pauseGame(); });
+onTap(el.btnHint, () => { Sound.ensure(); doHint(); });
+onTap(el.btnMute, () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+// pause when the page is hidden. (No pause on window blur: focus can shift right after a touch starts on some boards.)
+document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseAll(); pauseGame(); } });
+window.addEventListener('pagehide', () => { releaseAll(); pauseGame(); });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  });
+}
+let lastW = 0, lastH = 0;
+function onResize() {
+  const changed = Math.abs(window.innerWidth - lastW) > 1 || Math.abs(window.innerHeight - lastH) > 1;
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  if (changed) releaseAll();
+  layout();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+
+// =====================================================================
+// LOOP + BOOT
+// =====================================================================
+let lastTs = 0, slowN = 0, slowSum = 0, mascotAcc = 0;
+function tickPlay(dt) {
+  const G = S.G; if (!G || S.paused) return;
+  if (G.ev.length) handleEvents(G);
+  update(G, dt);
+  if (G.ev.length) handleEvents(G);
+  if (G.over) { S.overT += dt; if (S.overT > 1.5 && !S.resultShown) showResult(); }
+  if (S.bannerT > 0) { S.bannerT -= dt; if (S.bannerT <= 0) el.banner.classList.remove('on'); }
+  if (S.msgT > 0) { S.msgT -= dt; if (S.msgT <= 0) S.msg = ''; }
+}
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  // low-end devices: if frames keep taking too long, render at a lower resolution (2 -> 1.5 -> 1)
+  if (!S.paused && !document.hidden && dt > 0 && dt < 0.5 && dprCap > 1) {
+    slowSum += dt; slowN++;
+    if (slowN >= 90) { if (slowSum / slowN > 0.0235 && (window.devicePixelRatio || 1) > dprCap - 0.01) { dprCap = dprCap > 1.5 ? 1.5 : 1; layout(); } slowN = 0; slowSum = 0; }
+  }
+  if (dt < 0) dt = 0; if (dt > 0.05) dt = 0.05;
+  const t0 = performance.now();
+  if (layoutSig() !== S.sig) layout();
+  if (!S.paused) S.clock += dt;
+  if (S.view === 'play' && S.G) {
+    if (!S.paused) { tickPlay(dt); refreshHud(); render(dt); }
+  } else {
+    if (S.dirty) { render(0); S.dirty = false; }
+    if (!S.paused && !el.scrTitle.hidden) { mascotAcc += dt; if (mascotAcc > 1 / 24) { mascotAcc = 0; mascotScene(S.clock); } }
+  }
+  const ms = performance.now() - t0, P = S.perf;
+  P.ms = P.ms * 0.95 + ms * 0.05; if (ms > P.max) P.max = ms; P.frames++;
+}
+function snapshot() {
+  const G = S.G;
+  return {
+    view: S.view, mode: S.mode, players: S.players, paused: S.paused, best: S.best, newRecord: S.newRecord, resultShown: S.resultShown, wide: S.wide,
+    phase: G ? G.phase : '', gmode: G ? G.mode : '', round: G ? G.round : 0, n: G ? G.n : 0, cols: G ? G.cols : 0, rows: G ? G.rows : 0, pairs: G ? G.pairs : 0, found: G ? G.found : 0,
+    time: G ? G.time : 0, barMax: G ? G.barMax : 0, turn: G ? G.turn : 0, turnT: G ? G.turnT : 0, score: G ? G.score.slice() : [], over: G ? G.over : false, outcome: G ? G.outcome : '',
+    winner: G ? G.winner : -2, win: G ? G.win : false, seed: G ? G.seed : 0, hints: G ? G.hints : 0, stat: G ? Object.assign({}, G.stat) : null, reached: G ? G.reached : 0,
+    contacts: contacts.size, taps: S.taps, dpr: S.dpr, muted: Sound.muted, transposed: S.grid ? S.grid.T : false, cw: S.grid ? S.grid.cw : 0, ch: S.grid ? S.grid.ch : 0,
+  };
+}
+function rectOf(n) { if (!n) return null; const r = n.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 }; }
+window.__game = {
+  get state() { return snapshot(); },
+  get layout() {
+    const pr = $('probe');
+    return {
+      W: window.innerWidth, H: window.innerHeight, safe: { t: parseFloat(getComputedStyle(pr).paddingTop) || 0, b: parseFloat(getComputedStyle(pr).paddingBottom) || 0 },
+      board: S.board, grid: S.grid ? { T: S.grid.T, dc: S.grid.dc, dr: S.grid.dr, cw: S.grid.cw, ch: S.grid.ch, gap: S.grid.gap, ox: S.grid.ox, oy: S.grid.oy } : null,
+      hud: rectOf(el.hud), bar: rectOf(el.bar), chips: el.chips.map((c) => (c.node.style.display === 'none' ? null : rectOf(c.node))),
+      pause: rectOf(el.btnPause), mute: rectOf(el.btnMute), hint: el.btnHint.hidden ? null : rectOf(el.btnHint), banner: rectOf(el.banner),
+      start: rectOf($('btnStart')), titleCard: rectOf(el.scrTitle.querySelector('.card')), resume: rectOf($('btnResume')), again: rectOf($('btnAgain')),
+      modes: { solo: rectOf(el.btnSolo), team: rectOf(el.btnTeam), coop: rectOf(el.btnCoop) }, players: el.btnP.map(rectOf),
+    };
+  },
+  get G() { return S.G; },
+  get perf() { return Object.assign({}, S.perf); },
+  slotRect(slot) { return S.G && S.grid ? slotRect(slot) : null; },
+  slotCenter(slot) { return S.G && S.grid ? cardCenter(slot) : null; },
+  slotAt(x, y) { return slotAt(x, y); },
+  tapSlot(slot) { const c = cardCenter(slot); return doTap(slot, c.x, c.y); },
+  start(o) { startGame(o); },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  hint() { doHint(); },
+  // QA: jump to a round / stage (solo, team, coop)
+  jump(round) { const G = S.G; if (!G) return; G.round = round - 1; if (G.mode !== 'team') G.time = Math.max(G.time, 20); startRound(G); S.V.clear(); layout(); handleEvents(G); refreshHud(); },
+  // QA: step the game faster than real time
+  advance(sec) { const G = S.G; if (!G) return; const n = Math.round(sec * 60); for (let i = 0; i < n; i++) { if (G.over) break; update(G, 1 / 60); if (G.ev.length) handleEvents(G); } refreshHud(); },
+  pics: { NPIC, PIC_NAME },
+  logic: { newGame, update, tap, useHint, soloCfg, teamCfg, coopCfg, zoneOf, isPair, mulberry32, STEP, TEAM_NAME, PLAYER_NAME },
+};
+
+(function boot() {
+  S.best = readNum(KEY_BEST);
+  const m = store.get(KEY_MODE, 'solo'); S.mode = m === 'team' || m === 'coop' ? m : 'solo';
+  S.players = clamp(parseInt(store.get(KEY_PLAYERS, '2'), 10) || 2, 2, 4);
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  uiMute();
+  toTitle();
+  requestAnimationFrame(frame);
+  (function waitFonts() {
+    try {
+      if (!document.fonts || !document.fonts.load) return;
+      const t = new Promise((res) => setTimeout(res, 1500));
+      Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).then(() => { S.dirty = true; }).catch(() => { /* fallback fonts are fine */ });
+    } catch (e) { /* ignore */ }
+  })();
+})();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2079 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>쫑알쫑알</title>
+<meta name="theme-color" content="#1b1650">
+<meta name="description" content="쫑알이 합창단이 켜지는 순서대로 노래해요. 불이 켜진 순서를 기억했다가 똑같이 눌러 나만의 노래를 완성해요. 혼자서도, 둘이서 대결도, 2~4명이 한 곡을 나눠 부르는 합창도 해요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* Visual world: a night-time forest concert. Round little singers (쫑알이) sit on mossy cushions and sing one note each. */
+:root {
+  --night: #1b1650;
+  --panel: rgba(30, 24, 82, 0.96);
+  --hud-bg: rgba(22, 17, 66, 0.78);
+  --ink: #1a1033;
+  --paper: #fbf8ff;
+  --paper-dim: #c4bde8;
+  --left: #5ec8ff;
+  --right: #ff8fc4;
+  --gold: #ffd166;
+  --good: #7be0a1;
+  --danger: #ff6b81;
+  --font-d: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --font-b: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: var(--night); color: var(--paper);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--night); }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+
+/* ---------- HUD (the two buttons are placed by layout() in JS; everything else is drawn on the canvas) ---------- */
+#hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+#hud[hidden] { display: none; }
+#hud > * { position: absolute; }
+.icon-btn {
+  width: 46px; height: 46px; border-radius: 15px; padding: 0;
+  border: 2px solid rgba(251, 248, 255, 0.75); background: var(--hud-bg); color: var(--paper);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(var(--sat) + 62px) calc(var(--sar) + 14px) calc(var(--sab) + 14px) calc(var(--sal) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(12, 8, 40, 0.5);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.overlay[hidden] { display: none; }
+#scrPause { justify-content: center; background: rgba(10, 6, 34, 0.88); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(450px, 100%); margin: auto;
+  background: var(--panel); color: var(--paper);
+  border: 2px solid rgba(251, 248, 255, 0.85); border-radius: 24px;
+  box-shadow: 0 8px 0 rgba(8, 4, 30, 0.9);
+  padding: 20px 18px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 7px; z-index: 2;
+  background: linear-gradient(90deg, #ff6b81 0 16%, #ffa047 16% 33%, #ffd93d 33% 50%, #7fdc6a 50% 66%, #52b6ff 66% 83%, #c783ff 83% 100%);
+}
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.mascot { display: block; width: 240px; height: 112px; margin: 0 auto 4px; }
+.tag {
+  display: inline-block; font-size: 13px; letter-spacing: 1px; color: var(--ink); background: var(--paper);
+  padding: 3px 10px 2px; border-radius: 6px; transform: rotate(-2deg); font-weight: 700;
+}
+.logo {
+  margin: 6px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 60px; line-height: 1.05; letter-spacing: 1px;
+  white-space: nowrap;
+}
+.logo span {
+  display: inline-block; animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 2.8s ease-in-out infinite;
+  text-shadow: 0 5px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
+.logo span:nth-child(1) { color: #ff6b81; }
+.logo span:nth-child(2) { color: #ffd93d; animation-delay: 0.1s, 0.4s; }
+.logo span:nth-child(3) { color: #7fdc6a; animation-delay: 0.2s, 0.8s; }
+.logo span:nth-child(4) { color: #52b6ff; animation-delay: 0.3s, 1.2s; }
+@keyframes logoIn { from { transform: translateY(-34px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.hook { margin: 8px 0 8px; font-size: 16.5px; color: var(--paper); line-height: 1.45; }
+.hook small { display: block; margin-top: 3px; font-size: 14px; color: var(--paper-dim); }
+.howto {
+  background: rgba(251, 248, 255, 0.06); border: 1px solid rgba(251, 248, 255, 0.22); border-radius: 14px;
+  padding: 6px 12px; text-align: left; font-size: 14.5px; line-height: 1.4; color: var(--paper);
+}
+.howto p { margin: 6px 0; display: flex; gap: 9px; align-items: baseline; }
+.howto .k { flex: none; min-width: 66px; text-align: center; font-size: 12.5px; color: var(--gold); border: 1px solid rgba(255, 209, 102, 0.55); border-radius: 7px; padding: 1px 5px; }
+.best-line { margin: 10px 0 4px; font-size: 15px; color: var(--paper-dim); }
+.best-line b { color: var(--gold); font-weight: normal; font-family: var(--font-d); font-size: 21px; }
+.best-line[hidden] { display: none; }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; border-radius: 16px;
+  border: 2px solid var(--ink); background: var(--gold); color: var(--ink);
+  font-family: var(--font-d); font-size: 25px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 #c99a12; touch-action: manipulation;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a12; }
+.btn.sub {
+  background: transparent; color: var(--paper); border: 2px solid rgba(251, 248, 255, 0.55);
+  box-shadow: none; font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0;
+}
+.btn.sub[hidden] { display: none; }
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, .mode:focus-visible, .size:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--paper-dim); line-height: 1.35; }
+.back {
+  position: absolute; left: calc(var(--sal) + 10px); top: calc(var(--sat) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--paper); border: 2px solid rgba(251, 248, 255, 0.8); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.res-title { margin: 4px 0 0; font-size: 28px; font-weight: normal; font-family: var(--font-d); color: var(--paper); letter-spacing: 1px; line-height: 1.2; }
+.res-title.win { color: var(--gold); }
+.res-title.L { color: var(--left); }
+.res-title.R { color: var(--right); }
+.pause-line { margin: 10px 0 14px; font-size: 16.5px; color: var(--paper-dim); line-height: 1.45; }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 64px; line-height: 1.1; color: var(--gold); text-shadow: 0 4px 0 var(--ink), 0 0 24px rgba(255, 209, 102, 0.35); }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 24px; color: var(--paper); margin-left: 4px; text-shadow: none; }
+.res-big[hidden] { display: none; }
+.res-score { margin: 6px 0 0; display: flex; justify-content: center; align-items: center; gap: 14px; font-family: var(--font-d); font-size: 54px; line-height: 1.1; }
+.res-score[hidden] { display: none; }
+.res-score .l { color: var(--left); text-shadow: 0 4px 0 var(--ink); }
+.res-score .r { color: var(--right); text-shadow: 0 4px 0 var(--ink); }
+.res-score .c { font-size: 30px; color: var(--paper-dim); }
+.badge {
+  display: inline-block; margin-top: 6px; padding: 4px 14px 5px; border-radius: 12px;
+  background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 18px; border: 2px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge[hidden] { display: none; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.stats { margin: 12px 0 4px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.stats div { background: rgba(251, 248, 255, 0.06); border: 1px solid rgba(251, 248, 255, 0.22); border-radius: 12px; padding: 7px 2px 6px; font-size: 12.5px; color: var(--paper-dim); }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 21px; color: var(--paper); margin-top: 3px; }
+
+/* cards with a scrolling info area and an actions dock that never leaves the screen */
+.card.fit { display: flex; flex-direction: column; flex: 0 1 auto; max-height: 100%; min-height: 0; padding: 0; }
+.card.fit .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 20px 18px 6px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.card.fit .actions { flex: none; padding: 8px 18px 14px; background: linear-gradient(to bottom, rgba(30, 24, 82, 0), var(--panel) 10px); position: relative; }
+.pick-label { margin: 10px 0 5px; font-size: 13px; color: var(--paper-dim); text-align: left; }
+.pick-label[hidden], .sizes[hidden] { display: none; }
+.modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sizes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mode, .size {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; padding: 6px 4px;
+  border-radius: 16px; border: 3px solid rgba(251, 248, 255, 0.28); background: rgba(251, 248, 255, 0.06); color: var(--paper-dim);
+  touch-action: manipulation; font-family: var(--font-b);
+}
+.mode b, .size b { font-family: var(--font-d); font-weight: normal; font-size: 20px; line-height: 1.1; padding-top: 3px; color: var(--paper); white-space: nowrap; }
+.mode small, .size small { font-size: 11.5px; line-height: 1.2; white-space: nowrap; }
+.mode.on, .size.on { border-color: var(--gold); background: rgba(255, 209, 102, 0.16); color: var(--paper); box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.25); }
+.mode.on::after, .size.on::after {
+  content: '\2713'; position: absolute; right: 4px; top: 3px; width: 17px; height: 17px; border-radius: 50%; background: var(--gold); color: var(--ink);
+  font-size: 11px; font-weight: 700; display: grid; place-items: center;
+}
+.mode:active, .size:active { transform: translateY(2px); }
+.mode-line { margin: 10px 0 0; font-size: 14px; color: var(--paper-dim); line-height: 1.4; min-height: 4.2em; }
+.btn-row { display: flex; gap: 10px; margin-top: 10px; }
+.btn-row .btn.sub { margin-top: 0; flex: 1 1 0; min-width: 0; font-size: 16px; }
+
+@media (max-width: 380px) { .logo { font-size: 52px; } .mode b, .size b { font-size: 17px; } .mode small, .size small { font-size: 10.5px; } }
+@media (max-height: 800px) {
+  .mascot { display: none; }
+  .logo { font-size: 52px; }
+  .res-big { font-size: 54px; }
+  .card { padding-top: 18px; }
+}
+@media (min-width: 600px) and (min-height: 700px) {
+  .overlay { padding-top: calc(var(--sat) + 14px); }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding: calc(var(--sat) + 8px) calc(var(--sar) + 124px) calc(var(--sab) + 8px) calc(var(--sal) + 124px); }
+  .card { padding: 12px 16px 10px; width: min(680px, 100%); }
+  .pause-line { margin: 4px 0 6px; font-size: 14.5px; }
+  .badge { margin-top: 2px; font-size: 15px; padding: 2px 12px 3px; }
+  .tag { display: none; }
+  .logo { font-size: 38px; margin-top: 0; }
+  .hook { margin: 4px 0 6px; font-size: 14px; }
+  .hook small { display: none; }
+  .howto { display: none; }
+  .card.fit .scroll { padding: 14px 16px 4px; }
+  .card.fit .actions { padding: 6px 16px 10px; }
+  .pick-label { margin: 6px 0 3px; font-size: 12px; }
+  .mode, .size { min-height: 44px; padding: 3px 4px; flex-direction: row; flex-wrap: wrap; column-gap: 7px; }
+  .mode small, .size small { display: none; }
+  .mode.on::after, .size.on::after { display: none; }
+  .mode b, .size b { font-size: 19px; }
+  .mode-line { margin-top: 6px; min-height: 0; font-size: 12.5px; }
+  .best-line { margin: 4px 0 4px; }
+  .btn { min-height: 48px; font-size: 21px; }
+  .keyhint { display: none; }
+  .res-title { font-size: 22px; }
+  .res-big { font-size: 42px; }
+  .res-score { font-size: 40px; margin-top: 2px; }
+  .stats { margin: 6px 0 2px; }
+  .stats b { font-size: 18px; }
+  .btn.sub { min-height: 42px; margin-top: 6px; font-size: 15px; }
+  .back { min-height: 40px; }
+}
+@media (max-height: 540px) and (orientation: landscape) and (max-width: 760px) {
+  .overlay { padding-left: calc(var(--sal) + 14px); padding-right: calc(var(--sar) + 14px); padding-top: calc(var(--sat) + 50px); }
+  .best-line { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card { animation: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="쫑알이 합창단 무대"></canvas>
+  <div id="probe"></div>
+
+  <div id="hud" hidden>
+    <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+    </button>
+    <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+    </button>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card fit">
+      <div class="scroll">
+        <canvas class="mascot" id="mascot" width="480" height="224" aria-hidden="true"></canvas>
+        <span class="tag">기억력 합창</span>
+        <h1 class="logo" aria-label="쫑알쫑알"><span>쫑</span><span>알</span><span>쫑</span><span>알</span></h1>
+        <p class="hook" id="tHook">쫑알이들이 한 소절씩 노래해요. 켜지는 순서를 기억했다가 똑같이 눌러요!<small>맞출수록 나만의 노래가 한 곡 완성돼요. 하트가 다 깨지면 노래가 끝나요.</small></p>
+        <p class="pick-label">누구와 할까요?</p>
+        <div class="modes" role="radiogroup" aria-label="누구와 할까요">
+          <button class="mode on" id="btnSolo" type="button" role="radio" aria-checked="true"><b>혼자서</b><small>기억력 도전</small></button>
+          <button class="mode" id="btnVs" type="button" role="radio" aria-checked="false"><b>둘이서</b><small>먼저 틀리면 져요</small></button>
+          <button class="mode" id="btnCoop" type="button" role="radio" aria-checked="false"><b>함께</b><small>2~4명 합창</small></button>
+        </div>
+        <p class="pick-label" id="pplLabel" hidden>몇 명이 부를까요?</p>
+        <div class="sizes" id="pplRow" role="radiogroup" aria-label="합창 인원" hidden>
+          <button class="size on" id="btnP2" type="button" role="radio" aria-checked="true"><b>2명</b><small>하트 3개</small></button>
+          <button class="size" id="btnP3" type="button" role="radio" aria-checked="false"><b>3명</b><small>하트 4개</small></button>
+          <button class="size" id="btnP4" type="button" role="radio" aria-checked="false"><b>4명</b><small>하트 5개</small></button>
+        </div>
+        <p class="mode-line" id="modeLine"></p>
+        <p class="best-line" id="bestLine">최고 기록 <b id="tBest">-</b></p>
+        <div class="howto" style="margin-top:10px">
+          <p><span class="k">잘 봐요</span><span>쫑알이가 하나씩 켜지며 소리를 내요. 순서를 기억해요</span></p>
+          <p><span class="k">따라 해요</span><span>같은 순서로 눌러요. 틀리면 하트가 깨져요</span></p>
+          <p><span class="k">보너스</span><span>거꾸로 따라 하기, 두 소리 함께 누르기도 나와요</span></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnStart" type="button">시작하기</button>
+        <p class="keyhint" id="keyHint"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card fit">
+      <div class="scroll">
+        <h2 class="res-title">잠깐 쉬어요</h2>
+        <p class="pause-line">쫑알이들도 숨을 고르고 있어요.</p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnResume" type="button">계속하기</button>
+        <div class="btn-row">
+          <button class="btn sub" id="btnPauseRestart" type="button">처음부터 다시</button>
+          <button class="btn sub" id="btnPauseTitle" type="button">모드 고르기</button>
+        </div>
+        <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+        <p class="keyhint">스페이스·P로 계속하고, R로 처음부터 할 수 있어요</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card fit">
+      <div class="scroll">
+        <h2 class="res-title" id="rTitle">노래가 끝났어요</h2>
+        <div class="res-big" id="rBigBox"><span id="rBig">0</span><small id="rBigUnit">레벨 클리어</small></div>
+        <div class="res-score" id="rScoreBox" hidden><span class="l" id="rSL">0</span><span class="c">:</span><span class="r" id="rSR">0</span></div>
+        <div class="badge" id="rBadge" hidden>새 기록이에요!</div>
+        <p class="pause-line" id="rLine"></p>
+        <div class="stats">
+          <div id="rS1l">완벽한 연속<b id="rS1">0</b></div>
+          <div id="rS2l">만든 노래<b id="rS2">0</b></div>
+          <div id="rS3l">걸린 시간<b id="rS3">0:00</b></div>
+        </div>
+        <p class="best-line" id="rBestLine">최고 기록 <b id="rBest">-</b></p>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btnAgain" type="button">다시 하기</button>
+        <div class="btn-row">
+          <button class="btn sub" id="btnSong" type="button">내 노래 듣기</button>
+          <button class="btn sub" id="btnOverTitle" type="button">모드 고르기</button>
+        </div>
+        <p class="keyhint">스페이스바로도 다시 할 수 있어요</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+(() => {
+//#LOGIC-START
+// ---------------------------------------------------------------------
+// Pure game logic: no DOM, no audio, no wall clock. A game is stepped with a fixed timestep (STEP), so it is deterministic
+// for a given seed and testable from Node.
+// A level shows a sequence (pads light up one after another, each with its own note), then the players repeat it.
+//   solo : one player, shared hearts (3). A mistake costs a heart and the same sequence is shown again.
+//   vs   : two players on their own boards, same sequence at the same moment, nobody waits for anybody. The first one to
+//          make a mistake loses (both in the same tick = a draw). Whoever is slow for too long after the other finished loses.
+//   coop : 2-4 players, each owns some pads (contiguous pitch range, their own zone). The sequence is repeated in turn:
+//          the owner of the pad that comes next has to press it. A foreign touch cannot reach a pad (the view maps a touch to
+//          the zone's player and press() ignores pads the player does not own). Hearts are shared.
+// Level kinds: N normal, R backwards (press the sequence from the end), D double (every step is two pads pressed together).
+// ---------------------------------------------------------------------
+const STEP = 1 / 120;
+const MAXPAD = 9;
+const SEMI = [0, 2, 4, 7, 9, 12, 14, 16, 19];          // C D E G A C D E G (major pentatonic over two octaves): every combination sounds friendly
+const SOLFA = ['도', '레', '미', '솔', '라', '도', '레', '미', '솔'];
+const STABLE = [0, 3, 5, 8];                            // the "home" notes a phrase likes to end on
+const INTRO_T = 1.3, INTRO_T2 = 0.95, PRE_SHOW = 0.35, REPLAY_LEAD = 0.9, POST_SHOW = 0.2, OOPS_T = 1.5;
+const CHORD_T = 0.9;                                     // the second pad of a double step has to follow within this many seconds
+const IDLE_T = { solo: 12, vs: 9, coop: 14 };            // no press for this long = a mistake (timeout)
+const GRACE_T = 7;                                       // vs: the other one finished, so you have this long to finish too
+const HEARTS = [0, 3, 3, 4, 5];                          // by number of players (solo 1, coop 2..4)
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function gauss(rng) { let u = 0; while (!u) u = rng(); const v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(Math.PI * 2 * v); }
+
+// ---- level curve ----------------------------------------------------
+// [kind, pads, sequence length (steps), seconds between two notes]. Level 1 is understood in ten seconds; level 2 and 3 already
+// get longer and faster; level 5 asks for real memory (6 pads, 7 notes); 8-10 are hard.
+const TAB = [
+  ['N', 4, 2, 0.95],
+  ['N', 4, 3, 0.70],
+  ['N', 5, 5, 0.56],
+  ['R', 5, 5, 0.52],
+  ['N', 6, 7, 0.48],
+  ['D', 6, 5, 0.60],
+  ['N', 7, 8, 0.40],
+  ['R', 8, 7, 0.36],
+  ['D', 8, 6, 0.46],
+  ['N', 9, 10, 0.34],
+];
+function levelSpec(L, mode, P) {
+  L = Math.max(1, L | 0);
+  let kind, n, len, gap;
+  if (L <= TAB.length) { const r = TAB[L - 1]; kind = r[0]; n = r[1]; len = r[2]; gap = r[3]; }
+  else {
+    const q = L - TAB.length;                              // 1 = level 11
+    kind = ['R', 'D', 'N'][(q - 1) % 3]; n = 9;
+    const base = Math.min(16, 10 + Math.ceil(q * 0.5));
+    len = kind === 'N' ? base : kind === 'R' ? Math.round(base * 0.7) : Math.round(base * 0.5);
+    gap = Math.max(0.22, 0.30 - 0.006 * q);
+  }
+  mode = mode || 'solo'; P = clamp(P | 0 || 1, 1, 4);
+  if (mode === 'coop') { n = Math.min(MAXPAD, Math.max(n, 2 * P)); if (L >= 3 && kind !== 'D') len += P - 1; }
+  const lit = clamp(gap * 0.72, 0.18, 0.62);
+  return { L, kind, n, len, gap, lit, hint: L <= 2, intro: L === 1 ? INTRO_T : INTRO_T2 };
+}
+// contiguous pitch ranges per player: [0,0,1,1,1,2,2,...]
+function coopOwners(n, P) {
+  const base = Math.floor(n / P), extra = n % P, out = [];
+  for (let p = 0; p < P; p++) { const c = base + (p < extra ? 1 : 0); for (let k = 0; k < c; k++) out.push(p); }
+  return out;
+}
+function padsOf(owner, p) { const o = []; for (let i = 0; i < owner.length; i++) if (owner[i] === p) o.push(i); return o; }
+
+// ---- sequence generation ---------------------------------------------
+function genMelody(rng, n, len, L) {
+  const easy = L <= 2, seq = [];
+  let cur = Math.floor(rng() * n);
+  seq.push(cur);
+  while (seq.length < len) {
+    const r = rng();
+    let d = (r < 0.08 && !easy) ? 0 : r < 0.50 ? 1 : r < 0.76 ? 2 : r < 0.90 ? 3 : 4 + Math.floor(rng() * 3);
+    if (easy) d = clamp(d, 1, 2);
+    const dir = rng() < 0.5 ? -1 : 1;
+    let nx = cur + dir * d;
+    if (nx < 0 || nx >= n) nx = cur - dir * d;
+    nx = clamp(nx, 0, n - 1);
+    if (nx === cur && d !== 0) nx = cur < n - 1 ? cur + 1 : cur - 1;
+    const k = seq.length;
+    if (k >= 2 && seq[k - 1] === nx && seq[k - 2] === nx) nx = nx < n - 1 ? nx + 1 : nx - 1;
+    seq.push(nx); cur = nx;
+  }
+  // a repeated little motif (maybe moved up or down) makes a phrase that is easier to hum
+  if (len >= 6 && rng() < 0.55) {
+    const m = 2 + (rng() < 0.4 ? 1 : 0), j = len - 1 - m - Math.floor(rng() * 2);
+    if (j - m >= 0) {
+      const a = Math.floor(rng() * (j - m + 1)), tr = [0, 0, -2, -1, 1, 2][Math.floor(rng() * 6)];
+      let fits = true; for (let q = 0; q < m; q++) { const v = seq[a + q] + tr; if (v < 0 || v >= n) fits = false; }
+      for (let q = 0; q < m; q++) seq[j + q] = seq[a + q] + (fits ? tr : 0);
+    }
+  }
+  // end on a home note, not the one we just played
+  const prev = seq[len - 2], opts = STABLE.filter((s) => s < n && s !== prev);
+  if (opts.length && (STABLE.indexOf(seq[len - 1]) < 0 || seq[len - 1] === prev)) {
+    opts.sort((x, y) => Math.abs(x - prev) - Math.abs(y - prev));
+    const near = opts.filter((s) => Math.abs(s - prev) <= 3);
+    const pool = near.length ? near : opts;
+    seq[len - 1] = pool[Math.floor(rng() * pool.length)];
+  }
+  return seq.map((x) => [x]);
+}
+function genChords(rng, n, len, L) {
+  const base = genMelody(rng, n, len, Math.max(L, 3));
+  const out = [];
+  for (let i = 0; i < len; i++) {
+    const a = base[i][0];
+    let b = -1;
+    for (let tr = 0; tr < 12 && b < 0; tr++) {
+      const d = 2 + Math.floor(rng() * 3), dir = rng() < 0.5 ? -1 : 1;
+      let c = a + dir * d; if (c < 0 || c >= n) c = a - dir * d;
+      if (c >= 0 && c < n && c !== a) b = c;
+    }
+    if (b < 0) b = a === n - 1 ? a - 1 : a + 1;
+    out.push(a < b ? [a, b] : [b, a]);
+  }
+  return out;
+}
+// shuffle bag of player numbers: every player gets the same number of turns (+-1) and nobody goes three times in a row
+function bagOwners(rng, P, count, per) {
+  const out = [];
+  let bag = [];
+  const refill = () => { bag = []; for (let p = 0; p < P; p++) bag.push(p); for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = bag[i]; bag[i] = bag[j]; bag[j] = t; } };
+  for (let i = 0; i < count; i++) {
+    const picks = [];
+    for (let k = 0; k < per; k++) {
+      if (!bag.length) refill();
+      let idx = 0;
+      // a pair needs two different players; a run of three of the same player is avoided
+      for (let q = 0; q < bag.length; q++) {
+        const v = bag[q];
+        if (picks.indexOf(v) >= 0) continue;
+        if (per === 1 && out.length >= 2 && out[out.length - 1][0] === v && out[out.length - 2][0] === v) continue;
+        idx = q; break;
+      }
+      if (picks.indexOf(bag[idx]) >= 0 || (per === 1 && out.length >= 2 && out[out.length - 1][0] === bag[idx] && out[out.length - 2][0] === bag[idx])) { refill(); idx = 0; for (let q = 0; q < bag.length; q++) if (picks.indexOf(bag[q]) < 0 && !(per === 1 && out.length >= 2 && out[out.length - 1][0] === bag[q] && out[out.length - 2][0] === bag[q])) { idx = q; break; } }
+      picks.push(bag.splice(idx, 1)[0]);
+    }
+    out.push(picks);
+  }
+  return out;
+}
+function genCoop(rng, spec, owner) {
+  const P = owner.reduce((m, o) => Math.max(m, o), 0) + 1, per = spec.kind === 'D' ? 2 : 1;
+  const turns = bagOwners(rng, P, spec.len, per), mine = []; for (let p = 0; p < P; p++) mine.push(padsOf(owner, p));
+  const steps = []; let prev = -1;
+  for (let i = 0; i < spec.len; i++) {
+    const step = [];
+    for (const o of turns[i]) {
+      const pool = mine[o];
+      let pad;
+      if (prev >= 0 && rng() < 0.5) { const s = pool.slice().sort((a, b) => Math.abs(a - prev) - Math.abs(b - prev)); pad = s[Math.min(s.length - 1, rng() < 0.7 ? 0 : 1)]; }
+      else pad = pool[Math.floor(rng() * pool.length)];
+      step.push(pad);
+    }
+    step.sort((a, b) => a - b);
+    steps.push(step); prev = step[0];
+  }
+  return steps;
+}
+function seqOK(steps, spec, owner) {
+  const { n, len, kind, L } = spec;
+  if (steps.length !== len) return false;
+  const maxRun = L <= 2 ? 1 : 2;
+  let run = 1, repeats = 0; const seen = {};
+  for (let i = 0; i < len; i++) {
+    const s = steps[i];
+    if (s.length !== (kind === 'D' ? 2 : 1)) return false;
+    for (const x of s) { if (!(x >= 0 && x < n)) return false; seen[x] = 1; }
+    if (s.length === 2 && s[0] === s[1]) return false;
+    if (i > 0) {
+      const same = s.length === steps[i - 1].length && s.every((x, k) => x === steps[i - 1][k]);
+      if (same && kind === 'D') return false;
+      if (same) { run++; repeats++; if (run > maxRun) return false; } else run = 1;
+    }
+  }
+  if (repeats > Math.floor(len / 5)) return false;
+  const need = Math.min(len, n, kind === 'D' ? 3 + Math.floor(len / 4) : 2 + Math.floor(len / 3));
+  if (Object.keys(seen).length < need) return false;
+  if (owner) {
+    const P = owner.reduce((m, o) => Math.max(m, o), 0) + 1, cnt = new Array(P).fill(0);
+    for (const s of steps) for (const x of s) cnt[owner[x]]++;
+    if (Math.max(...cnt) - Math.min(...cnt) > 1) return false;
+    if (kind !== 'D') { let r = 1; for (let i = 1; i < len; i++) { r = owner[steps[i][0]] === owner[steps[i - 1][0]] ? r + 1 : 1; if (r > 2) return false; } }
+  }
+  return true;
+}
+function genSeq(rng, spec, owner) {
+  let last = null;
+  for (let a = 0; a < 60; a++) {
+    const steps = owner ? genCoop(rng, spec, owner) : spec.kind === 'D' ? genChords(rng, spec.n, spec.len, spec.L) : genMelody(rng, spec.n, spec.len, spec.L);
+    last = steps;
+    if (seqOK(steps, spec, owner)) return steps;
+  }
+  return last;
+}
+function expectOf(spec, steps) { return spec.kind === 'R' ? steps.slice().reverse() : steps; }
+
+// ---- the game ---------------------------------------------------------
+// o: { mode: 'solo'|'vs'|'coop', players (coop 2..4), seed, level (start level, default 1) }
+function newGame(o) {
+  o = o || {};
+  const mode = o.mode === 'vs' || o.mode === 'coop' ? o.mode : 'solo';
+  const P = mode === 'solo' ? 1 : mode === 'vs' ? 2 : clamp(o.players | 0 || 2, 2, 4);
+  const seed = o.seed | 0;
+  const hearts = mode === 'vs' ? 0 : HEARTS[P];
+  const G = {
+    mode, P, seed, rng: mulberry32((seed ^ 0x5bd1e995) >>> 0), level: (o.level || 1) - 1, cleared: 0, hearts, maxHearts: hearts,
+    phase: 'intro', t: 0, pt: 0, spec: null, seq: [], expect: [], owner: null, pl: [], song: [], ev: [],
+    mistakes: 0, wrongs: 0, taps: 0, streak: 0, bestStreak: 0, firstDone: [0, 0], winner: -1, reason: '', prevN: 0, newPads: false,
+    showI: 0, lead: 0, graceT: -1, introDur: INTRO_T, clearDur: 1.8, tries: 0, healed: false, stars: 0,
+  };
+  startLevel(G);
+  return G;
+}
+function startLevel(G) {
+  G.level++; G.prevN = G.spec ? G.spec.n : 0;
+  const spec = levelSpec(G.level, G.mode, G.P);
+  G.spec = spec; G.newPads = G.prevN > 0 && spec.n > G.prevN;
+  G.owner = G.mode === 'coop' ? coopOwners(spec.n, G.P) : null;
+  G.seq = genSeq(G.rng, spec, G.owner); G.expect = expectOf(spec, G.seq);
+  G.phase = 'intro'; G.pt = 0; G.introDur = spec.intro; G.mistakes = 0; G.tries = 0; G.healed = false;
+  G.pl = [];
+  G.ev.push({ t: 'level', L: G.level, kind: spec.kind, n: spec.n, newPads: G.newPads });
+}
+function beginShow(G, replay) {
+  G.phase = 'show'; G.pt = 0; G.showI = 0; G.lead = replay ? REPLAY_LEAD : PRE_SHOW;
+  G.pl = [];
+  G.ev.push({ t: 'showStart', replay: !!replay });
+}
+function beginInput(G) {
+  G.phase = 'input'; G.pt = 0; G.graceT = -1;
+  G.pl = [];
+  const np = G.mode === 'vs' ? 2 : 1;
+  for (let p = 0; p < np; p++) G.pl.push({ pos: 0, pend: [], got: [], chordT: 0, lastT: G.t, done: false, out: false, doneT: 0, taps: 0, why: '' });
+  G.ev.push({ t: 'inputStart' });
+}
+// pads the player p has to press right now (for hints and bots)
+function wantNow(G, p) {
+  const ps = G.pl[G.mode === 'vs' ? p : 0]; if (!ps || ps.done || ps.out) return [];
+  const e = G.expect[ps.pos]; if (!e) return [];
+  return ps.pend.length ? ps.pend.slice() : e.slice();
+}
+function levelDone(G) {
+  const spec = G.spec;
+  G.cleared++;
+  const perfect = G.mistakes === 0;
+  if (perfect) { G.streak++; if (G.streak > G.bestStreak) G.bestStreak = G.streak; } else G.streak = 0;
+  G.song.push({ L: G.level, kind: spec.kind, steps: G.seq.map((s) => s.slice()) });
+  let heal = false;
+  if (G.mode !== 'vs' && spec.kind !== 'N' && perfect && G.hearts < G.maxHearts) { G.hearts++; heal = true; G.healed = true; }
+  G.phase = 'clear'; G.pt = 0; G.clearDur = Math.max(1.7, 0.9 + spec.len * 0.2);
+  G.ev.push({ t: 'clear', L: G.level, perfect, heal, steps: G.seq.map((s) => s.slice()), kind: spec.kind });
+}
+function heartFail(G, p, pad, why) {
+  G.hearts--; G.mistakes++; G.wrongs++; G.streak = 0;
+  const want = wantNow(G, p);
+  G.phase = 'oops'; G.pt = 0;
+  G.ev.push({ t: 'wrong', p, pad, want, why, hearts: G.hearts });
+}
+function vsFail(G, p, pad, why) {
+  const ps = G.pl[p]; if (ps.out) return;
+  ps.out = true; ps.why = why; G.wrongs++;
+  G.ev.push({ t: 'wrong', p, pad, want: wantNow(G, p).length ? wantNow(G, p) : (G.expect[ps.pos] || []).slice(), why, hearts: 0 });
+}
+// A press of pad `pad` by player p. In vs, p is the board (0 left, 1 right). In coop, p is the zone's player: a pad of somebody
+// else is not reachable. In solo p is ignored. Returns { r: 'ok'|'part'|'wrong'|'ignore', ... }.
+function press(G, p, pad) {
+  if (G.phase !== 'input') return { r: 'ignore' };
+  if (G.mode !== 'vs') p = 0;
+  const ps = G.pl[p]; if (!ps || ps.out || ps.done) return { r: 'ignore' };
+  if (!(pad >= 0 && pad < G.spec.n)) return { r: 'ignore' };
+  return pressInner(G, p, pad, ps, -1);
+}
+function pressCoop(G, zone, pad) {
+  if (G.phase !== 'input') return { r: 'ignore' };
+  const ps = G.pl[0]; if (!ps || ps.done) return { r: 'ignore' };
+  if (!(pad >= 0 && pad < G.spec.n) || G.owner[pad] !== zone) return { r: 'ignore' };   // not this player's pad
+  return pressInner(G, 0, pad, ps, zone);
+}
+function pressInner(G, p, pad, ps, zone) {
+  const e = G.expect[ps.pos];
+  G.taps++; ps.taps++;
+  if (ps.pend.length) {
+    if (ps.got.indexOf(pad) >= 0) return { r: 'ignore', dup: true };   // the same pad twice while the partner is pending: no harm
+    if (ps.pend.indexOf(pad) >= 0) {
+      ps.got.push(pad); ps.pend = []; ps.lastT = G.t;
+      return finishStep(G, p, ps, pad, e);
+    }
+    return failPress(G, p, pad, 'wrong');
+  }
+  if (e.indexOf(pad) < 0) return failPress(G, p, pad, 'wrong');
+  ps.lastT = G.t;
+  if (e.length === 2) {
+    ps.got = [pad]; ps.pend = e.filter((x) => x !== pad); ps.chordT = CHORD_T;
+    G.ev.push({ t: 'press', p, pad, ok: true, part: true, i: ps.pos, zone });
+    return { r: 'part', pad };
+  }
+  ps.got = [pad];
+  return finishStep(G, p, ps, pad, e);
+}
+function finishStep(G, p, ps, pad, e) {
+  const i = ps.pos;
+  ps.pos++; ps.got = [];
+  G.ev.push({ t: 'press', p, pad, ok: true, part: false, i, double: e.length === 2 });
+  let fin = false;
+  if (ps.pos >= G.expect.length) {
+    ps.done = true; ps.doneT = G.t; fin = true;
+    if (G.mode === 'vs') { const o = G.pl[1 - p]; if (!o.done) G.firstDone[p]++; }
+    G.ev.push({ t: 'done', p });
+    if (G.mode !== 'vs') levelDone(G);
+  }
+  return { r: 'ok', pad, i, fin };
+}
+function failPress(G, p, pad, why) {
+  if (G.mode === 'vs') { vsFail(G, p, pad, why); return { r: 'wrong', pad, why }; }
+  heartFail(G, p, pad, why); return { r: 'wrong', pad, why };
+}
+function endGame(G, winner, reason) {
+  G.phase = 'over'; G.pt = 0; G.winner = winner; G.reason = reason;
+  G.ev.push({ t: 'over', winner, reason, cleared: G.cleared });
+}
+function step(G) {
+  if (G.phase === 'over') return;
+  G.t += STEP; G.pt += STEP;
+  const spec = G.spec;
+  if (G.phase === 'intro') {
+    if (G.pt >= G.introDur) beginShow(G, false);
+  } else if (G.phase === 'show') {
+    // note i starts at lead + i * gap
+    while (G.showI < spec.len && G.pt >= G.lead + G.showI * spec.gap) {
+      G.ev.push({ t: 'lit', i: G.showI, pads: G.seq[G.showI].slice(), lit: spec.lit, last: G.showI === spec.len - 1 });
+      G.showI++;
+    }
+    if (G.showI >= spec.len && G.pt >= G.lead + (spec.len - 1) * spec.gap + spec.lit + POST_SHOW) beginInput(G);
+  } else if (G.phase === 'input') {
+    for (let p = 0; p < G.pl.length && G.phase === 'input'; p++) {
+      const ps = G.pl[p]; if (ps.out || ps.done) continue;
+      if (ps.pend.length) {
+        ps.chordT -= STEP;
+        if (ps.chordT <= 0) { if (G.mode === 'vs') vsFail(G, p, -1, 'chord'); else heartFail(G, p, -1, 'chord'); }
+      } else if (G.t - ps.lastT > IDLE_T[G.mode]) { if (G.mode === 'vs') vsFail(G, p, -1, 'timeout'); else heartFail(G, p, -1, 'timeout'); }
+    }
+    if (G.mode === 'vs' && G.phase === 'input') {
+      const a = G.pl[0], b = G.pl[1];
+      if (G.graceT >= 0) {
+        G.graceT -= STEP;
+        if (G.graceT <= 0) { const slow = a.done ? 1 : 0; if (!G.pl[slow].out && !G.pl[slow].done) vsFail(G, slow, -1, 'slow'); }
+      }
+      if (a.out || b.out) {
+        if (a.out && b.out) endGame(G, -1, 'draw');
+        else endGame(G, a.out ? 1 : 0, 'mistake');
+      } else if (a.done && b.done) {
+        levelDone(G);
+      } else if ((a.done || b.done) && G.graceT < 0) { G.graceT = GRACE_T; G.ev.push({ t: 'grace', p: a.done ? 0 : 1 }); }
+    }
+  } else if (G.phase === 'clear') {
+    if (G.pt >= G.clearDur) startLevel(G);
+  } else if (G.phase === 'oops') {
+    if (G.pt >= OOPS_T) {
+      if (G.hearts <= 0) endGame(G, -1, 'hearts');
+      else { G.tries++; beginShow(G, true); }
+    }
+  }
+}
+
+// ---- bots: "an ordinary person" ----------------------------------------
+// Memory model: the capacity K (in items) is drawn for every attempt (about 7 +- 2). Item i of the shown sequence is remembered
+// with probability pe * sigmoid((K - i - 0.5) / width); a forgotten item is guessed (a bit better than chance because the
+// melody tends to move in small steps). Fast playback lowers pe, playing backwards lowers K, double steps count as chunks. Every
+// press may slip to a neighbour. Pace (seconds per step) and the delay between the two pads of a double step are random too.
+const SKILLS = {
+  normal: { cap: 7.2, capSd: 1.7, width: 0.65, pe: 0.997, peFast: 0.045, slip: 0.003, rev: 0.82, chunk: 1.55, retry: 0.9, pace: 0.62, paceSd: 0.2, chordDelay: 0.26, chordSd: 0.14 },
+  weak: { cap: 5.0, capSd: 1.4, width: 0.65, pe: 0.99, peFast: 0.07, slip: 0.01, rev: 0.78, chunk: 1.55, retry: 0.8, pace: 0.85, paceSd: 0.3, chordDelay: 0.34, chordSd: 0.18 },
+  strong: { cap: 9.5, capSd: 1.8, width: 0.65, pe: 0.999, peFast: 0.03, slip: 0.001, rev: 0.86, chunk: 1.55, retry: 0.9, pace: 0.5, paceSd: 0.15, chordDelay: 0.2, chordSd: 0.1 },
+  perfect: { cap: 99, capSd: 0, width: 0.65, pe: 1, peFast: 0, slip: 0, rev: 1, chunk: 1, retry: 0, pace: 0.5, paceSd: 0.05, chordDelay: 0.15, chordSd: 0.03 },
+};
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+// returns for every shown pad (flattened: item index of step s, slot k) whether the person remembers it
+function botMemory(rng, spec, steps, skill, attempt) {
+  const K0 = skill.cap + skill.capSd * gauss(rng) + (attempt || 0) * skill.retry;
+  const back = spec.kind === 'R', dbl = spec.kind === 'D';
+  const K = Math.max(2.5, back ? K0 * skill.rev : K0);
+  const pe = skill.pe - skill.peFast * Math.max(0, (0.5 - spec.gap) / 0.3) * (back ? 1.15 : 1);
+  const rec = [];
+  for (let s = 0; s < steps.length; s++) {
+    const idx = dbl ? s * skill.chunk : s;
+    const pr = Math.max(0, pe * sigmoid((K - idx - 0.5) / skill.width));
+    rec.push(steps[s].map(() => rng() < pr));
+  }
+  return rec;
+}
+// what a person would press for step s (expected step e), given they remember some of it
+function botPress(rng, n, e, rec, skill, prevPad, ownPads) {
+  const out = [];
+  for (let k = 0; k < e.length; k++) {
+    let pad = e[k];
+    if (!rec[k]) {
+      if (ownPads) pad = ownPads[Math.floor(rng() * ownPads.length)];
+      else if (prevPad >= 0 && rng() < 0.4) pad = clamp(prevPad + (rng() < 0.5 ? -1 : 1) * (1 + Math.floor(rng() * 2)), 0, n - 1);
+      else pad = Math.floor(rng() * n);
+    } else if (rng() < skill.slip) pad = clamp(pad + (rng() < 0.5 ? -1 : 1), 0, n - 1);
+    out.push(pad);
+  }
+  return out;
+}
+// Quick check of one level without running the clock: would this person get through the level without a mistake?
+function levelTrial(L, mode, P, rng, skill, attempt) {
+  const spec = levelSpec(L, mode, P), owner = mode === 'coop' ? coopOwners(spec.n, P) : null;
+  const steps = genSeq(rng, spec, owner), expect = expectOf(spec, steps);
+  if (mode === 'coop') {
+    const mems = []; for (let p = 0; p < P; p++) mems.push(botMemory(rng, spec, steps, skill, attempt));
+    for (let s = 0; s < expect.length; s++) {
+      const si = spec.kind === 'R' ? expect.length - 1 - s : s;
+      for (let k = 0; k < expect[s].length; k++) {
+        const pad = expect[s][k], o = owner[pad], rec = mems[o][si][steps[si].indexOf(pad)];
+        const got = botPress(rng, spec.n, [pad], [rec], skill, -1, padsOf(owner, o))[0];
+        if (got !== pad) return false;
+      }
+      if (expect[s].length === 2 && skill.chordDelay + skill.chordSd * gauss(rng) > CHORD_T) return false;
+    }
+    return true;
+  }
+  const rec = botMemory(rng, spec, steps, skill, attempt);
+  let prev = -1;
+  for (let s = 0; s < expect.length; s++) {
+    const si = spec.kind === 'R' ? expect.length - 1 - s : s;
+    const rr = steps[si].map((pad) => rec[si][steps[si].indexOf(pad)]);
+    const e = expect[s], r2 = e.map((pad) => rec[si][steps[si].indexOf(pad)]);
+    const got = botPress(rng, spec.n, e, r2, skill, prev, null);
+    for (let k = 0; k < e.length; k++) if (got[k] !== e[k]) return false;
+    if (e.length === 2 && skill.chordDelay + skill.chordSd * gauss(rng) > CHORD_T) return false;
+    prev = e[e.length - 1]; void rr;
+  }
+  return true;
+}
+// A whole game with bots at the controls. o: { mode, players, seed, skills: [skill name per player], maxT, maxLevel }.
+function simulate(o) {
+  o = o || {};
+  const G = newGame(o), mode = G.mode;
+  const brng = mulberry32(((o.seed | 0) ^ 0x9e3779b9) >>> 0);
+  const names = o.skills || ['normal', 'normal', 'normal', 'normal'];
+  const skillOf = (p) => SKILLS[names[p % names.length]] || SKILLS.normal;
+  let plan = null;         // per attempt: list of { t (absolute game time), p, pad }
+  let maxT = o.maxT || 3000, steps = 0;
+  const log = { levels: [], firstTry: [] };
+  let attempt = 0, lastLevel = 0;
+  while (G.phase !== 'over' && G.t < maxT && !(o.maxLevel && G.cleared >= o.maxLevel)) {
+    // build the plan when the input phase opens
+    for (const ev of G.ev) {
+      if (ev.t === 'level') { attempt = 0; lastLevel = ev.L; }
+      if (ev.t === 'showStart' && ev.replay) attempt++;
+      if (ev.t === 'inputStart') plan = makePlan(G, brng, skillOf, attempt);
+      if (ev.t === 'clear') log.levels.push({ L: ev.L, perfect: ev.perfect });
+    }
+    G.ev.length = 0;
+    if (G.phase === 'input' && plan) {
+      while (plan.length && plan[0].t <= G.t + 1e-9) {
+        const a = plan.shift();
+        if (mode === 'coop') pressCoop(G, a.p, a.pad); else press(G, a.p, a.pad);
+        if (G.phase !== 'input') break;
+      }
+    } else if (G.phase !== 'input') plan = null;
+    step(G); steps++;
+  }
+  void lastLevel;
+  return { G, cleared: G.cleared, level: G.level, winner: G.winner, reason: G.reason, t: G.t, hearts: G.hearts, over: G.phase === 'over', wrongs: G.wrongs, firstDone: G.firstDone.slice(), log, steps };
+}
+function makePlan(G, rng, skillOf, attempt) {
+  const spec = G.spec, steps = G.seq, expect = G.expect, out = [];
+  const t0 = G.t;
+  if (G.mode === 'vs') {
+    for (let p = 0; p < 2; p++) {
+      const sk = skillOf(p), rec = botMemory(rng, spec, steps, sk, attempt);
+      let t = t0 + 0.35 + Math.abs(sk.pace * 0.5 * (1 + 0.3 * gauss(rng))), prev = -1;
+      for (let s = 0; s < expect.length; s++) {
+        const si = spec.kind === 'R' ? expect.length - 1 - s : s, e = expect[s];
+        const r2 = e.map((pad) => rec[si][steps[si].indexOf(pad)]);
+        const got = botPress(rng, spec.n, e, r2, sk, prev, null);
+        got.forEach((pad, k) => { out.push({ t: t + k * Math.max(0.05, sk.chordDelay + sk.chordSd * gauss(rng)), p, pad }); });
+        t += Math.max(0.25, sk.pace + sk.paceSd * gauss(rng)); prev = e[e.length - 1];
+      }
+    }
+  } else if (G.mode === 'coop') {
+    const P = G.P, mems = []; for (let p = 0; p < P; p++) mems.push(botMemory(rng, spec, steps, skillOf(p), attempt));
+    let t = t0 + 0.5;
+    for (let s = 0; s < expect.length; s++) {
+      const si = spec.kind === 'R' ? expect.length - 1 - s : s, e = expect[s];
+      let dt = 0;
+      e.forEach((pad, k) => {
+        const o = G.owner[pad], sk = skillOf(o), rec = mems[o][si][steps[si].indexOf(pad)];
+        const got = botPress(rng, spec.n, [pad], [rec], sk, -1, padsOf(G.owner, o))[0];
+        const d = k === 0 ? 0 : Math.max(0.05, sk.chordDelay + sk.chordSd * gauss(rng));
+        out.push({ t: t + d, p: G.owner[got], pad: got }); dt = Math.max(dt, d);
+      });
+      t += Math.max(0.3, skillOf(G.owner[e[0]]).pace + skillOf(0).paceSd * gauss(rng));
+    }
+  } else {
+    const sk = skillOf(0), rec = botMemory(rng, spec, steps, sk, attempt);
+    let t = t0 + 0.4, prev = -1;
+    for (let s = 0; s < expect.length; s++) {
+      const si = spec.kind === 'R' ? expect.length - 1 - s : s, e = expect[s];
+      const r2 = e.map((pad) => rec[si][steps[si].indexOf(pad)]);
+      const got = botPress(rng, spec.n, e, r2, sk, prev, null);
+      got.forEach((pad, k) => { out.push({ t: t + (k ? Math.max(0.05, sk.chordDelay + sk.chordSd * gauss(rng)) : 0), p: 0, pad }); });
+      t += Math.max(0.25, sk.pace + sk.paceSd * gauss(rng)); prev = e[e.length - 1];
+    }
+  }
+  out.sort((a, b) => a.t - b.t);
+  return out;
+}
+//#LOGIC-END
+
+// =====================================================================
+// VIEW: everything from here on touches the DOM, the canvas or the audio
+// =====================================================================
+const KEY_BEST = 'arcade.chorus.best';       // solo record: levels cleared (a plain number)
+const KEY_COOP = 'arcade.chorus.coop';       // best choir (levels cleared together)
+const KEY_MUTE = 'arcade.chorus.muted';
+const KEY_MODE = 'arcade.chorus.mode';       // 'solo' | 'vs' | 'coop'
+const KEY_PPL = 'arcade.chorus.players';     // 2..4
+const TAU = Math.PI * 2;
+const FONT_D = '"Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+const FONT_B = '"Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+const INK = '#1a1033', PAPER = '#fbf8ff', GOLD = '#ffd166';
+const PAD_COL = ['#ff6b81', '#ffa047', '#ffd93d', '#7fdc6a', '#35d0b4', '#52b6ff', '#8b8dff', '#c783ff', '#ff8fd0'];
+const ANIMAL = ['cat', 'hamster', 'chick', 'frog', 'dog', 'bear', 'bunny', 'fox', 'pig'];
+const SIDE_COL = ['#5ec8ff', '#ff8fc4'];                                   // vs: left / right
+const PLAYER_COL = ['#ffb347', '#5ec8ff', '#7be07f', '#ff8fc4'];           // coop: player 1..4
+const SIDE_NAME = ['왼쪽 친구', '오른쪽 친구'];
+const KEYSETS = [['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'], ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO'], ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL'], ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM']];
+const KEYLBL = [['1', '2', '3', '4', '5', '6', '7', '8', '9'], ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O'], ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'], ['Z', 'X', 'C', 'V', 'B', 'N', 'M']];
+const NUMPAD = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9'];
+
+const QS = new URLSearchParams(location.search);
+const seedParam = QS.get('seed');
+const BASE_SEED = seedParam !== null && seedParam !== '' ? (+seedParam | 0) : null;
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function readNum(k) { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function buzz(p) { try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ } }
+function fmtTime(sec) { const s = Math.max(0, Math.floor(sec)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+const vr = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only: never touches the simulation
+
+// colour helpers (cached)
+const colCache = {};
+function rgbOf(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+function shade(h, t) {   // t > 0 towards white, t < 0 towards black
+  const key = h + t; if (colCache[key]) return colCache[key];
+  const c = rgbOf(h), to = t > 0 ? 255 : 0, a = Math.abs(t);
+  const r = c.map((v) => Math.round(v + (to - v) * a));
+  return (colCache[key] = '#' + r.map((v) => v.toString(16).padStart(2, '0')).join(''));
+}
+function rgba(h, a) { const c = rgbOf(h); return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+
+// =====================================================================
+// AUDIO (all synthesized)
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.55;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 1);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.55, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  tone(type, f0, f1, dur, vol, delay, attack, pri) {
+    if (!this.ok() || (!pri && this.voices >= 14)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.005));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type, pri, f1) {
+    if (!this.ok() || (!pri && this.voices >= 14)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+      if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(t, Math.random() * 0.9); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  // one singer: a soft marimba-like pluck (tb 0) or a music-box ping (tb 1). idx 0..8 is the pad, oct shifts by octaves.
+  note(idx, dur, vol, tb, delay, oct) {
+    const f = 261.63 * Math.pow(2, (SEMI[idx] + 12 * (oct || 0)) / 12);
+    const d = dur || 0.55, v = vol || 0.2;
+    if (tb === 1) { this.tone('sine', f, f, d, v * 0.9, delay, 0.004, true); this.tone('triangle', f * 2, f * 2, d * 0.35, v * 0.3, delay, 0.003, true); }
+    else { this.tone('triangle', f, f, d, v * 0.85, delay, 0.004, true); this.tone('sine', f * 3, f * 3, d * 0.22, v * 0.25, delay, 0.002, true); this.tone('sine', f, f, d * 1.25, v * 0.35, delay, 0.006, true); }
+  },
+  oops() { this.tone('sawtooth', 210, 95, 0.4, 0.1, 0, 0.01, true); this.tone('square', 150, 80, 0.3, 0.05, 0.02, 0.01, true); this.noise(0.18, 300, 0.7, 0.1, 0, 'lowpass', true); },
+  shrug() { this.noise(0.05, 900, 0.8, 0.035, 0, 'bandpass', true); },
+  heart() { this.tone('triangle', 330, 165, 0.4, 0.1, 0.12, 0.01, true); },
+  heal() { [0, 4, 7, 12].forEach((s, i) => { const f = 784 * Math.pow(2, s / 12); this.tone('sine', f, f, 0.22, 0.09, i * 0.07, 0.005, true); }); },
+  fanfare(perfect) {
+    const seq = perfect ? [0, 4, 7, 12, 16, 19] : [0, 4, 7, 12];
+    seq.forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.3, 0.09, i * 0.07, 0.005, true); this.tone('sine', f * 2, f * 2, 0.18, 0.04, i * 0.07, 0.003, true); });
+  },
+  banner() { this.tone('sine', 660, 880, 0.14, 0.07, 0, 0.005, true); },
+  newPads() { [0, 7, 12].forEach((s, i) => { const f = 440 * Math.pow(2, s / 12); this.tone('sine', f, f, 0.14, 0.06, i * 0.06, 0.004, true); }); },
+  win() { [0, 4, 7, 12, 7, 12, 16, 19].forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.24, 0.1, i * 0.09, 0.005, true); }); },
+  lose() { [0, -2, -4, -7].forEach((s, i) => { const f = 392 * Math.pow(2, s / 12); this.tone('triangle', f, f * 0.97, 0.3, 0.09, i * 0.17, 0.01, true); }); },
+  ui() { this.tone('sine', 880, 1100, 0.06, 0.08, 0, 0.005, true); },
+  tick() { this.tone('sine', 1320, 1320, 0.05, 0.04, 0, 0.003, true); },
+  // the song a player made: the phrases they cleared, one after the other, with a gentle bass under every phrase
+  song(song) {
+    if (!this.ok() || !song.length) return 0;
+    let total = 0; for (const ph of song) total += ph.steps.length;
+    const dt = total > 70 ? 0.13 : total > 40 ? 0.16 : 0.2;
+    let t = 0.05;
+    song.forEach((ph, k) => {
+      const bass = [0, 3, 0, 5][k % 4];
+      this.note(bass, dt * ph.steps.length * 1.15 + 0.3, 0.12, 1, t, -1);
+      ph.steps.forEach((st, i) => {
+        const last = i === ph.steps.length - 1;
+        st.forEach((pad) => this.note(pad, last ? 0.8 : 0.42, 0.15, k % 2, t + i * dt));
+      });
+      t += ph.steps.length * dt + 0.22;
+    });
+    return t;
+  },
+};
+
+// =====================================================================
+// DRAWING HELPERS + THE SINGERS
+// =====================================================================
+function pathCircle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, TAU); }
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(0.01, rx), Math.max(0.01, ry), rot || 0, 0, TAU); }
+function stroked(c, w) { c.lineWidth = w; c.strokeStyle = INK; c.lineJoin = 'round'; c.lineCap = 'round'; c.stroke(); }
+function rrect(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+function outlineText(c, text, x, y, size, fill, stroke, font) {
+  c.font = size + 'px ' + (font || FONT_D); c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineJoin = 'round'; c.lineWidth = Math.max(3, size * 0.22); c.strokeStyle = stroke || INK; c.strokeText(text, x, y);
+  c.fillStyle = fill || PAPER; c.fillText(text, x, y);
+}
+function heartPath(c, x, y, r) {
+  c.beginPath(); c.moveTo(x, y + r * 0.9);
+  c.bezierCurveTo(x - r * 1.5, y - r * 0.1, x - r * 0.8, y - r * 1.1, x, y - r * 0.4);
+  c.bezierCurveTo(x + r * 0.8, y - r * 1.1, x + r * 1.5, y - r * 0.1, x, y + r * 0.9); c.closePath();
+}
+function starPath(c, x, y, r, pts, inner) {
+  c.beginPath();
+  for (let i = 0; i < pts * 2; i++) { const a = -Math.PI / 2 + i * Math.PI / pts, rr = i % 2 ? r * (inner || 0.45) : r; if (i) c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  c.closePath();
+}
+
+// One eye. er is the unit (about a tenth of the head radius). side: -1 left eye, +1 right eye.
+// expr: idle | sing (happy arcs) | oops (> <) | wow (round) ; blink draws a line instead.
+function drawEye(c, ex, ey, er, side, expr, blink) {
+  c.fillStyle = INK; c.strokeStyle = INK; c.lineCap = 'round'; c.lineJoin = 'round';
+  if (expr === 'sing') {
+    c.lineWidth = Math.max(1.5, er * 0.75); c.beginPath(); c.arc(ex, ey + er * 0.55, er * 1.25, Math.PI * 1.12, Math.PI * 1.88); c.stroke();
+  } else if (expr === 'oops') {
+    c.lineWidth = Math.max(1.5, er * 0.8); c.beginPath();
+    c.moveTo(ex + side * er * 1.15, ey - er * 1.25); c.lineTo(ex - side * er * 1.0, ey); c.lineTo(ex + side * er * 1.15, ey + er * 1.25); c.stroke();
+  } else if (blink) {
+    c.lineWidth = Math.max(1.4, er * 0.7); c.beginPath(); c.moveTo(ex - er * 1.05, ey + er * 0.2); c.lineTo(ex + er * 1.05, ey + er * 0.2); c.stroke();
+  } else {
+    const k = expr === 'wow' ? 1.25 : 1;
+    ell(c, ex, ey, er * 0.95 * k, er * 1.2 * k); c.fill();
+    c.fillStyle = '#fff'; pathCircle(c, ex - er * 0.32 * k, ey - er * 0.42 * k, Math.max(0.7, er * 0.36 * k)); c.fill();
+  }
+}
+function drawMouth(c, x, y, R, expr, m) {
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  if (expr === 'sing') {
+    const rx = R * (0.1 + 0.05 * m), ry = R * (0.11 + 0.12 * m);
+    ell(c, x, y + ry * 0.35, rx, ry); c.fillStyle = '#4a1830'; c.fill(); stroked(c, Math.max(1.3, R * 0.055));
+    if (m > 0.45) { c.save(); ell(c, x, y + ry * 0.35, rx, ry); c.clip(); ell(c, x, y + ry * 1.2, rx * 0.8, ry * 0.5); c.fillStyle = '#ff8fa8'; c.fill(); c.restore(); }
+  } else if (expr === 'oops') {
+    ell(c, x, y + R * 0.09, R * 0.15, R * 0.17); c.fillStyle = '#4a1830'; c.fill(); stroked(c, Math.max(1.3, R * 0.055));
+  } else if (expr === 'wow') {
+    ell(c, x, y + R * 0.05, R * 0.075, R * 0.09); c.fillStyle = '#4a1830'; c.fill(); stroked(c, Math.max(1.2, R * 0.05));
+  } else {   // a small smile
+    c.strokeStyle = INK; c.lineWidth = Math.max(1.4, R * 0.06);
+    c.beginPath(); c.moveTo(x - R * 0.13, y); c.quadraticCurveTo(x, y + R * 0.17, x + R * 0.13, y); c.stroke();
+  }
+}
+function blush(c, x, y, R, a) { c.fillStyle = 'rgba(255,110,130,' + (a || 0.42) + ')'; ell(c, x, y, R * 0.14, R * 0.085); c.fill(); }
+
+// A singer: a round body with ears that tell the animals apart. o: { col, expr, m (mouth open 0..1), blink }
+function drawAnimal(c, kind, x, y, R, o) {
+  const col = o.col, dark = shade(col, -0.3), light = shade(col, 0.4), expr = o.expr || 'idle', lw = Math.max(1.6, R * 0.07);
+  const part = (fill) => { c.fillStyle = fill; c.fill(); stroked(c, lw); };
+  c.save();
+  // ---- parts behind the head ----
+  if (kind === 'cat' || kind === 'fox') {
+    const h = kind === 'fox' ? 0.74 : 0.56;
+    for (const s of [-1, 1]) {
+      c.beginPath(); c.moveTo(x + s * R * 0.24, y - R * 0.84); c.lineTo(x + s * R * 0.7, y - R * (0.84 + h)); c.lineTo(x + s * R * 0.9, y - R * 0.36); c.closePath(); part(col);
+      c.beginPath(); c.moveTo(x + s * R * 0.4, y - R * 0.86); c.lineTo(x + s * R * 0.7, y - R * (0.82 + h * 0.62)); c.lineTo(x + s * R * 0.8, y - R * 0.5); c.closePath(); c.fillStyle = kind === 'fox' ? '#4a2a58' : '#ffb3c1'; c.fill();
+    }
+  } else if (kind === 'bunny') {
+    for (const s of [-1, 1]) {
+      ell(c, x + s * R * 0.38, y - R * 1.18, R * 0.2, R * 0.58, s * 0.14); part(col);
+      ell(c, x + s * R * 0.38, y - R * 1.12, R * 0.1, R * 0.4, s * 0.14); c.fillStyle = '#ffb3c1'; c.fill();
+    }
+  } else if (kind === 'bear' || kind === 'hamster') {
+    const rr = kind === 'bear' ? 0.3 : 0.3;
+    for (const s of [-1, 1]) {
+      pathCircle(c, x + s * R * (kind === 'bear' ? 0.66 : 0.7), y - R * 0.7, R * rr); part(col);
+      pathCircle(c, x + s * R * (kind === 'bear' ? 0.66 : 0.7), y - R * 0.7, R * rr * 0.55); c.fillStyle = kind === 'bear' ? light : '#ffb3c1'; c.fill();
+    }
+  } else if (kind === 'dog') {
+    for (const s of [-1, 1]) { ell(c, x + s * R * 0.9, y - R * 0.1, R * 0.27, R * 0.52, s * -0.3); part(dark); }
+  } else if (kind === 'pig') {
+    for (const s of [-1, 1]) { c.beginPath(); c.moveTo(x + s * R * 0.3, y - R * 0.86); c.lineTo(x + s * R * 0.74, y - R * 1.22); c.lineTo(x + s * R * 0.98, y - R * 0.5); c.closePath(); part(shade(col, -0.1)); }
+  } else if (kind === 'chick') {
+    for (const dx of [-0.2, 0, 0.2]) { ell(c, x + dx * R, y - R * (1.1 - Math.abs(dx) * 0.4), R * 0.1, R * 0.2, dx * 1.2); part(col); }
+    for (const s of [-1, 1]) { ell(c, x + s * R * 0.98, y + R * 0.16, R * 0.17, R * 0.3, s * -0.3); part(dark); }
+  } else if (kind === 'frog') {
+    for (const s of [-1, 1]) { pathCircle(c, x + s * R * 0.5, y - R * 0.8, R * 0.32); part(col); }
+  }
+  // ---- body ----
+  pathCircle(c, x, y, R); c.fillStyle = col; c.fill();
+  c.save(); pathCircle(c, x, y, R); c.clip();
+  c.fillStyle = rgba(dark, 0.45); pathCircle(c, x + R * 0.2, y + R * 0.5, R * 1.08); c.fill();
+  c.fillStyle = col; pathCircle(c, x + R * 0.04, y + R * 0.1, R * 0.97); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.3)'; ell(c, x - R * 0.34, y - R * 0.5, R * 0.34, R * 0.17, -0.5); c.fill();
+  c.restore();
+  pathCircle(c, x, y, R); stroked(c, lw);
+  // ---- front features ----
+  const ey = y - R * 0.1, er = R * 0.1;
+  if (kind === 'bear' || kind === 'fox') {
+    ell(c, x, y + R * 0.34, R * (kind === 'bear' ? 0.36 : 0.44), R * 0.26); c.fillStyle = kind === 'bear' ? light : '#fff6ec'; c.fill();
+  }
+  if (kind === 'frog') {
+    for (const s of [-1, 1]) {
+      const ex = x + s * R * 0.5, ye = y - R * 0.8;
+      pathCircle(c, ex, ye, R * 0.2); c.fillStyle = '#fff'; c.fill(); stroked(c, lw * 0.8);
+      drawEye(c, ex, ye + R * 0.01, R * 0.075, s, expr, o.blink);
+    }
+  } else {
+    drawEye(c, x - R * 0.36, ey, er, -1, expr, o.blink); drawEye(c, x + R * 0.36, ey, er, 1, expr, o.blink);
+  }
+  blush(c, x - R * 0.62, y + R * 0.2, R); blush(c, x + R * 0.62, y + R * 0.2, R);
+  let my = y + R * 0.3;
+  if (kind === 'cat' || kind === 'dog' || kind === 'bear' || kind === 'fox' || kind === 'bunny' || kind === 'hamster') {
+    const dk = kind === 'dog' || kind === 'bear' || kind === 'fox';
+    if (dk) { ell(c, x, y + R * 0.13, R * 0.1, R * 0.07); c.fillStyle = INK; c.fill(); }
+    else { ell(c, x, y + R * 0.13, R * 0.07, R * 0.05); c.fillStyle = '#ff7a95'; c.fill(); }
+    my = y + R * 0.3;
+  } else if (kind === 'pig') {
+    ell(c, x, y + R * 0.2, R * 0.27, R * 0.19); c.fillStyle = shade(col, -0.12); c.fill(); stroked(c, lw * 0.7);
+    for (const s of [-1, 1]) { ell(c, x + s * R * 0.09, y + R * 0.2, R * 0.035, R * 0.06); c.fillStyle = INK; c.fill(); }
+    my = y + R * 0.5;
+  } else if (kind === 'frog') my = y + R * 0.28;
+  drawMouth(c, x, my, R, expr === 'sing' || expr === 'oops' || expr === 'wow' ? expr : 'idle', o.m || 0);
+  if (expr === 'oops') {   // a sweat drop
+    const sx = x + R * 0.86, sy = y - R * 0.5;
+    c.beginPath(); c.moveTo(sx, sy - R * 0.22); c.quadraticCurveTo(sx + R * 0.18, sy + R * 0.02, sx, sy + R * 0.14); c.quadraticCurveTo(sx - R * 0.18, sy + R * 0.02, sx, sy - R * 0.22);
+    c.fillStyle = '#9fe0ff'; c.fill(); stroked(c, lw * 0.6);
+  }
+  c.restore();
+}
+
+// =====================================================================
+// STATE + LAYOUT
+// =====================================================================
+const cv = $('cv');
+const ctx = cv.getContext('2d');
+const el = {
+  hud: $('hud'), btnPause: $('btnPause'), btnMute: $('btnMute'), scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrOver: $('scrOver'),
+  btnSolo: $('btnSolo'), btnVs: $('btnVs'), btnCoop: $('btnCoop'), pplLabel: $('pplLabel'), pplRow: $('pplRow'), btnP: [$('btnP2'), $('btnP3'), $('btnP4')],
+  modeLine: $('modeLine'), bestLine: $('bestLine'), tBest: $('tBest'), keyHint: $('keyHint'), tHook: $('tHook'),
+  rTitle: $('rTitle'), rBigBox: $('rBigBox'), rBig: $('rBig'), rBigUnit: $('rBigUnit'), rScoreBox: $('rScoreBox'), rSL: $('rSL'), rSR: $('rSR'),
+  rBadge: $('rBadge'), rLine: $('rLine'), rS1: $('rS1'), rS2: $('rS2'), rS3: $('rS3'), rS1l: $('rS1l'), rS2l: $('rS2l'), rS3l: $('rS3l'),
+  rBestLine: $('rBestLine'), rBest: $('rBest'), btnAgain: $('btnAgain'), btnSong: $('btnSong'),
+};
+const S = {
+  view: 'title', mode: ['solo', 'vs', 'coop'].indexOf(store.get(KEY_MODE, 'solo')) >= 0 ? store.get(KEY_MODE, 'solo') : 'solo',
+  players: clamp(parseInt(store.get(KEY_PPL, '2'), 10) || 2, 2, 4),
+  G: null, paused: false, clock: 0, acc: 0, tickAt: 0, gameN: 0,
+  best: readNum(KEY_BEST), bestCoop: readNum(KEY_COOP), newRecord: false, overT: 0, resultShown: false, series: [0, 0],
+  pv: {}, ripples: [], parts: [], floats: [], banner: null, shake: 0, flash: 0, bubble: '', heartAt: [], heartHit: -9, kb: false,
+  downs: {}, perf: { ms: 0, max: 0, frames: 0 }, sig: '', songTimer: 0, boardMark: [], hintOn: false, demoT: 0, demoI: 0, pressLog: [],
+};
+const LAY = { W: 0, H: 0, dpr: 1, port: false, boards: [], pads: [], bandH: 56, bubbleY: 70, dotsY: 0, region: { x: 0, y: 0, w: 0, h: 0 }, sat: 0, sab: 0, sal: 0, sar: 0 };
+const DPR_STEPS = [2, 1.5, 1];   // the resolution steps down by itself when frames take too long (low-end phones)
+let dprStep = 0;
+let bgCanvas = null;
+
+function pvKey(b, pad) { return b * 10 + pad; }
+function pvOf(b, pad) {
+  const k = pvKey(b, pad);
+  return S.pv[k] || (S.pv[k] = { litUntil: -1, lit: 0, bump: 0, held: 0, singUntil: -1, m: 0, oopsUntil: -1, pop: 1, popAt: -9, ring: 0, ringUntil: -9, ph: Math.random() * 6.28, blinkAt: S.clock + 1 + Math.random() * 3, blink: 0, shrug: 0, done: 0 });
+}
+function curSpec() { return S.G ? S.G.spec : null; }
+
+// the best arrangement of n pads in a w x h box: columns that make the biggest square cells
+function fitGrid(n, w, h, smax) {
+  let best = null;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols), s = Math.min(w / cols, h / rows, smax);
+    if (!best || s > best.s + 0.5 || (Math.abs(s - best.s) <= 0.5 && Math.abs(cols - rows) < Math.abs(best.cols - best.rows))) best = { cols, rows, s };
+  }
+  return best;
+}
+function layout() {
+  const cs = getComputedStyle($('probe'));
+  const sat = parseFloat(cs.paddingTop) || 0, sab = parseFloat(cs.paddingBottom) || 0, sal = parseFloat(cs.paddingLeft) || 0, sar = parseFloat(cs.paddingRight) || 0;
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, DPR_STEPS[dprStep]);
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+  const port = H > W * 1.05;
+  const G = S.G, mode = G ? G.mode : 'solo', P = G ? G.P : 1;
+  const n = G ? G.spec.n : 6;
+  const bandH = sat + (port ? 58 : 52), bubbleH = 36, bottomPad = sab + 8, dotsH = mode === 'vs' ? 0 : 30;
+  const region = { x: sal + 10, y: bandH + bubbleH, w: W - sal - sar - 20, h: H - bandH - bubbleH - bottomPad - dotsH };
+  Object.assign(LAY, { W, H, dpr, port, sat, sab, sal, sar, bandH, bubbleY: bandH + 12, dotsY: region.y + region.h + 16, region, mode, P, n });
+  const place = (nd, x, y) => { nd.style.left = Math.round(x) + 'px'; nd.style.top = Math.round(y) + 'px'; };
+  place(el.btnPause, sal + 8, sat + 6); place(el.btnMute, W - sar - 54, sat + 6);
+  // ---- boards ----
+  const boards = [];
+  const mk = (b, x, y, w, h, o) => boards.push(Object.assign({ b, x, y, w, h, head: 0, pads: [] }, o));
+  if (mode === 'solo') mk(0, region.x, region.y, region.w, region.h, { who: 0, col: '#ffd166', pids: seqNums(n) });
+  else if (mode === 'vs') {
+    const gap = port ? 10 : 18, w = (region.w - gap) / 2;
+    for (let b = 0; b < 2; b++) mk(b, region.x + b * (w + gap), region.y, w, region.h, { who: b, head: 30, col: SIDE_COL[b], label: SIDE_NAME[b], pids: seqNums(n) });
+  } else {
+    const owner = G.owner, gap = port ? 8 : 14;
+    let cols = P, rows = 1;
+    if (port && P === 4) { cols = 2; rows = 2; }
+    const bw = (region.w - (cols - 1) * gap) / cols, bh = (region.h - (rows - 1) * gap) / rows;
+    for (let p = 0; p < P; p++) {
+      const cI = p % cols, rI = Math.floor(p / cols);
+      mk(p, region.x + cI * (bw + gap), region.y + rI * (bh + gap), bw, bh, { who: p, head: 28, col: PLAYER_COL[p], label: (p + 1) + '번 친구', pids: padsOf(owner, p) });
+    }
+  }
+  const pads = [];
+  for (const bd of boards) {
+    const inset = mode === 'solo' ? 0 : 6;
+    const ax = bd.x + inset, ay = bd.y + bd.head + inset, aw = bd.w - 2 * inset, ah = bd.h - bd.head - 2 * inset;
+    const m = bd.pids.length, smax = mode === 'solo' ? 250 : 220;
+    const g = fitGrid(m, aw, ah, smax);
+    const gw = g.cols * g.s, gh = g.rows * g.s, ox = ax + (aw - gw) / 2, oy = ay + (ah - gh) / 2;
+    bd.area = { x: ax, y: ay, w: aw, h: ah }; bd.grid = g; bd.pads = [];
+    bd.pids.forEach((pad, k) => {
+      const r = Math.floor(k / g.cols), cI = k % g.cols, cnt = Math.min(g.cols, m - r * g.cols);
+      const cx = ox + (g.cols - cnt) * g.s / 2 + cI * g.s + g.s / 2, cy = oy + r * g.s + g.s / 2;
+      const rec = { b: bd.b, pad, who: bd.who, k, x: cx, y: cy, s: g.s, R: g.s * 0.33, hx: cx, hy: cy + g.s * 0.07, x0: cx - g.s / 2, y0: cy - g.s / 2, x1: cx + g.s / 2, y1: cy + g.s / 2 };
+      bd.pads.push(rec); pads.push(rec);
+    });
+  }
+  LAY.boards = boards; LAY.pads = pads;
+  buildBackground();
+  S.sig = layoutSig();
+}
+function seqNums(n) { const a = []; for (let i = 0; i < n; i++) a.push(i); return a; }
+function layoutSig() {
+  const G = S.G;
+  return window.innerWidth + 'x' + window.innerHeight + ':' + (G ? G.mode + G.P + ':' + G.spec.n + ':' + (G.owner ? G.owner.join('') : '') : 'demo');
+}
+// a touch point -> a pad (or null). Every board only owns its own pads (coop: the zone's player), so a finger can never reach a
+// pad that belongs to somebody else.
+function padAt(x, y) {
+  let bd = null;
+  for (const b of LAY.boards) { if (x >= b.x - 5 && x < b.x + b.w + 5 && y >= b.y - 4 && y < b.y + b.h + 4) { bd = b; break; } }
+  if (!bd) return null;
+  let best = null, bdist = 1e9;
+  for (const p of bd.pads) { const d = Math.hypot(x - p.x, y - p.y); if (d < bdist) { bdist = d; best = p; } }
+  if (best && bdist <= best.s * 0.72) return best;
+  return null;
+}
+
+// =====================================================================
+// BACKGROUND (drawn once per layout, then only the twinkles and fireflies move)
+// =====================================================================
+const BG = { stars: [], flies: [], seeded: false };
+function seedBg() {
+  const r = mulberry32(12345);
+  for (let i = 0; i < 70; i++) BG.stars.push({ u: r(), v: r() * 0.6, r: 0.6 + r() * 1.5, ph: r() * 6.28 });
+  for (let i = 0; i < 18; i++) BG.flies.push({ u: r(), v: 0.2 + r() * 0.75, ph: r() * 6.28, sp: 0.15 + r() * 0.25, rad: 10 + r() * 30 });
+  BG.seeded = true;
+}
+function buildBackground() {
+  if (!BG.seeded) seedBg();
+  const W = LAY.W, H = LAY.H, dpr = LAY.dpr;
+  const oc = document.createElement('canvas'); oc.width = Math.round(W * dpr); oc.height = Math.round(H * dpr);
+  const c = oc.getContext('2d'); c.scale(dpr, dpr);
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#120e44'); g.addColorStop(0.55, '#2a1d7c'); g.addColorStop(1, '#4a2f93');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  // moon
+  const mr = Math.min(W, H) * 0.07, mx = W * 0.84, my = LAY.bandH + mr * 1.6;
+  const mg = c.createRadialGradient(mx, my, mr * 0.6, mx, my, mr * 3.2); mg.addColorStop(0, 'rgba(255,244,190,0.35)'); mg.addColorStop(1, 'rgba(255,244,190,0)');
+  c.fillStyle = mg; c.fillRect(mx - mr * 3.4, my - mr * 3.4, mr * 6.8, mr * 6.8);
+  pathCircle(c, mx, my, mr); c.fillStyle = '#fff3c4'; c.fill();
+  c.fillStyle = 'rgba(214,190,120,0.35)'; pathCircle(c, mx - mr * 0.3, my - mr * 0.15, mr * 0.22); c.fill(); pathCircle(c, mx + mr * 0.35, my + mr * 0.3, mr * 0.15); c.fill();
+  // hills
+  const hill = (base, amp, f, col, ph) => {
+    c.beginPath(); c.moveTo(0, H);
+    for (let x = 0; x <= W + 6; x += 6) c.lineTo(x, H * base + Math.sin(x / W * f * TAU + ph) * amp * H);
+    c.lineTo(W, H); c.closePath(); c.fillStyle = col; c.fill();
+  };
+  hill(0.72, 0.035, 1.2, '#2a2a86', 0.5);
+  hill(0.80, 0.03, 1.6, '#1f2f78', 2.1);
+  // pines along the far hill
+  const pr = mulberry32(99);
+  for (let i = 0; i < 14; i++) {
+    const x = (i + pr() * 0.7) / 14 * W, y = H * 0.8 + Math.sin(x / W * 1.6 * TAU + 2.1) * 0.03 * H, h = 28 + pr() * 36;
+    c.fillStyle = '#1a2a6a';
+    for (let k = 0; k < 3; k++) { const yy = y - k * h * 0.28, ww = h * (0.42 - k * 0.08); c.beginPath(); c.moveTo(x, yy - h * 0.42); c.lineTo(x - ww, yy); c.lineTo(x + ww, yy); c.closePath(); c.fill(); }
+  }
+  hill(0.90, 0.02, 2.0, '#17205e', 4.0);
+  bgCanvas = oc;
+}
+function drawBackground(c, t) {
+  const W = LAY.W, H = LAY.H;
+  if (bgCanvas) c.drawImage(bgCanvas, 0, 0, W, H); else { c.fillStyle = '#1b1650'; c.fillRect(0, 0, W, H); }
+  for (const s of BG.stars) {
+    const a = reduceMotion ? 0.7 : 0.45 + 0.4 * Math.sin(t * 1.3 + s.ph);
+    c.fillStyle = 'rgba(255,255,240,' + a.toFixed(2) + ')'; c.fillRect(s.u * W, LAY.bandH * 0.4 + s.v * H * 0.6, s.r, s.r);
+  }
+  for (const f of BG.flies) {
+    const x = f.u * W + (reduceMotion ? 0 : Math.sin(t * f.sp + f.ph) * f.rad), y = f.v * H + (reduceMotion ? 0 : Math.cos(t * f.sp * 1.3 + f.ph) * f.rad * 0.7);
+    const a = reduceMotion ? 0.55 : 0.35 + 0.35 * Math.sin(t * 1.7 + f.ph * 3);
+    const g = c.createRadialGradient(x, y, 0, x, y, 9); g.addColorStop(0, 'rgba(255,240,150,' + a.toFixed(2) + ')'); g.addColorStop(1, 'rgba(255,240,150,0)');
+    c.fillStyle = g; c.fillRect(x - 9, y - 9, 18, 18);
+  }
+}
+
+// =====================================================================
+// RENDER: pads, boards, HUD
+// =====================================================================
+function drawCushion(c, hx, hy, R, glow, tint, litCol) {
+  const cy = hy + R * 1.0;
+  ell(c, hx, cy + R * 0.1, R * 1.12, R * 0.32); c.fillStyle = 'rgba(8,4,40,0.4)'; c.fill();
+  ell(c, hx, cy, R * 1.06, R * 0.3); c.fillStyle = shade(tint, -0.5); c.fill();
+  ell(c, hx, cy - R * 0.05, R * 1.0, R * 0.25); c.fillStyle = shade(tint, -0.25); c.fill();
+  if (glow > 0.02) { ell(c, hx, cy - R * 0.05, R * 1.0, R * 0.25); c.fillStyle = rgba(litCol, 0.55 * glow); c.fill(); }
+  ell(c, hx, cy, R * 1.06, R * 0.3); stroked(c, Math.max(1.4, R * 0.05));
+}
+function drawPad(c, bd, pr) {
+  const v = pvOf(pr.b, pr.pad), t = S.clock;
+  const lit = v.lit, pop = v.pop;
+  if (pop <= 0.02) return;
+  const R = pr.R * pop, bob = reduceMotion ? 0 : Math.sin(t * 1.7 + v.ph) * R * 0.025;
+  const sc = 1 + 0.14 * v.bump + 0.05 * v.held + 0.04 * lit;
+  const hx = pr.hx, hy = pr.hy - R * 0.1 * v.bump - R * 0.05 * lit + bob;
+  const col = PAD_COL[pr.pad];
+  const tint = S.G && S.G.mode === 'coop' ? PLAYER_COL[pr.who] : S.G && S.G.mode === 'vs' ? SIDE_COL[pr.who] : '#7a5bd0';
+  drawCushion(c, hx, pr.hy + (pr.R - R) * 0.0, R, lit, tint, col);
+  if (lit > 0.03) {   // the glow around a singer that is singing
+    const gr = R * (2.0 + 0.3 * lit), g = c.createRadialGradient(hx, hy, R * 0.5, hx, hy, gr);
+    g.addColorStop(0, rgba(col, 0.6 * lit)); g.addColorStop(1, rgba(col, 0));
+    c.fillStyle = g; c.fillRect(hx - gr, hy - gr, gr * 2, gr * 2);
+  }
+  // expression
+  let expr = 'idle', m = 0;
+  if (t < v.oopsUntil) expr = 'oops';
+  else if (t < v.singUntil || lit > 0.4) { expr = 'sing'; m = 0.55 + 0.45 * Math.abs(Math.sin(t * 22 + v.ph)); if (reduceMotion) m = 0.8; }
+  else if (t < v.shrugUntil) expr = 'wow';
+  const blink = expr === 'idle' && t > v.blinkAt && t < v.blinkAt + 0.12;
+  const q = Math.round(lit * 6) / 6;
+  c.save(); c.translate(hx, hy); c.scale(sc, sc * (1 - 0.05 * v.bump)); c.translate(-hx, -hy);
+  drawAnimal(c, ANIMAL[pr.pad], hx, hy, R, { col: q > 0 ? shade(col, 0.32 * q) : col, expr, m, blink });
+  c.restore();
+  if (lit > 0.05) { pathCircle(c, hx, hy, R * (1.1 + 0.1 * (1 - lit))); c.lineWidth = Math.max(2, R * 0.07); c.strokeStyle = 'rgba(255,255,255,' + (0.85 * lit).toFixed(2) + ')'; c.stroke(); }
+  // note name under the cushion
+  if (pr.s > 70) { c.globalAlpha = 0.85; outlineText(c, SOLFA[pr.pad], hx, pr.hy + R * 1.5, Math.max(11, Math.min(19, R * 0.4)), PAPER, INK); c.globalAlpha = 1; }
+  if (S.kb && S.view === 'play') {
+    const lab = keyLabel(pr); if (lab) { const bx = pr.x1 - R * 0.35, by = pr.y0 + R * 0.45; rrect(c, bx - 9, by - 9, 18, 18, 5); c.fillStyle = 'rgba(20,12,60,0.85)'; c.fill(); c.strokeStyle = 'rgba(251,248,255,0.7)'; c.lineWidth = 1.2; c.stroke(); c.font = '12px ' + FONT_B; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = PAPER; c.fillText(lab, bx, by + 1); }
+  }
+  // the coach ring: "start here"
+  if (v.ring > 0.02) {
+    const k = 1 + 0.08 * Math.sin(t * 7);
+    pathCircle(c, hx, hy, R * 1.3 * k); c.lineWidth = Math.max(3, R * 0.1); c.strokeStyle = 'rgba(255,209,102,' + (0.95 * v.ring).toFixed(2) + ')'; c.setLineDash([R * 0.3, R * 0.2]); c.lineDashOffset = -t * R * 0.8; c.stroke(); c.setLineDash([]);
+    const rfs = Math.max(13, Math.min(22, R * 0.46)); c.globalAlpha = v.ring; outlineText(c, v.ringText || '여기!', hx, hy - R * 1.32 * k - rfs * 0.9, rfs, GOLD, INK); c.globalAlpha = 1;
+  }
+}
+function keyLabel(pr) {
+  const G = S.G; if (!G) return '';
+  if (G.mode === 'solo') return KEYLBL[0][pr.pad];
+  if (G.mode === 'vs') return KEYLBL[pr.who === 0 ? 0 : 1][pr.pad];
+  return KEYLBL[pr.who][pr.k] || '';
+}
+function drawBoard(c, bd) {
+  const G = S.G, mode = LAY.mode;
+  if (mode !== 'solo') {
+    const mark = S.boardMark[bd.b] || {};
+    rrect(c, bd.x, bd.y, bd.w, bd.h, 18); c.fillStyle = rgba(bd.col, 0.1); c.fill();
+    const hot = G && G.phase === 'input' && mode === 'coop' && S.hintOn && G.pl[0] && wantNowSafe(G, 0).some((p) => G.owner[p] === bd.b);
+    rrect(c, bd.x, bd.y, bd.w, bd.h, 18); c.lineWidth = hot ? 5 : 3; c.strokeStyle = hot ? 'rgba(255,209,102,' + (0.7 + 0.3 * Math.sin(S.clock * 8)).toFixed(2) + ')' : rgba(bd.col, 0.6); c.stroke();
+    // tag
+    const label = hot ? bd.label + ' · 내 차례!' : bd.label, fs = Math.max(11, Math.min(15, bd.w / 9));
+    c.font = '700 ' + fs + 'px ' + FONT_B; const tw = Math.min(bd.w - 16, c.measureText(label).width + 22);
+    rrect(c, bd.x + bd.w / 2 - tw / 2, bd.y - 2, tw, 24, 12); c.fillStyle = hot ? GOLD : bd.col; c.fill(); stroked(c, 2);
+    c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(label, bd.x + bd.w / 2, bd.y + 10.5);
+    if (mode === 'vs' && G) {   // progress dots in the header + the "done" stamp
+      const ps = G.pl[bd.b], len = G.expect.length, r = Math.max(2.2, Math.min(4.2, (bd.w - 20) / (len * 2.6)));
+      const y = bd.y + 24 + r + 1, tot = len * r * 2.6, x0 = bd.x + bd.w / 2 - tot / 2 + r * 1.3;
+      for (let i = 0; i < len; i++) {
+        pathCircle(c, x0 + i * r * 2.6, y, r);
+        const done = G.phase === 'input' || G.phase === 'clear' ? (ps ? i < ps.pos : false) : G.phase === 'show' ? i < G.showI : false;
+        c.fillStyle = done ? (G.phase === 'show' ? '#9fe0ff' : GOLD) : 'rgba(251,248,255,0.18)'; c.fill();
+      }
+      if (ps && ps.done && G.phase === 'input') { c.globalAlpha = 0.95; outlineText(c, '완료!', bd.x + bd.w / 2, bd.y + bd.h * 0.5, Math.min(44, bd.w * 0.22), GOLD, INK); c.globalAlpha = 1; }
+      if (mark.out) { rrect(c, bd.x, bd.y, bd.w, bd.h, 18); c.fillStyle = 'rgba(255,70,100,0.18)'; c.fill(); }
+    }
+  }
+  for (const pr of bd.pads) drawPad(c, bd, pr);
+}
+function wantNowSafe(G, p) { try { return wantNow(G, p); } catch (e) { return []; } }
+function textFit(c, text, maxW, size, weight) {
+  let s = size; c.font = (weight || '700') + ' ' + s + 'px ' + FONT_B;
+  while (s > 10 && c.measureText(text).width > maxW) { s -= 1; c.font = (weight || '700') + ' ' + s + 'px ' + FONT_B; }
+  return s;
+}
+function drawBubble(c, text, y, chip, chipCol) {
+  if (!text) return;
+  const W = LAY.W, maxW = W - LAY.sal - LAY.sar - 24;
+  const fs = textFit(c, text, maxW - 40 - (chip ? 60 : 0), LAY.port ? 15.5 : 17, '700');
+  const tw = c.measureText(text).width, cw = chip ? c.measureText(chip).width + 18 : 0;
+  const w = Math.min(maxW, tw + 30 + (chip ? cw + 8 : 0)), h = 30, x = W / 2 - w / 2;
+  c.save(); rrect(c, x, y - h / 2, w, h, 15); c.fillStyle = 'rgba(251,248,255,0.96)'; c.fill(); stroked(c, 2);
+  c.beginPath(); c.moveTo(W / 2 - 7, y + h / 2 - 1); c.lineTo(W / 2, y + h / 2 + 8); c.lineTo(W / 2 + 7, y + h / 2 - 1); c.fillStyle = 'rgba(251,248,255,0.96)'; c.fill();
+  c.textBaseline = 'middle'; c.textAlign = 'left'; let tx = x + 15;
+  if (chip) { rrect(c, tx - 4, y - 11, cw, 22, 11); c.fillStyle = chipCol || '#8b8dff'; c.fill(); c.fillStyle = '#fff'; c.font = '700 ' + Math.max(11, fs - 2) + 'px ' + FONT_B; c.fillText(chip, tx + 5, y + 1); tx += cw + 6; }
+  c.font = '700 ' + fs + 'px ' + FONT_B; c.fillStyle = INK; c.fillText(text, tx, y + 1);
+  c.restore();
+}
+function drawHearts(c, G) {
+  const W = LAY.W, sat = LAY.sat;
+  const cy = sat + 29, lvText = '레벨 ' + G.level;
+  c.font = '20px ' + FONT_D; const lw = c.measureText(lvText).width;
+  const hs = G.mode === 'vs' ? 0 : G.maxHearts, hw = hs * 25;
+  const total = lw + (hs ? hw + 14 : 0) + 28, x0 = W / 2 - total / 2;
+  const hp = S.clock - S.heartHit < 0.5 ? 1 + 0.08 * Math.sin((S.clock - S.heartHit) * 30) : 1;
+  rrect(c, x0, cy - 20, total, 40, 20); c.fillStyle = 'rgba(22,17,66,0.82)'; c.fill(); c.strokeStyle = 'rgba(251,248,255,0.6)'; c.lineWidth = 2; c.stroke();
+  c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = PAPER; c.font = '20px ' + FONT_D; c.fillText(lvText, x0 + 14, cy + 2);
+  for (let i = 0; i < hs; i++) {
+    const hx = x0 + 14 + lw + 16 + i * 25 + 9, full = i < G.hearts, age = S.clock - (S.heartAt[i] || -9);
+    const k = age < 0.5 ? 1 + 0.35 * Math.sin(age / 0.5 * Math.PI) : 1;
+    heartPath(c, hx, cy + 1, 8.5 * k * (full ? hp : 1));
+    if (full) { c.fillStyle = '#ff5a76'; c.fill(); stroked(c, 2); c.fillStyle = 'rgba(255,255,255,0.55)'; pathCircle(c, hx - 3.5, cy - 3, 2); c.fill(); }
+    else { c.fillStyle = 'rgba(251,248,255,0.12)'; c.fill(); c.strokeStyle = 'rgba(251,248,255,0.4)'; c.lineWidth = 1.5; c.stroke(); }
+  }
+}
+function drawDots(c, G) {
+  const len = G.expect.length, W = LAY.W, y = LAY.dotsY;
+  const r = Math.max(3, Math.min(7, (W - 60) / (len * 3.1))), step = r * 3.1, x0 = W / 2 - (len - 1) * step / 2;
+  const ps = G.pl[0], showing = G.phase === 'show';
+  for (let i = 0; i < len; i++) {
+    const x = x0 + i * step, dbl = G.spec.kind === 'D';
+    const done = showing ? i < G.showI : G.phase === 'input' || G.phase === 'clear' || G.phase === 'oops' ? (G.phase === 'clear' || (ps && i < ps.pos)) : false;
+    const cur = !showing && G.phase === 'input' && ps && i === ps.pos;
+    if (dbl) rrect(c, x - r * 1.0, y - r, r * 2, r * 2, r); else pathCircle(c, x, y, r);
+    c.fillStyle = done ? (showing ? '#9fe0ff' : GOLD) : 'rgba(251,248,255,0.16)'; c.fill();
+    if (cur) { c.strokeStyle = GOLD; c.lineWidth = 2; c.beginPath(); if (dbl) c.roundRect ? c.roundRect(x - r * 1.0 - 2, y - r - 2, r * 2 + 4, r * 2 + 4, r + 2) : c.rect(x - r - 2, y - r - 2, r * 2 + 4, r * 2 + 4); else c.arc(x, y, r + 3 + Math.sin(S.clock * 8), 0, TAU); c.stroke(); }
+    else { c.strokeStyle = 'rgba(251,248,255,0.35)'; c.lineWidth = 1.2; if (dbl) { rrect(c, x - r * 1.0, y - r, r * 2, r * 2, r); } else pathCircle(c, x, y, r); c.stroke(); }
+  }
+}
+function drawBanner(c) {
+  const B = S.banner; if (!B) return;
+  const age = S.clock - B.t0; if (age > B.dur) { S.banner = null; return; }
+  const k = Math.min(1, age / 0.28), fade = age > B.dur - 0.3 ? Math.max(0, (B.dur - age) / 0.3) : 1;
+  const sc = 0.7 + 0.3 * (1 - Math.pow(1 - k, 3)) + (k < 1 ? 0.06 * Math.sin(k * Math.PI) : 0);
+  const W = LAY.W, R = LAY.region, cx = W / 2, cy = R.y + Math.min(R.h * 0.5, 120);
+  const big = Math.min(54, W * 0.13), sub = Math.min(19, W * 0.045);
+  c.save(); c.globalAlpha = fade; c.translate(cx, cy); c.scale(sc, sc);
+  c.font = big + 'px ' + FONT_D; const tw = Math.max(c.measureText(B.text).width, B.sub ? textFit(c, B.sub, W - 60, sub) * 0 + c.measureText(B.sub).width * 0 : 0);
+  let sw = 0; if (B.sub) { c.font = '700 ' + sub + 'px ' + FONT_B; sw = c.measureText(B.sub).width; }
+  const w = Math.min(W - 24, Math.max(tw, sw) + 56), h = B.sub ? big + sub + 40 : big + 28;
+  rrect(c, -w / 2, -h / 2, w, h, 22); c.fillStyle = 'rgba(20,12,64,0.86)'; c.fill(); c.lineWidth = 3; c.strokeStyle = B.col || GOLD; c.stroke();
+  outlineText(c, B.text, 0, B.sub ? -sub * 0.8 : 0, big, B.col || GOLD, INK);
+  if (B.sub) { c.font = '700 ' + sub + 'px ' + FONT_B; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = PAPER; c.fillText(B.sub, 0, big * 0.5 + 4); }
+  c.restore();
+}
+function drawFx(c) {
+  for (const r of S.ripples) {
+    const k = (S.clock - r.t) / r.dur; if (k >= 1 || k < 0) continue;
+    const e = 1 - Math.pow(1 - k, 2), a = (1 - k) * 0.8, rb = LAY.boards[r.b];
+    c.save(); if (rb && LAY.mode !== 'solo') { rrect(c, rb.x, rb.y, rb.w, rb.h, 18); c.clip(); }
+    c.strokeStyle = rgba(r.col, a); c.lineWidth = Math.max(1.5, r.R * 0.09 * (1 - k * 0.6));
+    ell(c, r.x, r.y + r.R * 1.0, r.R * (1.1 + 1.5 * e), r.R * (0.3 + 0.42 * e)); c.stroke();
+    pathCircle(c, r.x, r.y, r.R * (1.15 + 0.5 * e)); c.strokeStyle = rgba('#ffffff', a * 0.4); c.stroke(); c.restore();
+  }
+  for (const p of S.parts) {
+    const k = p.age / p.life; if (k >= 1) continue;
+    c.globalAlpha = Math.min(1, (1 - k) * 1.6);
+    if (p.kind === 'star') { starPath(c, p.x, p.y, p.size * (1 - k * 0.4), 4, 0.4); c.fillStyle = p.col; c.fill(); }
+    else if (p.kind === 'note') {
+      c.save(); c.translate(p.x, p.y); c.rotate(Math.sin(p.age * 5) * 0.2); c.fillStyle = p.col; c.strokeStyle = INK; c.lineWidth = 1.6;
+      ell(c, 0, 0, p.size * 0.5, p.size * 0.38, -0.4); c.fill(); c.stroke();
+      c.beginPath(); c.moveTo(p.size * 0.42, -p.size * 0.06); c.lineTo(p.size * 0.42, -p.size * 1.2); c.quadraticCurveTo(p.size * 1.0, -p.size * 0.9, p.size * 0.9, -p.size * 0.5); c.lineWidth = Math.max(1.8, p.size * 0.14); c.strokeStyle = p.col; c.stroke(); c.restore();
+    }
+    else if (p.kind === 'dot') { pathCircle(c, p.x, p.y, p.size * (1 - k * 0.5)); c.fillStyle = p.col; c.fill(); }
+    c.globalAlpha = 1;
+  }
+  for (const f of S.floats) {
+    const k = f.age / f.life; if (k >= 1) continue;
+    c.globalAlpha = Math.min(1, (1 - k) * 2); outlineText(c, f.text, f.x, f.y - 30 * k * (f.rise || 1), f.size, f.col, INK); c.globalAlpha = 1;
+  }
+}
+function render() {
+  const c = ctx, W = LAY.W, H = LAY.H;
+  c.setTransform(LAY.dpr, 0, 0, LAY.dpr, 0, 0);
+  drawBackground(c, S.clock);
+  const G = S.G, playing = S.view === 'play' && G;
+  c.save();
+  if (S.shake > 0.3 && !reduceMotion) c.translate((Math.random() - 0.5) * S.shake, (Math.random() - 0.5) * S.shake * 0.6);
+  for (const bd of LAY.boards) drawBoard(c, bd);
+  drawFx(c);
+  c.restore();
+  if (playing) {
+    drawHearts(c, G);
+    const bub = bubbleText(G); drawBubble(c, bub.text, LAY.bubbleY + 6, bub.chip, bub.col);
+    if (G.mode !== 'vs') drawDots(c, G);
+    drawBanner(c);
+  }
+  if (S.flash > 0.02) { c.fillStyle = 'rgba(255,70,100,' + (S.flash * (reduceMotion ? 0.08 : 0.28)).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
+}
+
+// =====================================================================
+// GAME FLOW: events from the logic -> sound, faces, sparkles, banners
+// =====================================================================
+const KIND_CHIP = { R: '거꾸로', D: '두 개 함께' };
+const KIND_COL = { R: '#ff8a3d', D: '#3da5ff' };
+function ensureLayout() { if (layoutSig() !== S.sig) layout(); }
+function boardsOf(G, pad, who) {
+  if (G.mode === 'solo') return [0];
+  if (G.mode === 'vs') return who === undefined || who === null || who < 0 ? [0, 1] : [who];
+  return [G.owner[pad]];
+}
+function padRec(b, pad) { const bd = LAY.boards[b]; if (!bd) return null; for (const p of bd.pads) if (p.pad === pad) return p; return null; }
+function addSparks(pr, col, n, spd) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, sp = (spd || 1) * vr(40, 130);
+    S.parts.push({ kind: 'star', x: pr.hx, y: pr.hy - pr.R * 0.2, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, g: 160, age: 0, life: vr(0.45, 0.85), size: vr(3, 7) * Math.max(0.8, pr.R / 40), col: i % 3 === 0 ? '#fff6c0' : col });
+  }
+  if (S.parts.length > 260) S.parts.splice(0, S.parts.length - 260);
+}
+function noteBurst(pr, col, withFloat) {
+  S.ripples.push({ x: pr.hx, y: pr.hy, R: pr.R, t: S.clock, dur: 0.75, col, b: pr.b });
+  if (!reduceMotion) { S.parts.push({ kind: 'note', x: pr.hx + vr(-pr.R * 0.4, pr.R * 0.4), y: pr.hy - pr.R * 1.1, vx: vr(-18, 18), vy: -vr(50, 80), g: 0, age: 0, life: 0.9, size: Math.max(9, pr.R * 0.3), col }); }
+  if (withFloat !== false && pr.s >= 118) S.floats.push({ x: pr.hx, y: pr.hy - pr.R * 1.5, text: SOLFA[pr.pad], size: Math.max(15, Math.min(28, pr.R * 0.62)), col: '#fff', age: 0, life: 0.7, rise: 1 });
+  if (S.ripples.length > 60) S.ripples.splice(0, S.ripples.length - 60);
+}
+function lightPad(b, pad, dur, strong) {
+  const pr = padRec(b, pad); if (!pr) return;
+  const v = pvOf(b, pad), col = PAD_COL[pad];
+  v.litUntil = S.clock + dur; v.lit = 1; v.singUntil = S.clock + dur; v.bump = Math.max(v.bump, strong ? 1 : 0.7);
+  noteBurst(pr, col, true); addSparks(pr, col, strong ? 10 : 6);
+}
+function setRings(on) {
+  const G = S.G; if (!G) return;
+  for (const k in S.pv) { const v = S.pv[k]; if (!on) { v.ringUntil = -9; } }
+  if (!on) return;
+  const np = G.mode === 'vs' ? 2 : 1;
+  for (let p = 0; p < np; p++) for (const pad of wantNowSafe(G, p)) for (const b of boardsOf(G, pad, G.mode === 'vs' ? p : undefined)) { const v = pvOf(b, pad); v.ringUntil = S.clock + 30; v.ringText = '여기부터!'; }
+}
+function schedule(dt, fn) { S.sched.push({ t: S.clock + dt, fn }); }
+S.sched = [];
+function bannerSet(text, sub, col, dur) { S.banner = { text, sub, col, t0: S.clock, dur: dur || 1.2 }; }
+
+function handleEvents(G) {
+  while (G.ev.length) handleEv(G, G.ev.shift());
+}
+function handleEv(G, ev) {
+  switch (ev.t) {
+    case 'level': {
+      ensureLayout();
+      S.boardMark = []; S.hintOn = false; setRings(false);
+      for (const bd of LAY.boards) for (const pr of bd.pads) {
+        const v = pvOf(pr.b, pr.pad);
+        if (ev.L === 1 || ev.newPads && pr.pad >= G.prevN) { v.pop = 0; v.popAt = S.clock + 0.12 + 0.07 * pr.k; }
+        else { v.popAt = -9; v.pop = 1; }
+      }
+      const kc = KIND_CHIP[ev.kind];
+      bannerSet('레벨 ' + ev.L, ev.newPads ? '새 친구가 왔어요!' : kc ? (ev.kind === 'R' ? '보너스! 거꾸로 따라 해요' : '보너스! 두 소리를 함께 눌러요') : (ev.L === 1 ? '쫑알이들이 노래해요' : ''), kc ? KIND_COL[ev.kind] : GOLD, G.introDur - 0.1);
+      if (ev.newPads) Sound.newPads(); else Sound.banner();
+      S.pressLog.length = 0;
+      break;
+    }
+    case 'showStart': setRings(false); S.hintOn = false; break;
+    case 'lit': {
+      const tb = 0;
+      for (const pad of ev.pads) {
+        for (const b of boardsOf(G, pad)) lightPad(b, pad, ev.lit, true);
+        Sound.note(pad, 0.6, 0.21, G.mode === 'coop' ? G.owner[pad] % 2 : tb);
+      }
+      break;
+    }
+    case 'inputStart': {
+      S.hintOn = G.spec.hint && G.tries === 0;
+      if (G.spec.L === 1 && G.tries === 0) setRings(true);
+      Sound.tick();
+      break;
+    }
+    case 'press': {
+      const pad = ev.pad, bs = boardsOf(G, pad, G.mode === 'vs' ? ev.p : undefined);
+      for (const b of bs) {
+        const pr = padRec(b, pad), v = pvOf(b, pad); if (!pr) continue;
+        v.litUntil = S.clock + 0.22; v.lit = 1; v.singUntil = S.clock + 0.34; v.bump = 1; v.ringUntil = -9; v.ring = 0;
+        noteBurst(pr, PAD_COL[pad], true); addSparks(pr, PAD_COL[pad], 4);
+      }
+      Sound.note(pad, 0.5, 0.2, G.mode === 'vs' ? ev.p : G.mode === 'coop' ? G.owner[pad] % 2 : 0);
+      buzz(8);
+      if (G.spec.L === 1 && G.tries === 0) setRings(true);
+      break;
+    }
+    case 'done': if (G.mode === 'vs') Sound.tick(); break;
+    case 'grace': break;
+    case 'wrong': {
+      setRings(false);
+      if (ev.pad >= 0) for (const b of boardsOf(G, ev.pad, G.mode === 'vs' ? ev.p : undefined)) { const v = pvOf(b, ev.pad); v.oopsUntil = S.clock + 1.15; v.bump = 0.6; }
+      if (G.mode === 'vs') S.boardMark[ev.p] = { out: true };
+      else { S.heartAt[G.hearts] = S.clock; S.heartHit = S.clock; for (let b = 0; b < LAY.boards.length; b++) for (const pr of LAY.boards[b].pads) { const v = pvOf(pr.b, pr.pad); if (S.clock >= v.oopsUntil) { v.shrugUntil = S.clock + 0.5; } } }
+      for (const wp of ev.want || []) for (const b of boardsOf(G, wp, G.mode === 'vs' ? ev.p : undefined)) { const v = pvOf(b, wp); v.ringUntil = S.clock + 1.3; v.ringText = '정답!'; }
+      if (ev.pad < 0) for (const bd of LAY.boards) for (const pr of bd.pads) { if (G.mode === 'vs' && bd.b !== ev.p) continue; const v = pvOf(pr.b, pr.pad); v.shrugUntil = S.clock + 0.9; }
+      S.shake = reduceMotion ? 0 : 14; S.flash = 1;
+      Sound.oops(); if (G.mode !== 'vs' && ev.hearts <= 0) Sound.heart(); else if (G.mode !== 'vs') Sound.heart();
+      buzz([40, 30, 40]);
+      break;
+    }
+    case 'clear': {
+      S.lastClear = ev; setRings(false); S.hintOn = false;
+      const per = ev.perfect, kc = KIND_CHIP[ev.kind];
+      bannerSet(per ? '완벽해요!' : '클리어!', ev.heal ? '보너스 성공! 하트가 돌아왔어요' : '내 노래 ' + G.song.length + '마디', per ? GOLD : '#7be0a1', G.clearDur - 0.1);
+      Sound.fanfare(per); if (ev.heal) { Sound.heal(); S.heartAt[G.hearts - 1] = S.clock; }
+      void kc;
+      // the phrase that was just sung comes back as a little tune: the pads sing it in order, with a bass under it
+      const n = ev.steps.length, dt = Math.min(0.2, Math.max(0.1, (G.clearDur - 1.0) / Math.max(1, n)));
+      ev.steps.forEach((st, i) => {
+        const last = i === n - 1;
+        schedule(0.6 + i * dt, () => { for (const pad of st) { for (const b of boardsOf(G, pad)) lightPad(b, pad, 0.2, last); } });
+        for (const pad of st) Sound.note(pad, last ? 0.9 : 0.4, 0.13, 1, 0.6 + i * dt);
+      });
+      Sound.note(ev.L % 2 ? 0 : 3, dt * n + 0.5, 0.1, 1, 0.6, -1);
+      for (const bd of LAY.boards) for (const pr of bd.pads) addSparks(pr, PAD_COL[pr.pad], 5, 1.2);
+      break;
+    }
+    case 'over': {
+      setRings(false);
+      if (G.mode === 'vs') { if (ev.winner >= 0) Sound.win(); else Sound.lose(); }
+      else Sound.lose();
+      break;
+    }
+  }
+}
+function bubbleText(G) {
+  const sp = G.spec, k = sp.kind, chip = KIND_CHIP[k] || '', col = KIND_COL[k];
+  const ps = G.pl[0];
+  let text = '';
+  switch (G.phase) {
+    case 'intro': text = sp.L === 1 ? '쫑알이들의 노래를 들어 봐요' : '준비해요!'; break;
+    case 'show': text = G.tries > 0 ? '다시 한 번 보여 줄게요' : sp.hint ? '잘 봐요! 켜지는 순서를 기억해요' : k === 'R' ? '잘 기억해요. 마지막 소리부터 눌러요' : k === 'D' ? '두 소리가 함께 켜져요' : '잘 봐요!'; break;
+    case 'input':
+      if (G.mode === 'vs') text = G.graceT >= 0 ? '상대가 끝났어요! 서둘러요 (' + Math.ceil(G.graceT) + ')' : '동시에 시작! 먼저 틀리면 져요';
+      else if (G.mode === 'coop') text = sp.hint ? '내 순서가 오면 내 쫑알이를 눌러요' : (ps ? ps.pos + 1 > G.expect.length ? '' : (ps.pos + '/' + G.expect.length + ' · 다 함께 이어 불러요') : '');
+      else text = sp.hint ? (sp.L === 1 ? '똑같은 순서로 눌러 봐요!' : '이제 똑같이 눌러 봐요!') : k === 'R' ? '마지막 소리부터 거꾸로!' : k === 'D' ? '두 소리를 함께 눌러요' : '따라 해요 ' + (ps ? ps.pos : 0) + '/' + G.expect.length;
+      break;
+    case 'clear': text = S.lastClear && S.lastClear.perfect ? '멋져요! 노래가 한 조각 늘었어요' : '해냈어요! 노래가 한 조각 늘었어요'; break;
+    case 'oops': text = G.mode === 'vs' ? '앗, 틀렸어요!' : '앗! 하트가 깨졌어요. 정답은 여기!'; break;
+    case 'over': text = ''; break;
+  }
+  return { text, chip: G.phase === 'show' || G.phase === 'input' ? chip : '', col };
+}
+
+// ---- per-frame effects ----
+function stepFx(dt) {
+  const t = S.clock;
+  for (const k in S.pv) {
+    const v = S.pv[k];
+    v.lit = t < v.litUntil ? 1 : Math.max(0, v.lit - dt * 4.5);
+    v.bump = Math.max(0, v.bump - dt * 5.5);
+    const hold = holdN[k] || 0;
+    v.held += ((hold > 0 ? 1 : 0) - v.held) * Math.min(1, dt * 22);
+    if (t < v.popAt) v.pop = 0; else if (v.popAt > -5) { const q = (t - v.popAt) / 0.45; if (q >= 1) { v.pop = 1; v.popAt = -9; } else { const s = 1.70158; const x = q - 1; v.pop = 1 + (s + 1) * x * x * x + s * x * x; } }
+    v.ring = t < v.ringUntil ? Math.min(1, v.ring + dt * 8) : Math.max(0, v.ring - dt * 5);
+    if (t > v.blinkAt + 0.14) v.blinkAt = t + 2 + Math.random() * 3;
+  }
+  for (let i = S.ripples.length - 1; i >= 0; i--) if (t - S.ripples[i].t > S.ripples[i].dur) S.ripples.splice(i, 1);
+  for (let i = S.parts.length - 1; i >= 0; i--) { const p = S.parts[i]; p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.g || 0) * dt; if (p.age >= p.life) S.parts.splice(i, 1); }
+  for (let i = S.floats.length - 1; i >= 0; i--) { S.floats[i].age += dt; if (S.floats[i].age >= S.floats[i].life) S.floats.splice(i, 1); }
+  S.shake = Math.max(0, S.shake - dt * 40); S.flash = Math.max(0, S.flash - dt * 2.6);
+  for (let i = S.sched.length - 1; i >= 0; i--) if (t >= S.sched[i].t) { const f = S.sched[i].fn; S.sched.splice(i, 1); f(); }
+  if (S.view === 'title' && !reduceMotion) {   // the title screen's stage rehearses by itself (silently)
+    S.demoT += dt;
+    if (S.demoT > 0.62 && LAY.boards[0] && !S.G) {
+      S.demoT = 0;
+      const pads = LAY.boards[0].pads, pat = [0, 2, 4, 2, 3, 5, 4, 1];
+      const pad = pat[S.demoI++ % pat.length] % pads.length, v = pvOf(0, pad);
+      v.litUntil = t + 0.4; v.lit = 1; v.singUntil = t + 0.4; v.bump = 0.7;
+      const pr = padRec(0, pad); if (pr) { noteBurst(pr, PAD_COL[pad], false); }
+    }
+  }
+}
+// the little choir on the title card
+function mascotScene(t) {
+  const cvm = $('mascot'); if (!cvm || cvm.offsetParent === null) return;
+  const c = cvm.getContext('2d'); c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 240, 112);
+  const pads = [3, 0, 5, 6], xs = [48, 98, 148, 198];
+  const singer = Math.floor(t * 1.6) % 4;
+  pads.forEach((pad, i) => {
+    const sing = i === singer && !reduceMotion, bob = reduceMotion ? 0 : Math.sin(t * 2 + i) * 2;
+    const x = xs[i], y = 62 + bob - (sing ? 4 : 0), R = 21;
+    ell(c, x, 88, R * 1.1, R * 0.3); c.fillStyle = 'rgba(8,4,40,0.45)'; c.fill();
+    ell(c, x, 85, R * 1.05, R * 0.28); c.fillStyle = '#5a40a8'; c.fill(); stroked(c, 1.4);
+    drawAnimal(c, ANIMAL[pad], x, y, R, { col: PAD_COL[pad], expr: sing ? 'sing' : 'idle', m: sing ? 0.6 + 0.4 * Math.abs(Math.sin(t * 20)) : 0, blink: false });
+    if (sing) { c.fillStyle = PAD_COL[pad]; c.strokeStyle = INK; c.lineWidth = 1.5; const nx = x + 20, ny = 20 - ((t * 30) % 10); ell(c, nx, ny, 5, 3.6, -0.4); c.fill(); c.stroke(); c.beginPath(); c.moveTo(nx + 4, ny - 1); c.lineTo(nx + 4, ny - 13); c.stroke(); }
+  });
+}
+
+// ---- screens ----
+function showOnly(name) {
+  el.scrTitle.hidden = name !== 'title'; el.scrPause.hidden = name !== 'pause'; el.scrOver.hidden = name !== 'over';
+  el.hud.hidden = name === 'title' || name === 'over';
+  if (name === 'title' || name === 'over') el.hud.hidden = true; else el.hud.hidden = false;
+}
+function nextSeed() { S.gameN++; return BASE_SEED !== null ? (BASE_SEED + S.gameN - 1) | 0 : (Math.floor(Math.random() * 1e9) ^ Date.now()) | 0; }
+function resetFx() { S.pv = {}; S.ripples.length = 0; S.parts.length = 0; S.floats.length = 0; S.banner = null; S.shake = 0; S.flash = 0; S.boardMark = []; S.heartAt = []; S.heartHit = -9; S.sched.length = 0; S.downs = {}; S.lastClear = null; S.hintOn = false; }
+const MODE_LINES = {
+  solo: '혼자서 기억력에 도전해요. 하트 3개로 몇 레벨까지 갈 수 있을까요?',
+  vs: '한 화면 왼쪽·오른쪽에서 같은 순서를 동시에 따라 눌러요. 먼저 틀리는 쪽이 져요.',
+  coop: '각자 자기 구역의 쫑알이를 맡아요. 순서가 오면 그 쫑알이의 주인이 눌러요. 틀리면 하트가 깨져요.',
+};
+function keyHintText() {
+  if (S.mode === 'solo') return '키보드: 1~9 또는 A S D F G H J K L · 스페이스로 시작';
+  if (S.mode === 'vs') return '키보드: 왼쪽 1~9 · 오른쪽 Q W E R T Y U I O';
+  return '키보드: 1번 1 2 3 4 · 2번 Q W E R · 3번 A S D F · 4번 Z X C V';
+}
+function setSel(mode, players, save) {
+  S.mode = mode; S.players = players;
+  if (save) { store.set(KEY_MODE, mode); store.set(KEY_PPL, players); }
+  const pick = (b, on) => { b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); };
+  pick(el.btnSolo, mode === 'solo'); pick(el.btnVs, mode === 'vs'); pick(el.btnCoop, mode === 'coop');
+  el.pplLabel.hidden = el.pplRow.hidden = mode !== 'coop';
+  el.btnP.forEach((b, i) => pick(b, players === i + 2));
+  el.modeLine.textContent = MODE_LINES[mode];
+  el.keyHint.textContent = keyHintText();
+  const best = mode === 'solo' ? S.best : mode === 'coop' ? S.bestCoop : 0;
+  el.bestLine.hidden = mode === 'vs';
+  el.bestLine.firstChild.textContent = mode === 'coop' ? '합창 최고 기록 ' : '최고 기록 ';
+  el.tBest.textContent = best > 0 ? best + '레벨 클리어' : '-';
+}
+function toTitle() {
+  S.view = 'title'; S.paused = false; S.G = null; S.acc = 0; S.resultShown = false;
+  releaseAll(); resetFx(); stopSong(); setSel(S.mode, S.players, false); showOnly('title'); layout();
+}
+function startGame() {
+  Sound.ensure(); stopSong();
+  const G = newGame({ mode: S.mode, players: S.players, seed: nextSeed() });
+  S.G = G; S.view = 'play'; S.paused = false; S.acc = 0; S.overT = 0; S.resultShown = false; S.newRecord = false;
+  releaseAll(); resetFx(); showOnly('play'); layout();
+  handleEvents(G);
+}
+function pauseGame() {
+  if (S.view !== 'play' || S.paused || !S.G || S.G.phase === 'over') return;
+  S.paused = true; releaseAll(); showOnly('pause');
+  try { if (Sound.ctx && Sound.ctx.state === 'running') Sound.ctx.suspend(); } catch (e) { /* ignore */ }
+}
+function resumeGame() {
+  if (!S.paused) return; S.paused = false; showOnly('play');
+  try { if (Sound.ctx && Sound.ctx.state === 'suspended') Sound.ctx.resume(); } catch (e) { /* ignore */ }
+}
+function songNotes(G) { let n = 0; for (const ph of G.song) for (const st of ph.steps) n += st.length; return n; }
+function showResult() {
+  const G = S.G; if (!G || S.resultShown) return;
+  S.resultShown = true;
+  el.rTitle.className = 'res-title';
+  let rec = false, title = '', line = '';
+  const notes = songNotes(G);
+  el.rBestLine.hidden = G.mode === 'vs';
+  if (G.mode === 'vs') {
+    el.rBigBox.hidden = true; el.rScoreBox.hidden = false;
+    if (G.winner >= 0) S.series[G.winner]++;
+    el.rSL.textContent = S.series[0]; el.rSR.textContent = S.series[1];
+    if (G.winner < 0) { title = '비겼어요!'; line = '둘이 같은 순간에 틀렸어요. 정말 아슬아슬했어요!'; }
+    else {
+      title = SIDE_NAME[G.winner] + ' 승!'; el.rTitle.classList.add(G.winner === 0 ? 'L' : 'R');
+      const lo = 1 - G.winner, why = G.pl[lo] ? G.pl[lo].why : '';
+      line = why === 'slow' ? SIDE_NAME[lo] + '가 너무 오래 걸렸어요.' : why === 'timeout' ? SIDE_NAME[lo] + '가 한참 멈춰 있었어요.' : why === 'chord' ? SIDE_NAME[lo] + '가 두 소리를 함께 누르지 못했어요.' : SIDE_NAME[lo] + '가 레벨 ' + G.level + '에서 먼저 틀렸어요.';
+    }
+    el.rS1l.firstChild.textContent = '지나온 레벨'; el.rS1.textContent = G.cleared;
+  } else {
+    el.rBigBox.hidden = false; el.rScoreBox.hidden = true;
+    const cl = G.cleared;
+    el.rBig.textContent = cl; el.rBigUnit.textContent = '레벨 클리어';
+    const prev = G.mode === 'solo' ? S.best : S.bestCoop;
+    if (cl > prev) { rec = true; if (G.mode === 'solo') { S.best = cl; store.set(KEY_BEST, cl); } else { S.bestCoop = cl; store.set(KEY_COOP, cl); } }
+    if (G.mode === 'solo') title = cl === 0 ? '아쉬워요! 한 번 더!' : cl < 4 ? '좋은 시작이에요!' : cl < 7 ? '기억력이 좋아요!' : cl < 10 ? '음악 천재예요!' : '전설의 지휘자!';
+    else title = cl === 0 ? '다음엔 꼭 맞춰요!' : cl < 4 ? '합창이 시작됐어요!' : cl < 7 ? '호흡이 척척이에요!' : cl < 10 ? '멋진 합창단이에요!' : '전설의 합창단!';
+    line = cl === 0 ? '하트를 모두 잃었어요. 켜지는 순서를 소리 내어 따라 해 보세요.' : '레벨 ' + G.level + '에서 하트를 모두 잃었어요.' + (G.song.length ? ' 그래도 노래가 ' + G.song.length + '마디 만들어졌어요!' : '');
+    el.rS1l.firstChild.textContent = '완벽한 연속'; el.rS1.textContent = G.bestStreak + '번';
+  }
+  S.newRecord = rec;
+  el.rTitle.textContent = title; el.rBadge.hidden = !rec; el.rLine.textContent = line;
+  el.rS2.textContent = notes + '음'; el.rS3.textContent = fmtTime(G.t);
+  const best = G.mode === 'solo' ? S.best : S.bestCoop;
+  el.rBestLine.firstChild.textContent = G.mode === 'coop' ? '합창 최고 기록 ' : '최고 기록 ';
+  el.rBest.textContent = best > 0 ? best + '레벨 클리어' : '-';
+  el.btnAgain.textContent = G.mode === 'vs' ? '한 판 더!' : G.mode === 'coop' ? '다시 부르기' : '다시 하기';
+  el.btnSong.hidden = !G.song.length; el.btnSong.textContent = '내 노래 듣기';
+  showOnly('over'); releaseAll();
+}
+function stopSong() { if (S.songTimer) { clearTimeout(S.songTimer); S.songTimer = 0; } el.btnSong.textContent = '내 노래 듣기'; }
+function playMySong() {
+  const G = S.G; if (!G || !G.song.length) return;
+  Sound.ensure(); if (Sound.muted) { Sound.setMuted(false); uiMute(); }
+  stopSong();
+  // the audio context needs a moment after a resume; the song is scheduled on the audio clock
+  const len = Sound.song(G.song);
+  el.btnSong.textContent = '♪ 연주 중…';
+  S.songTimer = setTimeout(() => { S.songTimer = 0; el.btnSong.textContent = '내 노래 다시 듣기'; }, Math.max(500, len * 1000 + 300));
+}
+
+// =====================================================================
+// INPUT: pointer + touch + mouse, one count per contact, keyboard
+// =====================================================================
+// A finger can arrive as pointer events, touch events, or (on some whiteboards) only emulated mouse events.
+// All paths feed pressAt. Every contact is tracked by its own key (source + id), so any number of fingers work at once and
+// a fast re-tap is always a new press. A press that repeats a press from ANOTHER path at the same spot within 120 ms is the
+// same finger (each source can be the duplicate of a press only once). Mouse presses within 700 ms of touch activity are
+// emulated duplicates.
+const contacts = new Map();   // key -> contact { keys:Set, t, b, pad }
+const recent = [];            // { t, src, x, y, srcs:Set, ct }
+const holdN = {};             // pvKey -> number of contacts / keys holding that pad
+const keysDown = new Map();   // code -> {b, pad}
+let lastTouchAt = -1e9;
+function releaseAll() {
+  contacts.clear(); recent.length = 0; keysDown.clear();
+  for (const k in holdN) delete holdN[k];
+}
+function ctKey(src, id) { return src + ':' + id; }
+function playable() { return S.view === 'play' && S.G && !S.paused; }
+function padDown(b, pad) {
+  const G = S.G; if (!G) return;
+  const k = pvKey(b, pad);
+  holdN[k] = (holdN[k] || 0) + 1; S.downs[b + ':' + pad] = (S.downs[b + ':' + pad] || 0) + 1;
+  const v = pvOf(b, pad);
+  if (G.phase === 'input') {
+    let r;
+    if (G.mode === 'coop') r = pressCoop(G, b, pad);
+    else if (G.mode === 'vs') r = press(G, b, pad);
+    else r = press(G, 0, pad);
+    handleEvents(G);
+    if (r.r === 'ignore' && !r.dup) { v.shrugUntil = S.clock + 0.22; }
+  } else if (G.phase === 'intro' || G.phase === 'clear') {
+    // free play while nothing is being asked: the singers answer every touch at once
+    const pr = padRec(b, pad); if (!pr) return;
+    v.litUntil = S.clock + 0.2; v.lit = 1; v.singUntil = S.clock + 0.3; v.bump = 1;
+    noteBurst(pr, PAD_COL[pad], true); addSparks(pr, PAD_COL[pad], 3);
+    Sound.note(pad, 0.45, 0.14, 0);
+  } else {   // while the tune is being shown (or after a mistake) the singers only shrug: no sound that could confuse the memory
+    v.shrugUntil = S.clock + 0.25; Sound.shrug();
+  }
+}
+function padUp(b, pad) {
+  const k = pvKey(b, pad);
+  holdN[k] = Math.max(0, (holdN[k] || 0) - 1);
+}
+function endContact(ct) {
+  if (ct.dead) return; ct.dead = true;
+  for (const k of ct.keys) contacts.delete(k);
+  if (ct.pad >= 0) padUp(ct.b, ct.pad);
+}
+function pressAt(src, id, x, y, isTouch) {
+  const now = performance.now();
+  if (isTouch) lastTouchAt = now; else if (src === 'mouse' && now - lastTouchAt < 700) return false;
+  Sound.ensure();
+  const k = ctKey(src, id);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const r = recent[i];
+    if (now - r.t > 400) { recent.splice(i, 1); continue; }
+    if (now - r.t < 120 && !r.srcs.has(src) && Math.abs(r.x - x) < 9 && Math.abs(r.y - y) < 9) {   // the same finger seen through another event path
+      r.srcs.add(src);
+      if (r.ct && !r.ct.dead) { r.ct.keys.add(k); contacts.set(k, r.ct); }
+      return false;
+    }
+  }
+  const ex = contacts.get(k); if (ex) endContact(ex);   // the old contact's "up" never came
+  const rec = { t: now, src, x, y, srcs: new Set([src]), ct: null };
+  recent.push(rec);
+  if (!playable()) return false;
+  const z = padAt(x, y); if (!z) return false;
+  const ct = { keys: new Set([k]), t: now, b: z.b, pad: z.pad, dead: false };
+  rec.ct = ct; contacts.set(k, ct);
+  padDown(z.b, z.pad);
+  return true;
+}
+function pressEnd(src, id) {
+  const ct = contacts.get(ctKey(src, id)); if (!ct) return;
+  endContact(ct);
+}
+const isTouchPtr = (e) => e.pointerType !== 'mouse';
+cv.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button > 0) return;   // left button only (touch and pen report 0 or -1)
+  if (pressAt('pointer', e.pointerId, e.clientX, e.clientY, isTouchPtr(e))) e.preventDefault();
+});
+window.addEventListener('pointerup', (e) => pressEnd('pointer', e.pointerId));
+window.addEventListener('pointercancel', (e) => pressEnd('pointer', e.pointerId));
+cv.addEventListener('touchstart', (e) => {
+  lastTouchAt = performance.now();
+  for (const t of e.changedTouches) pressAt('touch', t.identifier, t.clientX, t.clientY, true);
+  if (e.cancelable) e.preventDefault();   // no emulated mouse events, no scrolling
+}, { passive: false });
+window.addEventListener('touchmove', () => { lastTouchAt = performance.now(); }, { passive: true });
+window.addEventListener('touchend', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+window.addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+cv.addEventListener('mousedown', (e) => { if (e.button > 0) return; pressAt('mouse', 0, e.clientX, e.clientY, false); });
+window.addEventListener('mouseup', () => pressEnd('mouse', 0));
+window.addEventListener('blur', () => { /* focus can shift right after a touch starts on some boards: do not pause or release here */ });
+
+// keyboard: every singer has a key (solo 1-9 / A-L, vs left 1-9 and right Q-O, coop 1: 1234, 2: QWER, 3: ASDF, 4: ZXCV)
+function keyPad(code) {
+  const G = S.G; if (!G) return null;
+  if (G.mode === 'solo') {
+    let i = KEYSETS[0].indexOf(code); if (i < 0) i = KEYSETS[2].indexOf(code); if (i < 0) i = NUMPAD.indexOf(code);
+    return i >= 0 && i < G.spec.n ? { b: 0, pad: i } : null;
+  }
+  if (G.mode === 'vs') {
+    let i = KEYSETS[0].indexOf(code); if (i >= 0 && i < G.spec.n) return { b: 0, pad: i };
+    i = KEYSETS[1].indexOf(code); if (i >= 0 && i < G.spec.n) return { b: 1, pad: i };
+    return null;
+  }
+  for (let p = 0; p < G.P; p++) {
+    const j = KEYSETS[p].indexOf(code), bd = LAY.boards[p];
+    if (j >= 0 && bd && j < bd.pads.length) return { b: p, pad: bd.pads[j].pad };
+  }
+  return null;
+}
+const MENU_KEYS = new Set(['Space', 'Enter']);
+window.addEventListener('keydown', (e) => {
+  const code = e.code;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const onBtn = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  if (playable()) {
+    const pd = keyPad(code);
+    if (pd) { e.preventDefault(); S.kb = true; if (!e.repeat && !keysDown.has(code)) { Sound.ensure(); keysDown.set(code, pd); padDown(pd.b, pd.pad); } return; }
+  }
+  if (MENU_KEYS.has(code)) {
+    if (onBtn) return;   // the browser clicks the focused button itself
+    if (e.repeat) { e.preventDefault(); return; }
+    Sound.ensure();
+    if (S.paused) { e.preventDefault(); resumeGame(); return; }
+    if (S.view === 'title') { e.preventDefault(); startGame(); return; }
+    if (S.G && S.G.phase === 'over' && S.resultShown) { e.preventDefault(); startGame(); return; }
+    return;
+  }
+  if (code === 'Escape' || code === 'KeyP') { if (S.paused) resumeGame(); else pauseGame(); return; }
+  if (code === 'KeyM') { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (code === 'KeyR') { if (S.paused || (S.G && S.G.phase === 'over')) { e.preventDefault(); startGame(); } return; }
+  if (S.view === 'title' && !S.paused) {
+    const modes = ['solo', 'vs', 'coop'];
+    if (code === 'ArrowLeft' || code === 'ArrowRight') { e.preventDefault(); const i = clamp(modes.indexOf(S.mode) + (code === 'ArrowRight' ? 1 : -1), 0, 2); setSel(modes[i], S.players, true); Sound.ui(); layout(); return; }
+    if ((code === 'ArrowUp' || code === 'ArrowDown') && S.mode === 'coop') { e.preventDefault(); setSel('coop', clamp(S.players + (code === 'ArrowDown' ? 1 : -1), 2, 4), true); Sound.ui(); return; }
+  }
+});
+window.addEventListener('keyup', (e) => {
+  const pd = keysDown.get(e.code); if (!pd) return;
+  keysDown.delete(e.code); padUp(pd.b, pd.pad);
+});
+
+// buttons. A tap can come as pointer, touch or mouse events (and a click for keyboards), so every on-screen control
+// listens on all of them; a 120 ms window per control keeps one tap = one action.
+function onTap(node, fn) {
+  let sx = 0, sy = 0, armed = false, lastAt = -1e9;
+  const fire = (e) => { const t = performance.now(); if (t - lastAt < 120) return; lastAt = t; fn(e); };
+  const down = (x, y) => { sx = x; sy = y; armed = true; };
+  const up = (x, y) => { const ok = armed && Math.hypot(x - sx, y - sy) < 16; armed = false; return ok; };
+  node.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button > 0) return; if (e.pointerType !== 'mouse') lastTouchAt = performance.now(); down(e.clientX, e.clientY); });
+  node.addEventListener('pointerup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('touchstart', (e) => { lastTouchAt = performance.now(); const t = e.changedTouches[0]; if (t) down(t.clientX, t.clientY); }, { passive: true });
+  node.addEventListener('touchend', (e) => {
+    lastTouchAt = performance.now();
+    const t = e.changedTouches[0];
+    if (t && up(t.clientX, t.clientY)) fire(e);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  node.addEventListener('mousedown', (e) => { if (e.button <= 0 && performance.now() - lastTouchAt > 700) down(e.clientX, e.clientY); });
+  node.addEventListener('mouseup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('click', (e) => { armed = false; fire(e); });
+}
+function uiMute() {
+  el.btnMute.classList.toggle('muted', Sound.muted);
+  el.btnMute.setAttribute('aria-label', Sound.muted ? '소리 켜기' : '소리 끄기');
+}
+function pickSel(mode, players) { Sound.ensure(); Sound.ui(); setSel(mode, players, true); layout(); }
+onTap($('btnStart'), () => { Sound.ensure(); Sound.ui(); startGame(); });
+onTap(el.btnSolo, () => pickSel('solo', S.players));
+onTap(el.btnVs, () => { S.series = [0, 0]; pickSel('vs', S.players); });
+onTap(el.btnCoop, () => pickSel('coop', S.players));
+el.btnP.forEach((b, i) => onTap(b, () => pickSel('coop', i + 2)));
+onTap(el.btnAgain, () => { Sound.ensure(); startGame(); });
+onTap(el.btnSong, () => playMySong());
+onTap($('btnOverTitle'), () => { Sound.ensure(); Sound.ui(); S.series = [0, 0]; toTitle(); });
+onTap($('btnResume'), () => { Sound.ensure(); resumeGame(); });
+onTap($('btnPauseRestart'), () => { Sound.ensure(); S.series = [0, 0]; startGame(); });
+onTap($('btnPauseTitle'), () => { Sound.ensure(); Sound.ui(); S.series = [0, 0]; toTitle(); });
+onTap(el.btnPause, () => { Sound.ensure(); Sound.ui(); pauseGame(); });
+onTap(el.btnMute, () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+// pause when the page is hidden. (No pause on window blur: focus can shift right after a touch starts on some boards.)
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+window.addEventListener('pagehide', () => pauseGame());
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  });
+}
+let lastW = 0, lastH = 0;
+function onResize() {
+  const changed = Math.abs(window.innerWidth - lastW) > 1 || Math.abs(window.innerHeight - lastH) > 1;
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  if (changed) releaseAll();
+  layout();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+
+// =====================================================================
+// LOOP + BOOT
+// =====================================================================
+let lastTs = 0, slowN = 0, slowSum = 0;
+function advanceGame(G, dt) {
+  S.acc += dt;
+  let n = 0;
+  while (S.acc >= STEP && n < 12) {
+    step(G); S.acc -= STEP; n++;
+    if (G.ev.length) handleEvents(G);
+    if (G.phase === 'over') break;
+  }
+  if (S.acc > STEP * 12) S.acc = 0;
+}
+function tick(dt) {
+  S.clock += dt; S.tickAt = performance.now();
+  if (S.view === 'play' && S.G && !S.paused) {
+    const G = S.G;
+    if (G.ev.length) handleEvents(G);
+    advanceGame(G, dt);
+    if (G.phase === 'over') { S.overT += dt; if (S.overT > (G.mode === 'vs' ? 1.6 : 1.1) && !S.resultShown) showResult(); }
+  }
+  stepFx(dt);
+}
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  // low-end devices: if frames keep taking too long, render at a lower resolution (2 -> 1.5 -> 1)
+  if (!S.paused && !document.hidden && dt > 0 && dt < 0.5 && dprStep < DPR_STEPS.length - 1) {
+    slowSum += dt; slowN++;
+    if (slowN >= 90) { if (slowSum / slowN > 0.0235 && (window.devicePixelRatio || 1) > DPR_STEPS[dprStep + 1]) { dprStep++; layout(); } slowN = 0; slowSum = 0; }
+  }
+  if (dt < 0) dt = 0; if (dt > 0.05) dt = 0.05;
+  const t0 = performance.now();
+  if (layoutSig() !== S.sig) layout();
+  if (S.paused) { S.clock += dt; render(); }
+  else {
+    tick(dt);
+    if (S.view === 'title') mascotScene(reduceMotion ? 0.4 : S.clock);
+    render();
+  }
+  const ms = performance.now() - t0, P = S.perf;
+  P.ms = P.ms * 0.95 + ms * 0.05; if (ms > P.max) P.max = ms; P.frames++;
+}
+function snapshot() {
+  const G = S.G;
+  const np = G ? (G.mode === 'vs' ? 2 : 1) : 0;
+  return {
+    view: S.view, mode: S.mode, players: S.players, paused: S.paused, best: S.best, bestCoop: S.bestCoop, newRecord: S.newRecord, resultShown: S.resultShown, series: S.series.slice(),
+    phase: G ? G.phase : '', level: G ? G.level : 0, cleared: G ? G.cleared : 0, hearts: G ? G.hearts : 0, maxHearts: G ? G.maxHearts : 0, tries: G ? G.tries : 0, t: G ? G.t : 0,
+    kind: G ? G.spec.kind : '', n: G ? G.spec.n : 0, len: G ? G.expect.length : 0, gap: G ? G.spec.gap : 0, seq: G ? G.seq.map((s) => s.slice()) : [], expect: G ? G.expect.map((s) => s.slice()) : [],
+    owner: G && G.owner ? G.owner.slice() : null, winner: G ? G.winner : -1, reason: G ? G.reason : '', song: G ? G.song.length : 0, streak: G ? G.streak : 0, bestStreak: G ? G.bestStreak : 0,
+    pos: G ? G.pl.map((p) => p.pos) : [], done: G ? G.pl.map((p) => p.done) : [], out: G ? G.pl.map((p) => p.out) : [], want: G ? Array.from({ length: np }, (_, p) => wantNowSafe(G, p)) : [],
+    contacts: contacts.size, holds: Object.assign({}, holdN), downs: Object.assign({}, S.downs), dpr: LAY.dpr, port: LAY.port, kb: S.kb,
+  };
+}
+window.__game = {
+  get state() { return snapshot(); },
+  get layout() { return { W: LAY.W, H: LAY.H, dpr: LAY.dpr, port: LAY.port, region: Object.assign({}, LAY.region), boards: LAY.boards.map((b) => ({ b: b.b, x: b.x, y: b.y, w: b.w, h: b.h, who: b.who, n: b.pads.length })), pads: LAY.pads.map((p) => ({ b: p.b, pad: p.pad, who: p.who, x: p.x, y: p.y, hx: p.hx, hy: p.hy, s: p.s, R: p.R, x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1 })), safe: { t: LAY.sat, b: LAY.sab, l: LAY.sal, r: LAY.sar } }; },
+  get G() { return S.G; },
+  get perf() { return Object.assign({}, S.perf); },
+  start(o) { o = o || {}; if (o.mode) S.mode = o.mode; if (o.players) S.players = o.players; setSel(S.mode, S.players, false); startGame(); if (o.level) { /* QA only: jump straight to a level */ const G = S.G; G.level = o.level - 1; G.spec = null; startLevel(G); handleEvents(G); layout(); } },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  press(b, pad) { if (!playable()) return null; padDown(b, pad); padUp(b, pad); },
+  // QA: step the simulation faster than real time
+  advance(sec) { const G = S.G; if (!G) return; const n = Math.round(sec / STEP); for (let i = 0; i < n; i++) { if (G.phase === 'over') break; step(G); if (G.ev.length) handleEvents(G); } },
+  advanceTo(phase, maxSec) { const G = S.G; if (!G) return; const n = Math.round((maxSec || 60) / STEP); for (let i = 0; i < n && G.phase !== phase && G.phase !== 'over'; i++) { step(G); if (G.ev.length) handleEvents(G); } return G.phase; },
+  logic: { newGame, step, press, pressCoop, levelSpec, genSeq, coopOwners, simulate, levelTrial, SKILLS, STEP },
+};
+
+lastW = window.innerWidth; lastH = window.innerHeight;
+uiMute();
+toTitle();
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

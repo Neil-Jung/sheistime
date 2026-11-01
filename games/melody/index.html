@@ -1,0 +1,2382 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>도레미</title>
+<meta name="theme-color" content="#cfeaff">
+<meta name="description" content="떨어지는 음표가 건반에 닿을 때 탭하면 실로폰이 동요를 연주해요. 혼자서 곡 이어 치기, 2~4명이 건반을 나눠 맡는 합주까지!">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Dodum&display=swap">
+<style>
+/* Visual world: a sunny music-room meadow. A baby bear stands under a candy-coloured xylophone with two mallets; note blocks slide down eight
+   lanes and land on the round bars. Every shape wears the same chunky indigo outline. The HUD is DOM; the stage is drawn on the canvas. */
+:root {
+  --ink: #2b2550;
+  --ink2: #4a4378;
+  --paper: #fffaf0;
+  --cream: #fff3d6;
+  --sky: #cfeaff;
+  --dim: #6a6492;
+  --gold: #ffc43d;
+  --gold-deep: #e29a12;
+  --good: #1f9d55;
+  --warn: #e8590c;
+  --danger: #e0364f;
+  --k0: #ff6b6b; --k1: #ff9f43; --k2: #ffd23f; --k3: #5fd068; --k4: #2ec4b6; --k5: #4a90ff; --k6: #9b6bff; --k7: #ff7eb6;
+  --panel: rgba(255, 250, 240, 0.97);
+  --hud-bg: rgba(255, 250, 240, 0.92);
+  --font-d: "Black Han Sans", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --font-b: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden;
+  background: #cfeaff; color: var(--ink);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: #cfeaff; }
+#cv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+body.paused #hud * { animation-play-state: paused !important; }
+body.paused #banner, body.paused #stamp, body.paused #count { visibility: hidden; }
+
+/* ---------- HUD ---------- */
+#hud {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 5; pointer-events: none;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) calc(env(safe-area-inset-right, 0px) + 8px) 0 calc(env(safe-area-inset-left, 0px) + 8px);
+}
+#hud[hidden] { display: none; }
+#hud .r1, #hud .r2 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#hud .r1 { height: 40px; }
+#hud .r2 { height: 28px; margin-top: 3px; }
+.icon-btn {
+  flex: none; width: 40px; height: 40px; border-radius: 13px; padding: 0;
+  border: 2px solid var(--ink); background: var(--hud-bg); color: var(--ink);
+  display: grid; place-items: center; touch-action: manipulation; pointer-events: auto;
+  box-shadow: 0 3px 0 rgba(43, 37, 80, 0.55);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(43, 37, 80, 0.55); }
+.icon-btn svg { width: 20px; height: 20px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+#songBox { flex: 1; min-width: 0; padding: 0 4px; line-height: 1.15; }
+#hTitle { display: block; font-family: var(--font-d); font-weight: normal; font-size: 17px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
+#hSub { display: block; font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8); }
+.pill {
+  flex: none; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 12px;
+  background: var(--hud-bg); border-radius: 14px; border: 2px solid var(--ink); box-shadow: 0 3px 0 rgba(43, 37, 80, 0.55);
+}
+.pill b { font-family: var(--font-d); font-weight: normal; font-size: 24px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.pill small { font-family: var(--font-d); font-size: 13px; color: var(--ink2); padding-top: 4px; }
+#pillScore { min-width: 104px; }
+#pillScore.pop b { animation: pop 0.3s ease-out; }
+@keyframes pop { 0% { transform: scale(1.3); } 100% { transform: none; } }
+#hearts { flex: none; display: flex; align-items: center; gap: 2px; padding: 3px 8px 3px 6px; background: var(--hud-bg); border: 2px solid var(--ink); border-radius: 999px; height: 28px; }
+#hearts svg { width: 20px; height: 20px; display: block; transition: transform 0.2s; }
+#hearts svg .hf { fill: #ff5470; stroke: var(--ink); stroke-width: 2.2; stroke-linejoin: round; transition: fill 0.2s; }
+#hearts svg.lost .hf { fill: rgba(43, 37, 80, 0.12); stroke: rgba(43, 37, 80, 0.45); }
+#hearts svg.hurt { animation: hurt 0.45s ease-out; }
+@keyframes hurt { 0% { transform: scale(1.5) rotate(-12deg); } 50% { transform: scale(0.85) rotate(8deg); } 100% { transform: none; } }
+#pips { display: flex; align-items: center; gap: 3px; margin-left: 4px; }
+#pips i { width: 8px; height: 8px; border-radius: 50%; border: 1.8px solid var(--ink); background: transparent; transition: background 0.15s; }
+#pips i.on { background: var(--warn); }
+#hearts.low { animation: beat 0.55s ease-in-out infinite; }
+@keyframes beat { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.chip {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-d); font-size: 14px; line-height: 1; height: 28px; padding: 3px 11px 0; border-radius: 999px;
+  background: var(--hud-bg); border: 2px solid var(--ink); color: var(--ink); white-space: nowrap;
+}
+.chip b { font-weight: normal; color: var(--warn); margin: 0 1px; font-variant-numeric: tabular-nums; }
+.chip.off { opacity: 0.55; }
+.chip.pop { animation: pop 0.3s ease-out; }
+#r2fill { flex: 1; min-width: 0; }
+#chipDone { margin-left: auto; }
+#coach { position: absolute; left: 16px; right: 16px; text-align: center; opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 6; }
+#coach span { display: inline-block; padding: 7px 15px 6px; border-radius: 14px; background: var(--panel); border: 2px solid var(--ink); font-family: var(--font-d); font-size: 16px; color: var(--ink); box-shadow: 0 3px 0 rgba(43, 37, 80, 0.5); }
+#coach.show { opacity: 1; }
+.big {
+  position: absolute; left: 0; right: 0; text-align: center; opacity: 0; white-space: nowrap; pointer-events: none; z-index: 6;
+  font-family: var(--font-d); line-height: 1.08; color: #fff;
+  text-shadow: 0 4px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
+#banner b { display: block; font-weight: normal; font-size: 40px; letter-spacing: 1px; color: #ffe27a; }
+#banner small { display: inline-block; margin-top: 6px; font-size: 18px; color: var(--ink); text-shadow: none; padding: 3px 12px 2px; border-radius: 999px; background: var(--panel); border: 2px solid var(--ink); }
+#banner.show { animation: bannerIn 2.4s ease-out forwards; }
+@keyframes bannerIn { 0% { opacity: 0; transform: translateY(-30px); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(8px); } }
+#stamp b { display: block; font-weight: normal; font-size: 52px; color: #ffe27a; }
+#stamp small { display: block; font-size: 22px; margin-top: 2px; }
+#stamp.show { animation: stampIn 2s ease-out forwards; }
+@keyframes stampIn { 0% { opacity: 0; transform: scale(2) rotate(-8deg); } 12% { opacity: 1; transform: scale(0.95) rotate(-4deg); } 20% { transform: scale(1) rotate(-4deg); } 80% { opacity: 1; transform: scale(1) rotate(-4deg); } 100% { opacity: 0; transform: scale(1) rotate(-4deg); } }
+#count { font-size: 84px; }
+#count.show { animation: countIn 0.55s ease-out forwards; }
+@keyframes countIn { 0% { opacity: 0; transform: scale(1.8); } 25% { opacity: 1; transform: scale(0.96); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+#keys { position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink2); pointer-events: none; z-index: 4; }
+#keys[hidden] { display: none; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 60px) calc(env(safe-area-inset-right, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 14px) calc(env(safe-area-inset-left, 0px) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+  background: rgba(207, 234, 255, 0.5);
+}
+.overlay[hidden] { display: none; }
+#scrPause, #scrSync { justify-content: center; background: rgba(207, 234, 255, 0.6); z-index: 30; }
+#scrSync { z-index: 40; }
+#scrOver { background: rgba(207, 234, 255, 0.6); }
+.card {
+  position: relative; flex: none; width: min(400px, 100%); margin: auto;
+  background: var(--panel); color: var(--ink);
+  border: 2.5px solid var(--ink); border-radius: 24px;
+  box-shadow: 0 8px 0 rgba(43, 37, 80, 0.7);
+  padding: 20px 18px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+  overflow: clip;
+}
+.card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 9px;
+  background: linear-gradient(90deg, var(--k0) 0 12.5%, var(--k1) 12.5% 25%, var(--k2) 25% 37.5%, var(--k3) 37.5% 50%, var(--k4) 50% 62.5%, var(--k5) 62.5% 75%, var(--k6) 75% 87.5%, var(--k7) 87.5% 100%);
+}
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.mascot { display: block; width: 260px; height: 128px; margin: 6px auto 0; border-radius: 16px; }
+.mascot.small { width: 200px; height: 100px; margin: 2px auto 0; }
+.logo {
+  margin: 2px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 62px; line-height: 1.05; letter-spacing: 3px; white-space: nowrap; color: var(--paper);
+  text-shadow: 0 5px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
+.logo span { display: inline-block; animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 2.8s ease-in-out infinite; }
+.logo span:nth-child(1) { color: var(--k0); rotate: -4deg; }
+.logo span:nth-child(2) { color: var(--k2); rotate: 3deg; animation-delay: 0.1s, 0.3s; }
+.logo span:nth-child(3) { color: var(--k5); rotate: -3deg; animation-delay: 0.2s, 0.6s; }
+@keyframes logoIn { from { transform: translateY(-34px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -8px; } 95% { translate: 0 0; } }
+.hook { margin: 10px 0 8px; font-size: 16.5px; color: var(--ink2); line-height: 1.45; }
+.pick-label { margin: 8px 0 5px; font-size: 13px; color: var(--dim); text-align: left; font-weight: 700; }
+.pick-label[hidden], .sizes[hidden] { display: none; }
+.modes, .sizes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sizes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mode, .size {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px; padding: 5px 4px;
+  border-radius: 14px; border: 2px solid rgba(43, 37, 80, 0.3); background: rgba(43, 37, 80, 0.05); color: var(--ink2); touch-action: manipulation;
+}
+.mode b, .size b { font-family: var(--font-d); font-weight: normal; font-size: 20px; line-height: 1.1; padding-top: 3px; color: var(--ink); white-space: nowrap; }
+.mode small, .size small { font-size: 11.5px; line-height: 1.2; white-space: nowrap; }
+.mode.on, .size.on { border-color: var(--ink); background: #ffe9a8; box-shadow: 0 3px 0 rgba(43, 37, 80, 0.55); }
+.mode:active, .size:active { transform: translateY(2px); }
+.mode-line { margin: 9px 0 0; font-size: 14px; color: var(--ink2); line-height: 1.4; min-height: 2.8em; }
+.howto {
+  background: rgba(43, 37, 80, 0.05); border: 1.5px solid rgba(43, 37, 80, 0.18); border-radius: 14px;
+  padding: 5px 12px; text-align: left; font-size: 14.5px; line-height: 1.4; color: var(--ink);
+}
+.howto p { margin: 7px 0; display: flex; gap: 10px; align-items: center; }
+.howto svg { flex: none; width: 40px; height: 40px; }
+.howto b { color: var(--warn); font-weight: 700; }
+.best-line { margin: 8px 0 8px; font-size: 15.5px; color: var(--dim); }
+.best-line b { color: var(--ink); font-weight: normal; font-family: var(--font-d); font-size: 22px; }
+.best-line b.none { font-family: var(--font-b); font-weight: 700; font-size: 15.5px; color: var(--warn); }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; border-radius: 16px;
+  border: 2.5px solid var(--ink); background: var(--gold); color: var(--ink);
+  font-family: var(--font-d); font-size: 27px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 var(--gold-deep); touch-action: manipulation; pointer-events: auto;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--gold-deep); }
+.btn.sub {
+  background: transparent; color: var(--ink); border: 2px solid rgba(43, 37, 80, 0.5);
+  box-shadow: none; font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0;
+}
+.btn.sub.arm { border-color: var(--danger); color: var(--danger); }
+.btn:focus-visible, .icon-btn:focus-visible, .back:focus-visible, .mode:focus-visible, .size:focus-visible { outline: 3px solid var(--k5); outline-offset: 3px; }
+.keyhint { margin: 9px 0 0; font-size: 12.5px; color: var(--dim); letter-spacing: -0.2px; }
+.keyhint.desk { display: none; }
+@media (hover: hover) and (pointer: fine) { .keyhint.desk { display: block; } }
+.back {
+  position: absolute; left: calc(env(safe-area-inset-left, 0px) + 10px); top: calc(env(safe-area-inset-top, 0px) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--ink); border: 2px solid var(--ink); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700; box-shadow: 0 3px 0 rgba(43, 37, 80, 0.55);
+}
+.res-title { margin: 4px 0 0; font-size: 28px; font-weight: normal; font-family: var(--font-d); color: var(--ink); letter-spacing: 1px; }
+.pause-line { margin: 10px 0 8px; font-size: 16.5px; color: var(--ink2); line-height: 1.45; }
+.off-line { margin: 0 0 14px; font-size: 13.5px; color: var(--dim); }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 58px; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 22px; color: var(--ink2); margin-left: 4px; }
+.res-line { margin: 2px 0 0; font-family: var(--font-d); font-size: 21px; color: var(--warn); }
+.badge {
+  display: inline-block; margin-top: 8px; padding: 4px 16px 5px; border-radius: 12px;
+  background: var(--gold); color: var(--ink); font-family: var(--font-d); font-size: 21px; border: 2px solid var(--ink);
+  animation: wob2 0.9s ease-in-out infinite;
+}
+.badge[hidden] { display: none; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.songs { margin: 10px 0 0; padding: 0; list-style: none; text-align: left; max-height: 168px; overflow-y: auto; touch-action: pan-y; }
+.songs li { display: grid; grid-template-columns: minmax(0, 1fr) 96px 42px; align-items: center; gap: 8px; font-size: 14px; padding: 3px 2px; }
+.songs li span.t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.songs li .bar { height: 10px; border-radius: 6px; background: rgba(43, 37, 80, 0.14); overflow: hidden; border: 1.5px solid var(--ink); }
+.songs li .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--k3), var(--k2)); }
+.songs li.part .bar i { background: linear-gradient(90deg, var(--k0), var(--k1)); }
+.songs li b { font-family: var(--font-d); font-weight: normal; font-size: 15px; text-align: right; font-variant-numeric: tabular-nums; }
+.stats { margin: 10px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stats div { background: rgba(43, 37, 80, 0.06); border: 1.5px solid rgba(43, 37, 80, 0.18); border-radius: 12px; padding: 6px 2px 5px; font-size: 12px; color: var(--dim); min-width: 0; }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 19px; color: var(--ink); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.team { margin: 8px 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.team[hidden] { display: none; }
+.team span { font-size: 12.5px; padding: 3px 10px 2px; border-radius: 999px; border: 2px solid var(--ink); background: #fff; color: var(--ink); white-space: nowrap; }
+.team span b { font-family: var(--font-d); font-weight: normal; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 .btn.sub { font-size: 16px; min-height: 46px; margin-top: 10px; padding: 0 4px; }
+.seed { margin: 6px 0 0; font-size: 11px; color: var(--dim); opacity: 0.8; }
+.seed[hidden] { display: none; }
+
+/* sync screen */
+#syncDot {
+  width: 140px; height: 140px; margin: 14px auto 8px; border-radius: 50%; border: 4px solid var(--ink);
+  background: radial-gradient(circle at 36% 30%, #fff6c8, var(--gold) 55%, #e08a1e); box-shadow: 0 0 0 4px rgba(255, 196, 61, 0.3), 0 6px 0 rgba(43, 37, 80, 0.6);
+  opacity: 0.5; transform: scale(0.9); touch-action: manipulation;
+}
+#syncDot.lit { opacity: 1; transform: scale(1.04); box-shadow: 0 0 0 10px rgba(255, 196, 61, 0.45), 0 0 40px rgba(255, 196, 61, 0.8), 0 6px 0 rgba(43, 37, 80, 0.6); }
+#syncDots { display: flex; justify-content: center; gap: 7px; margin: 4px 0 8px; }
+#syncDots i { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(43, 37, 80, 0.5); }
+#syncDots i.skip { opacity: 0.35; }
+#syncDots i.on { background: var(--gold); border-color: var(--ink); }
+#syncMsg { margin: 4px 0 2px; min-height: 28px; font-family: var(--font-d); font-size: 21px; color: var(--warn); }
+.syncval { margin: 0 0 6px; font-size: 14px; color: var(--dim); }
+.syncval b { color: var(--ink); font-family: var(--font-d); font-weight: normal; font-size: 18px; }
+
+@media (min-width: 600px) and (min-height: 700px) {
+  .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 14px); }
+}
+/* wide screens: one HUD row */
+@media (min-width: 600px) {
+  #hud { display: flex; align-items: center; gap: 8px; }
+  #hud[hidden] { display: none; }
+  #hud .r1, #hud .r2 { display: contents; }
+  #hud .r2 { margin-top: 0; }
+  #songBox { order: 3; }
+  #btnPause { order: 1; } #btnMute { order: 2; }
+  #hearts { order: 4; } #chipCombo { order: 5; } #chipDone { order: 6; margin-left: 0; } #pillScore { order: 7; }
+  #r2fill { display: none; }
+}
+@media (max-height: 800px) {
+  .mascot { height: 112px; width: 230px; }
+  .logo { font-size: 54px; }
+  .res-big { font-size: 50px; }
+  .card { padding-top: 18px; }
+}
+@media (max-height: 700px) {
+  .mascot { display: none; }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 10px); }
+  .card { padding: 16px 16px 10px; width: min(560px, 100%); }
+  .card .dock { bottom: calc(-10px - env(safe-area-inset-bottom, 0px)); padding-top: 8px; }
+  .logo { font-size: 38px; margin-top: 0; }
+  .hook { margin: 4px 0 6px; font-size: 14px; }
+  .howto { font-size: 13px; padding: 2px 10px; }
+  .howto p { margin: 4px 0; }
+  .howto svg { width: 30px; height: 30px; }
+  .pick-label { margin: 4px 0 3px; font-size: 12px; }
+  .mode, .size { min-height: 42px; padding: 3px 4px; flex-direction: row; gap: 7px; }
+  .mode small, .size small { display: none; }
+  .mode b, .size b { font-size: 18px; }
+  .mode-line { margin-top: 5px; min-height: 0; font-size: 12.5px; }
+  .best-line { margin: 4px 0 6px; font-size: 14px; }
+  .best-line b { font-size: 16px; }
+  .btn { min-height: 46px; font-size: 22px; }
+  .keyhint { display: none !important; }
+  .res-big { font-size: 40px; margin-top: 0; line-height: 1; }
+  .res-title { font-size: 20px; margin: 0; }
+  .res-line { font-size: 16px; }
+  .badge { margin-top: 4px; font-size: 16px; padding: 2px 12px 3px; }
+  .songs { max-height: 88px; margin-top: 6px; }
+  .songs li { padding: 1px 2px; font-size: 13px; }
+  .stats { margin: 6px 0 0; }
+  .stats div { padding: 4px 2px 3px; }
+  .stats b { font-size: 16px; margin-top: 1px; }
+  .btn.sub { min-height: 44px; margin-top: 8px; font-size: 16px; }
+  #syncDot { width: 70px; height: 70px; margin: 4px auto; }
+  #banner b { font-size: 30px; } #banner small { font-size: 14px; margin-top: 2px; }
+  #stamp b { font-size: 38px; } #stamp small { font-size: 17px; }
+  #count { font-size: 60px; }
+  #hTitle { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card, #pillScore.pop b, .chip.pop, #hearts.low, #hearts svg.hurt { animation: none; }
+  #banner.show { animation: fadeOnly 2.4s linear forwards; }
+  @keyframes fadeOnly { 0% { opacity: 0; } 12% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  #stamp.show { animation: fadeOnly 2s linear forwards; transform: rotate(-4deg); }
+  #count.show { animation: fadeOnly 0.55s linear forwards; }
+  #coach, .chip, #hearts svg, #pips i { transition: none; }
+  #syncDot, #syncDot.lit { transform: none; }
+}
+/* 큰 버튼 고정: 카드가 화면보다 길면 카드 안쪽이 스크롤되고, 시작·다시 하기 버튼은 화면 아래에 늘 붙어 있어요 */
+.card .dock { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); z-index: 3; padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 10px); background: var(--paper); box-shadow: 0 0 0 100vmax var(--paper); clip-path: inset(0 -100vmax 0 -100vmax); }
+.card .dock .btn { margin-top: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="도레미 실로폰 무대"></canvas>
+  <div id="probe"></div>
+
+  <div id="hud" hidden>
+    <div class="r1">
+      <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+      </button>
+      <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+      </button>
+      <div id="songBox"><b id="hTitle">메리의 어린 양</b><small id="hSub">1번째 곡 · 70 BPM</small></div>
+      <div class="pill" id="pillScore" aria-label="점수"><b id="hScore">0</b><small>점</small></div>
+    </div>
+    <div class="r2">
+      <div id="hearts" aria-label="하트">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="hf" d="M12 21C5 15.5 2.5 12 2.5 8.6 2.5 5.9 4.6 4 7 4c1.9 0 3.8 1.1 5 3 1.2-1.9 3.1-3 5-3 2.4 0 4.5 1.9 4.5 4.6C21.5 12 19 15.5 12 21z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="hf" d="M12 21C5 15.5 2.5 12 2.5 8.6 2.5 5.9 4.6 4 7 4c1.9 0 3.8 1.1 5 3 1.2-1.9 3.1-3 5-3 2.4 0 4.5 1.9 4.5 4.6C21.5 12 19 15.5 12 21z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path class="hf" d="M12 21C5 15.5 2.5 12 2.5 8.6 2.5 5.9 4.6 4 7 4c1.9 0 3.8 1.1 5 3 1.2-1.9 3.1-3 5-3 2.4 0 4.5 1.9 4.5 4.6C21.5 12 19 15.5 12 21z"/></svg>
+        <span id="pips" aria-label="실수 칸"></span>
+      </div>
+      <div class="chip off" id="chipCombo">연속 <b id="cbN">0</b><span id="cbMul"></span></div>
+      <div id="r2fill"></div>
+      <div class="chip" id="chipDone">완성 <b id="dnN">0%</b></div>
+    </div>
+  </div>
+  <div id="coach" role="status"><span>음표가 건반에 닿을 때 그 건반을 탭!</span></div>
+  <div class="big" id="banner" aria-hidden="true"><b id="bnTitle">메리의 어린 양</b><small id="bnSub">1번째 곡 · 70 BPM</small></div>
+  <div class="big" id="stamp" aria-hidden="true"><b id="stTitle">곡 완성!</b><small id="stSub"></small></div>
+  <div class="big" id="count" aria-hidden="true">하나</div>
+  <div id="keys" hidden>건반: 1~8 또는 A S D F J K L ; · P 일시정지 · M 소리</div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot" id="mascot" width="520" height="256" aria-hidden="true"></canvas>
+      <h1 class="logo" aria-label="도레미"><span>도</span><span>레</span><span>미</span></h1>
+      <p class="hook">떨어지는 음표가 건반에 닿을 때 탭하면, 실로폰이 동요를 연주해요!</p>
+      <p class="pick-label">누구와 연주할까요?</p>
+      <div class="modes" role="radiogroup" aria-label="모드">
+        <button class="mode on" id="btnSolo" type="button" role="radio" aria-checked="true"><b>혼자서</b><small>곡 이어 치기</small></button>
+        <button class="mode" id="btnEns" type="button" role="radio" aria-checked="false"><b>같이 도레미</b><small>2~4명 합주</small></button>
+      </div>
+      <p class="pick-label" id="pplLabel" hidden>몇 명이 함께 연주할까요?</p>
+      <div class="sizes" id="pplRow" role="radiogroup" aria-label="합주 인원" hidden>
+        <button class="size on" id="btnP2" type="button" role="radio" aria-checked="true"><b>2명</b><small>건반 반반</small></button>
+        <button class="size" id="btnP3" type="button" role="radio" aria-checked="false"><b>3명</b><small>2~3건반씩</small></button>
+        <button class="size" id="btnP4" type="button" role="radio" aria-checked="false"><b>4명</b><small>2건반씩</small></button>
+      </div>
+      <p class="mode-line" id="modeLine"></p>
+      <p class="best-line" id="bestLine"><span id="bestLab">내 최고 기록</span> <b id="tBest" class="none">아직 기록이 없어요</b></p>
+      <div class="howto">
+        <p>
+          <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#e8f4ff" stroke="#2b2550" stroke-width="2"/><rect x="9" y="6" width="22" height="11" rx="5" fill="#ff9f43" stroke="#2b2550" stroke-width="2"/><rect x="7" y="24" width="26" height="9" rx="4.5" fill="#4a90ff" stroke="#2b2550" stroke-width="2"/><path d="M20 19v3m-2.5-1.8 2.5 2.5 2.5-2.5" fill="none" stroke="#2b2550" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>음표 블록</b>이 <b>건반</b>에 닿을 때 그 건반을 탭해요. 키보드는 1~8이에요.</span>
+        </p>
+        <p>
+          <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#e8f4ff" stroke="#2b2550" stroke-width="2"/><rect x="6" y="9" width="12" height="11" rx="5" fill="#ffd23f" stroke="#2b2550" stroke-width="2"/><rect x="22" y="9" width="12" height="11" rx="5" fill="#9b6bff" stroke="#2b2550" stroke-width="2"/><path d="M18 14.5h4" stroke="#2b2550" stroke-width="3" stroke-linecap="round"/><circle cx="12" cy="29" r="3.2" fill="#ff7eb6" stroke="#2b2550" stroke-width="1.6"/><circle cx="28" cy="29" r="3.2" fill="#ff7eb6" stroke="#2b2550" stroke-width="1.6"/></svg>
+          <span>이어진 두 블록은 <b>화음</b>이에요. 두 손가락으로 <b>동시에</b> 탭해요.</span>
+        </p>
+        <p>
+          <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#e8f4ff" stroke="#2b2550" stroke-width="2"/><path d="M20 31C11 24.500 8 21 8 17.200 8 14 10.500 12 13.200 12c2.400 0 4.800 1.300 6.800 3.500 2-2.200 4.400-3.500 6.800-3.500C29.500 12 32 14 32 17.200 32 21 29 24.500 20 31z" fill="#ff5470" stroke="#2b2550" stroke-width="2.2" stroke-linejoin="round"/></svg>
+          <span>놓치거나 엉뚱한 건반을 치면 실수가 쌓여 <b>하트</b>가 줄어요. 곡마다 점점 빨라져요!</span>
+        </p>
+      </div>
+      <div class="dock">
+        <button class="btn" id="btnStart" type="button">연주 시작</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnMuteT" type="button">소리 끄기</button>
+        <button class="btn sub" id="btnSyncT" type="button">박자 맞추기</button>
+      </div>
+      <p class="keyhint desk">건반 1~8 · A S D F J K L ; · P 일시정지 · M 소리</p>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card">
+      <canvas class="mascot small" id="mascotP" width="400" height="200" aria-hidden="true"></canvas>
+      <h2 class="res-title">잠깐 쉬어요</h2>
+      <p class="pause-line">음악은 그 자리에서 기다려요.<br>준비되면 이어서 연주해요.</p>
+      <p class="off-line" id="pOffset">박자 보정 0ms</p>
+      <div class="dock">
+        <button class="btn" id="btnResume" type="button">계속하기</button>
+      </div>
+      <button class="btn sub" id="btnPauseRetry" type="button">처음부터</button>
+      <div class="row2">
+        <button class="btn sub" id="btnMuteP" type="button">소리 끄기</button>
+        <button class="btn sub" id="btnSyncP" type="button">박자 맞추기</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnPauseTitle" type="button">모드 고르기</button>
+        <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+      </div>
+      <p class="keyhint desk">P · Esc로 계속해요</p>
+    </div>
+  </section>
+
+  <!-- sync calibration -->
+  <section class="overlay" id="scrSync" hidden>
+    <div class="card">
+      <h2 class="res-title">박자 맞추기</h2>
+      <p class="pause-line" id="syncHelp">원이 깜빡일 때 아무 데나 탭해요.<br>소리가 늦게 들리면 꼭 해 봐요.</p>
+      <div id="syncDot" role="button" aria-label="탭하는 곳"></div>
+      <div id="syncDots" aria-hidden="true"></div>
+      <p id="syncMsg" role="status">&nbsp;</p>
+      <p class="syncval">지금 보정 <b id="syncVal">0ms</b></p>
+      <div class="row2">
+        <button class="btn sub" id="btnSyncMinus" type="button">−10ms</button>
+        <button class="btn sub" id="btnSyncPlus" type="button">+10ms</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnSyncRetry" type="button">다시 재기</button>
+        <button class="btn sub" id="btnSyncReset" type="button">초기화</button>
+      </div>
+      <div class="dock" style="margin-top:12px">
+        <button class="btn" id="btnSyncDone" type="button">완료</button>
+      </div>
+      <p class="keyhint desk">Esc로 닫아요 · 안 해도 괜찮아요</p>
+    </div>
+  </section>
+
+  <!-- result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot small" id="mascotR" width="400" height="200" aria-hidden="true"></canvas>
+      <h2 class="res-title" id="rTitle" role="status">연주가 끝났어요</h2>
+      <p class="res-line" id="rLine"></p>
+      <div class="res-big"><span id="rScore">0</span><small>점</small></div>
+      <div class="badge" id="rBadge" hidden>새 기록!</div>
+      <ul class="songs" id="rSongs" aria-label="곡별 완성도"></ul>
+      <div class="team" id="rTeam" hidden></div>
+      <div class="stats">
+        <div>연주한 곡<b id="rSongsN">0곡</b></div>
+        <div>완벽<b id="rPerfect">0</b></div>
+        <div>최고 연속<b id="rCombo">0</b></div>
+      </div>
+      <div class="dock">
+        <button class="btn" id="btnAgain" type="button" style="margin-top:12px">다시 하기</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnOverTitle" type="button">모드 고르기</button>
+        <a class="btn sub" href="../../index.html">게임 목록</a>
+      </div>
+      <button class="btn sub" id="btnMuteR" type="button">소리 끄기</button>
+      <p class="keyhint desk">스페이스 · 엔터로도 다시 할 수 있어요</p>
+      <p class="seed" id="rSeed" hidden></p>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+(() => {
+// =====================================================================
+// LOGIC (pure, no DOM, no Math.random, no Date, no AudioContext): the songs, the note chart of every level, the judging windows,
+// the strain / hearts, the combo and the score, the ensemble zones. The view steps it with song time and reacts to G.events.
+// =====================================================================
+//#LOGIC-START
+// 도레미 pure logic. Deterministic for (seed, option set, input sequence). Time unit: seconds of "song time" G.t (t = 0 is the start of the first count-in).
+// Lanes 0..7 = 도 레 미 파 솔 라 시 높은도. Number notation in the song data: 1..8 (8 = high do), r = rest, a+b = two notes at once, ":d" = beats (default 1).
+const MELODY = (function () {
+  const C = {
+    LANES: 8, LIVES: 3, COUNT_BEATS: 4, LEAD0: 0.8, GAP: 2.2, TAIL: 0.6,
+    MISS_LAG: 0.06,                         // a note is only written off this long after its window closed, so a tap that arrives a frame late still counts
+    FREE_PAD: 0.5, OFF_PAD: 0.22,           // taps this far outside the song are free play; a tap this close to a window is "off" (no penalty) instead of "stray"
+    BPM0: 70, BPM_STEP: 12, BPM_MAX: 160,
+    W0: [0.090, 0.170, 0.250], WSTEP: [0.006, 0.010, 0.014], WMIN: [0.040, 0.065, 0.085],   // perfect / good / close half-windows (s): wide for song 1, shrinking to a human floor
+    GAP_FRAC: 0.45,                         // the close window never exceeds this share of the shortest gap between two notes of one lane
+    PTS: { perfect: 100, good: 70, close: 40 }, CRED: { perfect: 1, good: 1, close: 0.6 },
+    MULT_EVERY: 10, MULT_STEPS: 4, CHORD_BONUS: 60, FLAME_AT: 8, HEAL_PCT: 95, DONE_PCT: 50,
+  };
+  const NAMES = ['도', '레', '미', '파', '솔', '라', '시', '도'];
+  const FREQ = [523.25, 587.33, 659.25, 698.46, 783.99, 880.0, 987.77, 1046.5];
+
+  // ---------------------------------------------------------------- songs (traditional / public-domain tunes, short own arrangements)
+  const SONGS = [
+    { id: 'mary', title: '메리의 어린 양', meter: 4, tier: 0, bars: ['3 2 1 2', '3 3 3:2', '2 2 2:2', '3 5 5:2'] },
+    { id: 'boat', title: '노 저어라', meter: 4, tier: 1, bars: ['1 1 1:1.5 2:.5', '3:1.5 2:.5 3:1.5 4:.5', '5:4', '5 4 3 2', '5 5 3 3', '1:4'] },
+    { id: 'butterfly', title: '나비야', meter: 4, tier: 2, bars: ['5 3 3:2', '4 2 2:2', '1 2 3 4', '5 5 5:2', '5 3 3 3', '4 2 2 2', '1 3 5 5', '1:4'] },
+    { id: 'arirang', title: '아리랑 (일부)', meter: 3, tier: 2, bars: ['3:2 5', '6:3', '5:1.5 6:.5 5', '3:3', '3 5 6', '8:2 6', '5:1.5 6:.5 5', '3:2 2', '1:3'] },
+    { id: 'london', title: '런던 브리지', meter: 4, tier: 2, bars: ['5:1.5 6:.5 5 4', '3 4 5:2', '2 3 4:2', '3 4 5:2', '5:1.5 6:.5 5 4', '3 4 5:2', '2:2 5 3', '1:4'] },
+    { id: 'frere', title: '프레르 자크', meter: 4, tier: 3, bars: ['1 2 3 1', '1 2 3 1', '3 4 5:2', '3 4 5:2', '5:.5 6:.5 5:.5 4:.5 3 1', '5:.5 6:.5 5:.5 4:.5 3 1', '1 5 1:2', '1 5 1:2'] },
+    { id: 'twinkle', title: '반짝반짝 작은 별', meter: 4, tier: 3, bars: ['1 1 5 5', '6 6 5:2', '4 4 3 3', '2 2 1:2', '5 5 4 4', '3 3 2:2', '5 5 4 4', '3 3 2:2', '1 1 5 5', '6 6 5:2', '4 4 3 3', '2 2 1:2'] },
+    { id: 'ode', title: '환희의 송가', meter: 4, tier: 4, bars: ['3 3 4 5', '5 4 3 2', '1 1 2 3', '3:1.5 2:.5 2:2', '3 3 4 5', '5 4 3 2', '1 1 2 3', '2:1.5 1:.5 1:2', '2 2 3 1', '2 3:.5 4:.5 3 1', '2 3:.5 4:.5 3 2', '1 2 5:2'] },
+    { id: 'jingle', title: '징글벨', meter: 4, tier: 4, bars: ['3 3 3:2', '3 3 3:2', '3 5 1:1.5 2:.5', '3:4', '4 4 4:1.5 4:.5', '4 3 3 3:.5 3:.5', '3 2 2 3', '2:2 5:2', '3 3 3:2', '3 3 3:2', '3 5 1:1.5 2:.5', '1:4'] },
+    { id: 'doremi', title: '도레미 놀이', meter: 4, tier: 5, bars: ['1 2 3 4', '5 6 7 8', '8 7 6 5', '4 3 2 1', '1:.5 3:.5 5:.5 8:.5 5:.5 3:.5 1:1', '2:.5 4:.5 6:.5 8:.5 6:.5 4:.5 2:1', '1+5:2 3+8:2', '2+6 r 4+7 r', '8:.5 7:.5 6:.5 5:.5 4:.5 3:.5 2:.5 1:.5', '1+8:4'] },
+  ];
+
+  function parseSong(def) {
+    const items = [], errs = []; let beat = 0;
+    def.bars.forEach((bar, bi) => {
+      let sum = 0;
+      for (const tok of bar.trim().split(/\s+/)) {
+        const m = /^(r|[1-8](?:\+[1-8])?)(?::(\d*\.?\d+))?$/.exec(tok);
+        if (!m) { errs.push('bar ' + (bi + 1) + ': bad token ' + tok); continue; }
+        const dur = m[2] === undefined ? 1 : parseFloat(m[2]);
+        if (!(dur > 0)) errs.push('bar ' + (bi + 1) + ': bad length ' + tok);
+        if (m[1] === 'r') items.push({ rest: true, beat, dur, bar: bi });
+        else {
+          const lanes = m[1].split('+').map((x) => +x - 1);
+          if (lanes.length === 2 && lanes[0] === lanes[1]) errs.push('bar ' + (bi + 1) + ': chord of one pitch ' + tok);
+          items.push({ lanes, beat, dur, bar: bi });
+        }
+        beat += dur; sum += dur;
+      }
+      if (Math.abs(sum - def.meter) > 1e-9) errs.push('bar ' + (bi + 1) + ' has ' + sum + ' beats, meter is ' + def.meter);
+    });
+    return { id: def.id, title: def.title, meter: def.meter, tier: def.tier, items, beats: beat, bars: def.bars.length, errs };
+  }
+  const PARSED = SONGS.map(parseSong);
+  function songIndex(s) {
+    if (typeof s === 'number' && s >= 0 && s < SONGS.length) return s | 0;
+    const i = SONGS.findIndex((x) => x.id === s);
+    if (i >= 0) return i;
+    const n = parseInt(s, 10);
+    return isFinite(n) && n >= 0 && n < SONGS.length ? n : 0;
+  }
+
+  // ---------------------------------------------------------------- seedable randomness
+  function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function hash2(a, b) {
+    let h = (a | 0) ^ Math.imul(((b | 0) + 0x9E3779B9) | 0, 0x85EBCA6B);
+    h = Math.imul(h ^ (h >>> 16), 0x7feb352d); h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+    return (h ^ (h >>> 16)) | 0;
+  }
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  // ---------------------------------------------------------------- the chain: which song comes when, how fast, how strict
+  function chainOrder(seed, first) {
+    const rng = mulberry32(hash2(seed, 7));
+    const tiers = []; for (const s of SONGS) if (tiers.indexOf(s.tier) < 0) tiers.push(s.tier);
+    tiers.sort((a, b) => a - b);
+    let order = [];
+    for (const t of tiers) {
+      const g = []; SONGS.forEach((s, i) => { if (s.tier === t) g.push(i); });
+      for (let i = g.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const x = g[i]; g[i] = g[j]; g[j] = x; }
+      order = order.concat(g);
+    }
+    if (first !== null && first !== undefined) { const p = order.indexOf(first); if (p > 0) order = order.slice(p).concat(order.slice(0, p)); }
+    return order;
+  }
+  const bpmFor = (lv) => Math.min(C.BPM_MAX, C.BPM0 + C.BPM_STEP * Math.max(0, lv));
+  const strainLimit = (lv, P) => (lv < 3 ? 3 : 2) + Math.max(0, P - 1);   // mistakes it takes to lose one heart
+  function windowsFor(lv, minGap) {
+    const k = Math.min(Math.max(0, lv), 14);
+    let p = Math.max(C.WMIN[0], C.W0[0] - C.WSTEP[0] * k), g = Math.max(C.WMIN[1], C.W0[1] - C.WSTEP[1] * k), c = Math.max(C.WMIN[2], C.W0[2] - C.WSTEP[2] * k);
+    if (isFinite(minGap) && minGap > 0) {
+      c = Math.max(C.WMIN[2], Math.min(c, C.GAP_FRAC * minGap));
+      g = Math.max(C.WMIN[1], Math.min(g, c * 0.75));
+      p = Math.max(C.WMIN[0], Math.min(p, g * 0.62));
+    }
+    return { perfect: p, good: g, close: c };
+  }
+  const pSplit8 = (lv) => (lv < 2 ? 0 : Math.min(0.5, 0.1 + 0.07 * (lv - 2)));
+  const pRest = (lv) => (lv < 1 ? 0 : Math.min(0.35, 0.12 + 0.03 * lv));
+  const pChord = (lv) => (lv < 3 ? 0 : Math.min(0.4, 0.1 + 0.05 * (lv - 3)));
+
+  // the arrangement of one song at one level: the written notes, then (with growing odds) eighth-note pairs, staccato rests and two-note chords
+  function arrange(song, lv, rng) {
+    const out = [], items = song.items, pS = pSplit8(lv), pR = pRest(lv), pC = pChord(lv);
+    let beat = 0, lastChord = -99;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i], r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng(), r5 = rng();
+      const last = i === items.length - 1;
+      if (it.rest) { out.push({ rest: true, dur: it.dur }); beat += it.dur; continue; }
+      let parts;
+      if (!last && it.lanes.length === 1 && it.dur === 1 && lv >= 2 && r1 < pS) {
+        const l = it.lanes[0], nx = items[i + 1] && items[i + 1].lanes ? items[i + 1].lanes[0] : l;
+        const second = lv >= 4 && r2 < 0.5 ? clamp(l + (nx > l ? 1 : nx < l ? -1 : (r3 < 0.5 ? 1 : -1)), 0, 7) : l;
+        parts = [{ lanes: it.lanes, dur: 0.5 }, { lanes: [second], dur: 0.5 }];
+      } else if (!last && i > 0 && it.dur >= 2 && it.lanes.length === 1 && r1 < pR) {
+        const play = it.dur >= 3 ? 2 : 1;
+        parts = [{ lanes: it.lanes, dur: play }, { rest: true, dur: it.dur - play }];
+      } else if (!last && it.dur === 2 && it.lanes.length === 1 && lv >= 3 && r1 < pS + 0.1) {
+        parts = [{ lanes: it.lanes, dur: 1 }, { lanes: it.lanes, dur: 1 }];
+      } else parts = [{ lanes: it.lanes, dur: it.dur }];
+      const p0 = parts[0];
+      if (!last && i > 0 && p0.lanes.length === 1 && p0.dur >= 1 && Math.abs(beat - Math.round(beat)) < 1e-9 && beat - lastChord >= 3 && r4 < pC) {
+        const l = p0.lanes[0], cands = [];
+        for (const d of [-4, -3, -2, 2, 3, 4]) if (l + d >= 0 && l + d <= 7) cands.push(l + d);
+        if (cands.length) { p0.lanes = [l, cands[Math.floor(r5 * cands.length)]]; lastChord = beat; }
+      }
+      for (const p of parts) { out.push(p); beat += p.dur; }
+    }
+    return out;
+  }
+
+  // chart of chain step L: { notes (sorted by beat, lane), bpm, win, ... } with beat-relative note positions; place it in time with place()
+  function buildChart(seed, L, o) {
+    o = o || {};
+    const order = chainOrder(seed | 0, o.first === undefined ? null : o.first);
+    const lv = L + (o.base | 0), idx = order[L % order.length], song = PARSED[idx];
+    const rng = mulberry32(hash2(seed | 0, L * 131 + 17 + idx));
+    const parts = arrange(song, lv, rng);
+    const bpm = bpmFor(lv), spb = 60 / bpm;
+    const notes = []; let beat = 0;
+    for (const p of parts) {
+      if (!p.rest) {
+        const base = notes.length;
+        for (const lane of p.lanes) notes.push({ id: L * 1000 + notes.length, beat, dur: p.dur, lane, t: 0, state: 0, js: null, dt: 0, mi: -1, pl: 0 });
+        if (p.lanes.length === 2) { notes[base].mi = base + 1; notes[base + 1].mi = base; }
+      }
+      beat += p.dur;
+    }
+    const lastBeat = [-9, -9, -9, -9, -9, -9, -9, -9]; let minGapBeats = Infinity;
+    for (const n of notes) { if (lastBeat[n.lane] > -9) minGapBeats = Math.min(minGapBeats, n.beat - lastBeat[n.lane]); lastBeat[n.lane] = n.beat; }
+    const minGap = minGapBeats * spb;
+    const lanes = []; for (const n of notes) if (lanes.indexOf(n.lane) < 0) lanes.push(n.lane);
+    lanes.sort((a, b) => a - b);
+    return { idx, id: song.id, title: song.title, meter: song.meter, bars: song.bars, L, lv, bpm, spb, beats: beat, notes, lanes, minGap, win: windowsFor(lv, minGap), chords: notes.filter((n) => n.mi >= 0).length / 2,
+      t0: 0, countT: 0, firstT: 0, lastT: 0, endT: 0, open: 0, zone: null, strays: 0, tapsFree: 0 };
+  }
+  function place(ch, countT) {
+    ch.countT = countT; ch.t0 = countT + C.COUNT_BEATS * ch.spb;
+    for (const n of ch.notes) n.t = ch.t0 + n.beat * ch.spb;
+    ch.firstT = ch.notes.length ? ch.notes[0].t : ch.t0;
+    ch.lastT = ch.notes.length ? ch.notes[ch.notes.length - 1].t : ch.t0;
+    ch.endT = ch.lastT + ch.win.close + C.MISS_LAG + C.TAIL;
+    return ch;
+  }
+
+  // ensemble: split the 8 keys into P contiguous zones; every key belongs to exactly one player. The zones are balanced by how many notes each gets
+  // (so a song that only uses 4 keys still gives everybody something to play), and stay close to an even split of the keyboard.
+  function zoneSplit(notes, P) {
+    const w = [0, 0, 0, 0, 0, 0, 0, 0]; for (const n of notes) w[n.lane]++;
+    if (P <= 1) return { zone: [0, 0, 0, 0, 0, 0, 0, 0], cuts: [], bounds: [0, 8], sizes: [8], weights: [w.reduce((a, b) => a + b, 0)] };
+    const ideal = 8 / P;
+    let best = null;
+    const search = (lo, hi) => {
+      const cuts = [];
+      const rec = (start) => {
+        if (cuts.length === P - 1) {
+          const bounds = [0].concat(cuts, [8]); let empty = 0, maxw = 0, dev = 0;
+          for (let k = 0; k < P; k++) {
+            const sz = bounds[k + 1] - bounds[k]; if (sz < lo || sz > hi) return;
+            let s = 0; for (let l = bounds[k]; l < bounds[k + 1]; l++) s += w[l];
+            if (s === 0) empty++; if (s > maxw) maxw = s; dev += Math.abs(sz - ideal);
+          }
+          const cost = [empty, maxw, dev];
+          if (!best || cost[0] < best.cost[0] || (cost[0] === best.cost[0] && (cost[1] < best.cost[1] || (cost[1] === best.cost[1] && cost[2] < best.cost[2] - 1e-9)))) best = { cost, bounds: bounds.slice() };
+          return;
+        }
+        for (let c = start; c <= 7; c++) { cuts.push(c); rec(c + 1); cuts.pop(); }
+      };
+      rec(1);
+    };
+    search(Math.max(1, Math.round(ideal) - 1), Math.round(ideal) + 1);          // the usual split: 2-3 keys each for 3-4 players, 3-5 for two
+    if (!best || best.cost[0] > 0) search(1, 8 - (P - 1));                       // a song that only uses a few keys: let a zone grow so that everybody still has a note
+    if (!best) { const bounds = [0]; for (let k = 1; k < P; k++) bounds.push(Math.round(ideal * k)); bounds.push(8); best = { bounds }; }
+    const zone = [], sizes = [], weights = [];
+    for (let k = 0; k < P; k++) { let s = 0; for (let l = best.bounds[k]; l < best.bounds[k + 1]; l++) { zone[l] = k; s += w[l]; } sizes.push(best.bounds[k + 1] - best.bounds[k]); weights.push(s); }
+    return { zone, cuts: best.bounds.slice(1, -1), sizes, weights, bounds: best.bounds };
+  }
+
+  // ---------------------------------------------------------------- the game
+  const newStats = () => ({ perfect: 0, good: 0, close: 0, miss: 0, stray: 0, off: 0, chords: 0 });
+  const newPl = (P) => { const a = []; for (let i = 0; i < P; i++) a.push({ hit: 0, perfect: 0, miss: 0, taps: 0 }); return a; };
+
+  // o: { mode: 'solo' | 'coop', players (coop 2..4), song (id / index of the first song), level (start level, default 0) }
+  function create(seed, o) {
+    o = o || {};
+    const coop = o.mode === 'coop', P = coop ? clamp((o.players | 0) || 2, 2, 4) : 1;
+    const first = o.song === undefined || o.song === null || o.song === '' ? null : songIndex(o.song);
+    const G = {
+      seed: seed | 0, mode: coop ? 'coop' : 'solo', P, base: Math.max(0, o.level | 0), first, order: null,
+      t: 0, phase: 'between', over: false, result: null, events: [], L: -1, chart: null,
+      hearts: C.LIVES, strain: 0, score: 0, combo: 0, maxCombo: 0, pStreak: 0, maxPStreak: 0, stats: newStats(), songsDone: 0, log: [], pl: newPl(P),
+    };
+    G.order = chainOrder(G.seed, first);
+    startSong(G, C.LEAD0);
+    return G;
+  }
+  function startSong(G, countT) {
+    G.L++;
+    const ch = place(buildChart(G.seed, G.L, { first: G.first, base: G.base }), countT);
+    ch.zone = zoneSplit(ch.notes, G.P);
+    for (const n of ch.notes) n.pl = ch.zone.zone[n.lane];
+    ch.stats = newStats();
+    G.chart = ch;
+    G.events.push({ e: 'song', L: G.L, id: ch.id, title: ch.title, bpm: ch.bpm, lv: ch.lv, notes: ch.notes.length, countT: ch.countT });
+  }
+  const completeness = (ch) => { let s = 0; for (const n of ch.notes) if (n.state === 1) s += C.CRED[n.js]; return ch.notes.length ? s / ch.notes.length : 1; };
+  const multOf = (combo) => 1 + Math.min(C.MULT_STEPS, Math.floor(combo / C.MULT_EVERY)) * 0.5;
+  function phaseOf(G) { const ch = G.chart; return G.over ? 'over' : G.t < ch.countT ? 'between' : G.t < ch.t0 ? 'count' : G.t <= ch.lastT + ch.win.close + C.MISS_LAG ? 'play' : 'tail'; }
+
+  function strike(G) {
+    G.strain++;
+    const lim = strainLimit(G.chart.lv, G.P);
+    G.events.push({ e: 'strain', strain: G.strain, limit: lim });
+    if (G.strain >= lim) {
+      G.strain = 0; G.hearts--;
+      G.events.push({ e: 'heart', hearts: G.hearts });
+      if (G.hearts <= 0) endGame(G);
+    }
+  }
+  function missNote(G, n) {
+    n.state = 2; G.stats.miss++; G.chart.stats.miss++; G.pl[n.pl].miss++;
+    G.combo = 0; G.pStreak = 0;
+    G.events.push({ e: 'miss', id: n.id, lane: n.lane, pl: n.pl });
+    strike(G);
+  }
+  function resolveMisses(G, upTo) {
+    const ch = G.chart, ns = ch.notes, w = ch.win.close;
+    while (ch.open < ns.length && ns[ch.open].state !== 0) ch.open++;
+    for (let i = ch.open; i < ns.length; i++) {
+      const n = ns[i];
+      if (n.t + w > upTo) break;
+      if (n.state === 0) { missNote(G, n); if (G.over) return; }
+    }
+  }
+  function hitNote(G, n, dt) {
+    const ch = G.chart, w = ch.win, ad = Math.abs(dt);
+    const js = ad <= w.perfect ? 'perfect' : ad <= w.good ? 'good' : 'close';
+    n.state = 1; n.js = js; n.dt = dt;
+    const mult = multOf(G.combo);
+    let pts = Math.round(C.PTS[js] * mult), chord = false;
+    const mate = n.mi >= 0 ? ch.notes[n.mi] : null;
+    if (mate && mate.state === 1) { pts += C.CHORD_BONUS; chord = true; G.stats.chords++; }
+    G.score += pts; G.combo++; if (G.combo > G.maxCombo) G.maxCombo = G.combo;
+    if (js === 'perfect') { G.pStreak++; if (G.pStreak > G.maxPStreak) G.maxPStreak = G.pStreak; } else G.pStreak = 0;
+    G.stats[js]++; ch.stats[js]++;
+    const pl = G.pl[n.pl]; pl.hit++; if (js === 'perfect') pl.perfect++;
+    G.events.push({ e: 'hit', id: n.id, lane: n.lane, js, dt, pts, mult, combo: G.combo, pStreak: G.pStreak, pl: n.pl, chord, mate: mate ? mate.lane : -1 });
+    if (G.combo % C.MULT_EVERY === 0) {
+      G.events.push({ e: 'combo', combo: G.combo, mult: multOf(G.combo) });
+      if (G.strain > 0) { G.strain--; G.events.push({ e: 'relief', strain: G.strain }); }
+    }
+    return js;
+  }
+
+  // a tap on `lane` at song time `at` (the time the finger landed, not the time the frame got around to it). Returns { k, js, n }:
+  //   k = 'hit' (js perfect | good | close) | 'free' (outside the song: free play) | 'off' (right key, wrong moment: no penalty) | 'stray' (a key with no note near: one mistake) | null (game over)
+  function tap(G, lane, at) {
+    if (G.over || !(lane >= 0 && lane < C.LANES)) return { k: null };
+    const ch = G.chart;
+    resolveMisses(G, at);
+    if (G.over) return { k: null };
+    const ns = ch.notes, w = ch.win.close;
+    let best = null, bd = Infinity;
+    for (let i = ch.open; i < ns.length; i++) {
+      const n = ns[i]; if (n.t - at > w) break;
+      if (n.state !== 0 || n.lane !== lane) continue;
+      const d = Math.abs(at - n.t); if (d <= w && d < bd) { best = n; bd = d; }
+    }
+    if (best) { const js = hitNote(G, best, at - best.t); return { k: 'hit', js, n: best }; }
+    if (at < ch.firstT - C.FREE_PAD || at > ch.lastT + w + C.FREE_PAD) { ch.tapsFree++; return { k: 'free' }; }
+    for (let i = 0; i < ns.length; i++) {
+      const n = ns[i]; if (n.t - at > w + C.OFF_PAD) break;
+      if (n.lane === lane && Math.abs(at - n.t) <= w + C.OFF_PAD) { G.stats.off++; return { k: 'off' }; }
+    }
+    G.stats.stray++; ch.stats.stray++; ch.strays++;
+    G.combo = 0; G.pStreak = 0;
+    G.events.push({ e: 'stray', lane, pl: ch.zone.zone[lane] });
+    strike(G);
+    return { k: 'stray' };
+  }
+
+  function songRecord(G, partial) {
+    const ch = G.chart, pct = Math.round(completeness(ch) * 100);
+    return { idx: ch.idx, id: ch.id, title: ch.title, L: ch.L, lv: ch.lv, bpm: ch.bpm, notes: ch.notes.length, pct, perfect: ch.stats.perfect, good: ch.stats.good, close: ch.stats.close, miss: ch.stats.miss, stray: ch.strays, partial: !!partial, bonus: 0, flawless: false };
+  }
+  function summary(G) {
+    return { score: Math.round(G.score), songs: G.songsDone, log: G.log.slice(), maxCombo: G.maxCombo, maxPStreak: G.maxPStreak, stats: Object.assign({}, G.stats), mode: G.mode, P: G.P, pl: G.pl.map((p) => Object.assign({}, p)), hearts: G.hearts, L: G.L, t: G.t };
+  }
+  function endGame(G) {
+    if (G.over) return;
+    const rec = songRecord(G, true); G.log.push(rec);
+    G.over = true; G.phase = 'over';
+    G.result = summary(G);
+    G.events.push({ e: 'over', result: G.result });
+  }
+  function finishSong(G) {
+    const ch = G.chart, rec = songRecord(G, false);
+    rec.flawless = rec.miss === 0 && rec.stray === 0 && rec.close === 0;
+    rec.bonus = rec.pct >= C.DONE_PCT ? 150 + 3 * rec.pct + (rec.flawless ? 250 : 0) : 0;
+    G.score += rec.bonus; G.songsDone++; G.log.push(rec);
+    G.events.push({ e: 'songEnd', rec, hearts: G.hearts });
+    if (rec.pct >= C.HEAL_PCT && G.hearts < C.LIVES) { G.hearts++; G.events.push({ e: 'heartUp', hearts: G.hearts }); }
+    startSong(G, ch.endT + C.GAP);
+  }
+  function step(G, dt) {
+    if (G.over || !(dt > 0)) return;
+    G.t += dt;
+    resolveMisses(G, G.t - C.MISS_LAG);
+    if (G.over) return;
+    if (G.t >= G.chart.endT) finishSong(G);
+    G.phase = phaseOf(G);
+  }
+
+  return { C, NAMES, FREQ, SONGS, PARSED, parseSong, songIndex, mulberry32, hash2, chainOrder, bpmFor, strainLimit, windowsFor, arrange, buildChart, place, zoneSplit, create, step, tap, completeness, multOf, phaseOf, summary, startSong };
+})();
+//#LOGIC-END
+
+// =====================================================================
+// CONFIG / UTIL / STORE
+// =====================================================================
+const KEY_BEST = 'arcade.melody.best';          // solo record: score (a plain number)
+const KEY_COOP = 'arcade.melody.best.coop';     // best team score of the ensemble
+const KEY_MUTE = 'arcade.melody.muted';
+const KEY_MODE = 'arcade.melody.mode';          // 'solo' | 'coop'
+const KEY_PPL = 'arcade.melody.players';        // 2..4
+const KEY_OFFSET = 'arcade.melody.offset';
+const TAU = Math.PI * 2;
+const FONT_D = '"Black Han Sans", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif';
+const FONT_B = '"Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif';
+const INK = '#2b2550', PAPER = '#fffaf0';
+const M = MELODY, C = M.C, FREQ = M.FREQ, NAMES = M.NAMES;
+const KC = ['#ff6b6b', '#ff9f43', '#ffd23f', '#5fd068', '#2ec4b6', '#4a90ff', '#9b6bff', '#ff7eb6'];
+const KEYCODES = [['Digit1', 'KeyA', 'Numpad1'], ['Digit2', 'KeyS', 'Numpad2'], ['Digit3', 'KeyD', 'Numpad3'], ['Digit4', 'KeyF', 'Numpad4'], ['Digit5', 'KeyJ', 'Numpad5'], ['Digit6', 'KeyK', 'Numpad6'], ['Digit7', 'KeyL', 'Numpad7'], ['Digit8', 'Semicolon', 'Numpad8']];
+const KEYLANE = {}; KEYCODES.forEach((a, i) => a.forEach((c) => { KEYLANE[c] = i; }));
+const KEYCAP = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const JS_TEXT = { perfect: '완벽!', good: '좋아요', close: '아슬아슬' };
+const JS_COL = { perfect: '#ffb800', good: '#1f9d55', close: '#e8590c' };
+const PCOL = ['#ff6b6b', '#4a90ff', '#5fd068', '#ffb020'];
+const VIEW = {
+  OVER_LOCK: 0.5,       // seconds the result card ignores "다시 하기"
+  RESUME_T: 1.5,        // 3-2-1 after "계속하기"; the song waits
+  GRACE: 0.05,          // the logic runs this far behind the picture, so a tap that arrives a frame late still counts
+  LOOK: 0.15,           // audio look-ahead of the metronome scheduler (s)
+  FAIL_T: 1.1,          // the stage dims before the result card
+  PARTS: 150,
+  SYNC_BPM: 90, SYNC_TAPS: 10, SYNC_SKIP: 2,
+};
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function lerp(a, b, k) { return a + (b - a) * k; }
+function easeOut(k) { return 1 - (1 - k) * (1 - k) * (1 - k); }
+function easeInOut(k) { return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; }
+const rv = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only (the songs have their own seeded streams)
+const QS = new URLSearchParams(location.search);
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function fmtNum(n) { try { return Math.floor(n).toLocaleString('ko-KR'); } catch (e) { return String(Math.floor(n)); } }
+function readInt(k) { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function readOffset() { const v = parseInt(store.get(KEY_OFFSET, '0'), 10); return isFinite(v) ? clamp(v, -200, 200) : 0; }
+function restartAnim(node, cls) { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+function buzz(p) {   // haptics only after a real tap (browsers log an error otherwise)
+  try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ }
+}
+const seedParam = QS.get('seed');
+const RUN_SEED = seedParam !== null && seedParam !== '' && isFinite(+seedParam) ? (+seedParam | 0) : null;
+const SONG_PARAM = QS.get('song') !== null && QS.get('song') !== '' ? QS.get('song') : null;
+const LEVEL_PARAM = isFinite(parseInt(QS.get('level'), 10)) ? Math.max(0, parseInt(QS.get('level'), 10)) : 0;
+const $ = (id) => document.getElementById(id);
+const hexRgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+function mixc(h, to, k) { const a = hexRgb(h); return 'rgb(' + Math.round(lerp(a[0], to[0], k)) + ',' + Math.round(lerp(a[1], to[1], k)) + ',' + Math.round(lerp(a[2], to[2], k)) + ')'; }
+const KL = KC.map((c) => mixc(c, [255, 255, 255], 0.5)), KD = KC.map((c) => mixc(c, [43, 37, 80], 0.3));
+const mixRgb = (h, to, k) => mixc(h, to, k);
+
+// =====================================================================
+// AUDIO (all synthesized). With the sound off nothing is created or scheduled: the key flashes and the bear still play.
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, bed: null, noiseBuf: null, voices: 0, unavailable: false,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx && !this.unavailable) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { this.unavailable = true; return; }
+        let c;
+        try { c = new AC({ latencyHint: 'interactive' }); } catch (e) { c = new AC(); }
+        this.ctx = c;
+        this.master = c.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.85;
+        const comp = c.createDynamicsCompressor();
+        comp.threshold.value = -12; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.2;
+        this.master.connect(comp); comp.connect(c.destination);
+        this.bed = c.createGain(); this.bed.gain.value = 1; this.bed.connect(this.master);
+        const sr = c.sampleRate, len = Math.floor(sr * 0.5);
+        this.noiseBuf = c.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        c.onstatechange = () => { if (typeof onAudioState === 'function') onAudioState(); };
+        try { const b = c.createBuffer(1, 1, 22050), s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch (e) { /* iOS unlock is best effort */ }
+      }
+      this.unlock();
+    } catch (e) { this.ctx = null; this.unavailable = true; }
+  },
+  // resume on every gesture: iOS starts 'suspended' and falls back to 'interrupted' after a call or a lock screen
+  unlock() {
+    const c = this.ctx;
+    if (c && c.state !== 'running') { try { const p = c.resume(); if (p && p.catch) p.catch(() => { /* needs another gesture */ }); } catch (e) { /* ignore */ } }
+  },
+  running() { return !!this.ctx && this.ctx.state === 'running'; },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.85, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  live() { return this.running() && !this.muted && !V.ff; },
+  // one short oscillator voice; o: { atk, fd (pitch glide time), lp, dest }
+  tone(type, f0, f1, dur, vol, t, o) {
+    if (!this.live() || this.voices >= 48) return null;
+    o = o || {};
+    try {
+      const c = this.ctx, at = t === undefined ? c.currentTime : t;
+      const osc = c.createOscillator(), g = c.createGain();
+      osc.type = type; osc.frequency.setValueAtTime(f0, at);
+      if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), at + (o.fd || dur * 0.85));
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), at + (o.atk || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      let out = osc; osc.connect(g); out = g;
+      if (o.lp) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp; out.connect(f); out = f; }
+      out.connect(o.dest || this.master);
+      this.voices++; osc.onended = () => { this.voices--; };
+      osc.start(at); osc.stop(at + dur + 0.03);
+      return osc;
+    } catch (e) { return null; }
+  },
+  noise(dur, freq, q, vol, t, type, dest) {
+    if (!this.live() || this.voices >= 48) return;
+    try {
+      const c = this.ctx, at = t === undefined ? c.currentTime : t;
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), at + Math.min(0.004, dur * 0.3)); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      s.connect(f); f.connect(g); g.connect(dest || this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(at, Math.random() * 0.3); s.stop(at + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  // the xylophone: a bright fundamental with a fast-dying 4x partial, a short high ring and a mallet "tak".
+  // kind 'close' = a half-hearted hit: a little flat and muffled. vel 0..1.
+  note(lane, kind, vel, t) {
+    if (!this.live() || this.voices >= 42) return;
+    try {
+      const c = this.ctx, at = t === undefined ? c.currentTime : t, v = vel === undefined ? 1 : vel, close = kind === 'close';
+      let f = FREQ[lane]; if (close) f *= Math.pow(2, -0.5 / 12);
+      const out = c.createGain(); out.gain.value = 1;
+      if (close) { const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1300; out.connect(lp); lp.connect(this.master); } else out.connect(this.master);
+      const parts = [[1, 0.62, 1.15], [3.99, 0.26, 0.3], [9.7, 0.08, 0.1], [2.76, 0.05, 0.45]];
+      for (const p of parts) {
+        const osc = c.createOscillator(), g = c.createGain();
+        osc.type = 'sine'; osc.frequency.value = f * p[0];
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0002, p[1] * v), at + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + p[2]);
+        osc.connect(g); g.connect(out);
+        this.voices++; osc.onended = () => { this.voices--; };
+        osc.start(at); osc.stop(at + p[2] + 0.04);
+      }
+      this.noise(0.014, 3000, 1.1, 0.13 * v, at, 'bandpass', out);
+    } catch (e) { /* ignore */ }
+  },
+  ting(lane, t) { const f = FREQ[lane] * 4; this.tone('sine', f, f, 0.14, 0.05, t, { atk: 0.002 }); this.tone('sine', f * 1.5, f * 1.5, 0.1, 0.03, t, { atk: 0.002 }); },
+  thud(lane, vel) {   // the wrong key: a dull knock, no pitch to speak of
+    const v = vel === undefined ? 1 : vel;
+    this.tone('triangle', FREQ[lane] * 0.5, FREQ[lane] * 0.32, 0.16, 0.34 * v, undefined, { atk: 0.003, lp: 700 });
+    this.noise(0.05, 300, 0.7, 0.22 * v, undefined, 'lowpass');
+  },
+  miss() { this.tone('sine', 150, 100, 0.1, 0.07, undefined, { atk: 0.004, lp: 500 }); },
+  heartLoss() { const t = this.ctx ? this.ctx.currentTime : 0; this.note(3, 'close', 0.7, t); this.note(1, 'close', 0.7, t + 0.15); this.note(0, 'close', 0.7, t + 0.3); },
+  heartUp() { const t = this.ctx ? this.ctx.currentTime : 0; this.note(4, 'ok', 0.5, t); this.note(7, 'ok', 0.5, t + 0.1); this.ting(7, t + 0.1); },
+  combo(m) { const t = this.ctx ? this.ctx.currentTime : 0; this.ting(clamp(m + 2, 0, 7), t); this.ting(clamp(m + 4, 0, 7), t + 0.07); },
+  chord() { this.ting(7, undefined); },
+  fanfare(great) {
+    if (!this.ctx) return; const t = this.ctx.currentTime;
+    [0, 2, 4, 7].forEach((l, i) => this.note(l, 'ok', 0.85, t + i * 0.1));
+    [0, 2, 4, 7].forEach((l) => this.note(l, 'ok', 0.6, t + 0.5));
+    if (great) { [7, 4, 7].forEach((l, i) => this.ting(l, t + 0.5 + i * 0.09)); }
+  },
+  over() { if (!this.ctx) return; const t = this.ctx.currentTime; [4, 3, 2, 0].forEach((l, i) => this.note(l, 'close', 0.8, t + i * 0.16)); },
+  record() { if (!this.ctx) return; const t = this.ctx.currentTime + 0.4; [0, 2, 4, 7, 4, 7].forEach((l, i) => this.note(l, 'ok', 0.7, t + i * 0.09)); },
+  tick() { this.tone('sine', 1100, 1100, 0.04, 0.1, undefined, { atk: 0.002 }); },
+  star(i) { this.note(clamp(2 + i * 2, 0, 7), 'ok', 0.6); },
+  // the metronome: a woodblock on every beat, scheduled on the audio clock and sent through `bed` (pausing silences it)
+  wood(t, hz, v) { this.tone('sine', hz, hz, 0.035, v, t, { atk: 0.002, dest: this.bed }); },
+  bedOn() { if (this.bed && this.ctx) { try { const t = this.ctx.currentTime; this.bed.gain.cancelScheduledValues(t); this.bed.gain.setValueAtTime(1, t); } catch (e) { /* ignore */ } } },
+  bedOff() { if (this.bed && this.ctx) { try { const t = this.ctx.currentTime; this.bed.gain.cancelScheduledValues(t); this.bed.gain.setValueAtTime(0, t); } catch (e) { /* ignore */ } } },
+};
+
+// =====================================================================
+// CLOCK: song time = DOM time since the anchor. A tap is judged where it happened (event.timeStamp), not when the frame got around to it.
+// The metronome is scheduled on the audio clock from the same anchor; the player's own latency is set with 박자 맞추기 (V.offset).
+// =====================================================================
+const Clock = {
+  base: 0,
+  songAt(perfMs) { return (perfMs - this.base) / 1000; },
+  anchor(song, perfMs) { this.base = perfMs - song * 1000; },
+  evPerf(e) { const n = performance.now(), ts = e && e.timeStamp; return ts && Math.abs(ts - n) < 1000 ? ts : n; },
+};
+const Sch = {
+  on: false, chart: null, k: 0, timer: 0, count: 0, minLead: 9,
+  start(chart, fromSong) {
+    this.chart = chart; this.on = true;
+    this.k = -C.COUNT_BEATS;
+    while (chart.t0 + this.k * chart.spb < fromSong - 0.001) this.k++;
+    clearInterval(this.timer); this.timer = setInterval(() => this.tick(), 25);
+  },
+  stop() { this.on = false; clearInterval(this.timer); this.timer = 0; },
+  tick() {
+    if (!this.on || !Sound.running() || V.paused || !V.ready || !this.chart || Sound.muted) return;
+    const now = performance.now(), sNow = Clock.songAt(now), cNow = Sound.ctx.currentTime, ch = this.chart;
+    for (let guard = 0; guard < 12; guard++) {
+      const s = ch.t0 + this.k * ch.spb;
+      if (s > sNow + VIEW.LOOK) break;
+      if (s > ch.lastT + ch.spb * 0.5 + 0.01) { this.on = false; break; }
+      const k = this.k; this.k++;
+      const at = cNow + (s - sNow);
+      if (at < cNow - 0.005) continue;
+      this.minLead = Math.min(this.minLead, at - cNow); this.count++;
+      const bar = ((k % ch.meter) + ch.meter) % ch.meter === 0;
+      Sound.wood(at, bar ? 1500 : 1050, k < 0 ? 0.22 : bar ? 0.085 : 0.045);
+    }
+  },
+};
+
+// =====================================================================
+// STATE
+// =====================================================================
+const LAY = { W: 390, H: 844, dpr: 1, sat: 0, sab: 0, sal: 0, sar: 0, hudBottom: 84, rollY: 86, rollH: 22, laneTop: 112, hitY: 600, barTop: 600, barH: 84, barBot: 684, stripTop: 684, stripBot: 840, stripH: 150, kx0: 4, kx1: 386, kw: 47.75, ppb: 100, noteH: 44, barW: 41, sc: 1.1, short: false };
+const SEL = {   // what the title panel has chosen
+  mode: store.get(KEY_MODE, 'solo') === 'coop' ? 'coop' : 'solo',
+  players: clamp(parseInt(store.get(KEY_PPL, '2'), 10) || 2, 2, 4),
+};
+const V = {
+  phase: 'title',            // title | play | ending (the stage dims) | over
+  paused: false, g: null, live: false, ready: false, ff: false, clock: 0, vt: 0, nextSeed: 0,
+  offset: readOffset(), best: readInt(KEY_BEST), bestCoop: readInt(KEY_COOP), bestAtStart: 0, newRecord: false, result: null, finalScore: 0,
+  waitT: 0, resumeLeft: 0, resumeShown: 0, overT: 0, overShown: false, overCount: 0, endT: 0, endKind: '', runCount: 0, retryArmed: false, retryT: 0,
+  press: [9, 9, 9, 9, 9, 9, 9, 9], glow: [0, 0, 0, 0, 0, 0, 0, 0], rail: 0, shake: 0, shakeA: 0, dim: 0, flame: 0, flameT: 0,
+  bears: [], parts: [], texts: [], coach: 0, countShown: -1, curBeat: -1,
+  audioClock: false, noAudioShown: false, fxOff: false, logOn: false, log: [], songShown: -1, zoneKey: '',
+  sync: { open: false, from: '', taps: [], running: false, msg: '', done: false, tapEvents: 0 },
+  keysDown: new Set(), taps: 0,
+};
+const el = {
+  cv: $('cv'), hud: $('hud'), btnPause: $('btnPause'), btnMute: $('btnMute'), pillScore: $('pillScore'), hScore: $('hScore'), hTitle: $('hTitle'), hSub: $('hSub'),
+  hearts: $('hearts'), pips: $('pips'), chipCombo: $('chipCombo'), cbN: $('cbN'), cbMul: $('cbMul'), chipDone: $('chipDone'), dnN: $('dnN'),
+  coach: $('coach'), banner: $('banner'), bnTitle: $('bnTitle'), bnSub: $('bnSub'), stamp: $('stamp'), stTitle: $('stTitle'), stSub: $('stSub'), count: $('count'), keys: $('keys'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrSync: $('scrSync'), scrOver: $('scrOver'),
+  btnSolo: $('btnSolo'), btnEns: $('btnEns'), pplLabel: $('pplLabel'), pplRow: $('pplRow'), btnP: [$('btnP2'), $('btnP3'), $('btnP4')], modeLine: $('modeLine'), tBest: $('tBest'), bestLab: $('bestLab'),
+  btnStart: $('btnStart'), btnMuteT: $('btnMuteT'), btnMuteP: $('btnMuteP'), btnMuteR: $('btnMuteR'), btnPauseRetry: $('btnPauseRetry'), pOffset: $('pOffset'),
+  rTitle: $('rTitle'), rLine: $('rLine'), rScore: $('rScore'), rBadge: $('rBadge'), rSongs: $('rSongs'), rTeam: $('rTeam'), rSongsN: $('rSongsN'), rPerfect: $('rPerfect'), rCombo: $('rCombo'), rSeed: $('rSeed'),
+  mascot: $('mascot'), mascotP: $('mascotP'), mascotR: $('mascotR'),
+  syncDot: $('syncDot'), syncDots: $('syncDots'), syncMsg: $('syncMsg'), syncVal: $('syncVal'), syncHelp: $('syncHelp'),
+};
+const stage = el.cv, ctx = stage.getContext('2d');
+const bgCv = document.createElement('canvas');
+let fine = false;
+try { fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) { fine = false; }
+let bgDirty = true;
+
+// =====================================================================
+// LAYOUT: HUD on top, the song map, eight lanes, the xylophone, and a wooden floor with the bear(s). Everything is measured from the real viewport.
+// =====================================================================
+function layout() {
+  const probe = getComputedStyle($('probe'));
+  const sat = parseFloat(probe.paddingTop) || 0, sab = parseFloat(probe.paddingBottom) || 0, sal = parseFloat(probe.paddingLeft) || 0, sar = parseFloat(probe.paddingRight) || 0;
+  const vv = window.visualViewport;
+  const W = Math.max(1, Math.round(vv && vv.width ? vv.width : window.innerWidth)), H = Math.max(1, Math.round(vv && vv.height ? vv.height : window.innerHeight));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const short = H < 500, wide = W >= 600;
+  let hudBottom = sat + 6 + (wide ? 40 : 40 + 3 + 28) + 4;
+  if (!el.hud.hidden) { const r = el.hud.getBoundingClientRect(); if (r.height > 10) hudBottom = r.bottom + 4; }
+  const rollH = short ? 16 : 22, rollY = hudBottom, laneTop = rollY + rollH + 4;
+  const stripH = short ? 58 : clamp(Math.round(H * 0.16), 100, 140), barH = short ? 58 : clamp(Math.round(H * 0.1), 74, 100);
+  const stripBot = H - sab - (short ? 0 : 2), stripTop = stripBot - stripH, barBot = stripTop, barTop = barBot - barH, hitY = barTop;
+  const kx0 = sal + 4, kx1 = W - sar - 4, kw = (kx1 - kx0) / 8;
+  const laneH = hitY - laneTop;
+  const ppb = clamp(laneH / (short ? 3.7 : 4.4), 40, 108);
+  const noteH = clamp(Math.round(ppb * 0.5 - 4), 18, 44);
+  const barW = Math.min(kw - 7, 138);
+  const sc = clamp(stripH / 128, 0.4, 1.15);
+  Object.assign(LAY, { W, H, dpr, sat, sab, sal, sar, hudBottom, rollY, rollH, laneTop, hitY, barTop, barH, barBot, stripTop, stripBot, stripH, kx0, kx1, kw, ppb, noteH, barW, sc, short });
+  stage.width = Math.round(W * dpr); stage.height = Math.round(H * dpr);
+  bgDirty = true;
+  const topCoach = laneTop + 10;
+  el.coach.style.top = topCoach + 'px';
+  el.banner.style.top = Math.round(laneTop + (short ? 2 : laneH * 0.14)) + 'px';
+  el.count.style.top = Math.round(laneTop + laneH * (short ? 0.5 : 0.42)) + 'px';
+  el.stamp.style.top = Math.round(laneTop + laneH * (short ? 0.2 : 0.3)) + 'px';
+  el.coach.style.display = short ? 'none' : '';
+  el.keys.style.top = (stripBot - 16) + 'px';
+  el.keys.hidden = !fine || W < 700 || short;
+}
+window.addEventListener('resize', () => { layout(); });
+window.addEventListener('orientationchange', () => setTimeout(layout, 150));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { layout(); });
+const laneCx = (i) => LAY.kx0 + (i + 0.5) * LAY.kw;
+const laneAtX = (x) => clamp(Math.floor((x - LAY.kx0) / LAY.kw), 0, 7);
+const chartZones = () => (V.g && V.g.chart && V.g.chart.zone) || { zone: [0, 0, 0, 0, 0, 0, 0, 0], bounds: [0, 8] };
+
+// =====================================================================
+// DRAWING PRIMITIVES
+// =====================================================================
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(0.001, rx), Math.max(0.001, ry), rot || 0, 0, TAU); }
+function circ(c, x, y, r) { c.beginPath(); c.arc(x, y, Math.max(0.001, r), 0, TAU); }
+function rrect(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+function paint(c, fill, w) { c.fillStyle = fill; c.fill(); if (w !== 0) { c.lineWidth = w || 2.4; c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK; c.stroke(); } }
+function outText(c, txt, x, y, size, col, ow, align, font) {
+  c.font = size + 'px ' + (font || FONT_D); c.textAlign = align || 'center'; c.textBaseline = 'middle';
+  c.lineJoin = 'round'; c.lineWidth = ow === undefined ? size * 0.22 : ow; c.strokeStyle = INK;
+  if (c.lineWidth > 0) c.strokeText(txt, x, y);
+  c.fillStyle = col; c.fillText(txt, x, y);
+}
+function star4(c, x, y, r, rot) {
+  c.beginPath();
+  for (let i = 0; i < 8; i++) { const a = (rot || 0) + i * Math.PI / 4, rr = i % 2 ? r * 0.38 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  c.closePath();
+}
+function noteGlyph(c, x, y, s, col, rot, dbl) {   // an eighth note drawn by hand (no font dependency)
+  c.save(); c.translate(x, y); c.rotate(rot || 0); c.scale(s / 20, s / 20);
+  c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK;
+  c.beginPath(); c.moveTo(4, 6); c.lineTo(4, -14); c.lineTo(13, -9); c.lineWidth = 6.5; c.stroke(); c.lineWidth = 3.2; c.strokeStyle = col; c.stroke();
+  ell(c, 0, 7, 6.5, 5, -0.4); paint(c, col, 2.4);
+  if (dbl) { c.save(); c.translate(-14, 4); ell(c, 0, 7, 6.5, 5, -0.4); paint(c, col, 2.4); c.restore(); }
+  c.restore();
+}
+function heartPath(c, x, y, s) {
+  c.save(); c.translate(x, y); c.scale(s / 12, s / 12); c.beginPath();
+  c.moveTo(0, 10); c.bezierCurveTo(-12, 1, -9, -9, -3.5, -7); c.bezierCurveTo(-1.5, -6.4, 0, -4.4, 0, -3); c.bezierCurveTo(0, -4.4, 1.5, -6.4, 3.5, -7); c.bezierCurveTo(9, -9, 12, 1, 0, 10); c.closePath(); c.restore();
+}
+const labelDot = (c, x, y, r) => { circ(c, x, y, r); c.fillStyle = INK; c.fill(); };
+
+// =====================================================================
+// THE BEARS: parametric little musicians (bear / bunny), a 2-bone arm with an elbow, a mallet in each paw. Local units: feet at (0,0), 128 tall.
+// =====================================================================
+const STYLES = [
+  { kind: 'bear', fur: '#c98a52', furDk: '#a8703c', belly: '#f6dcb0', inner: '#f2a68f', scarf: '#ff6b6b', mallet: '#ff6b6b' },
+  { kind: 'bunny', fur: '#fff1ea', furDk: '#e6cdc2', belly: '#ffffff', inner: '#ffb3c7', scarf: '#4a90ff', mallet: '#4a90ff' },
+  { kind: 'bear', fur: '#f0b64b', furDk: '#cf9226', belly: '#ffe9b3', inner: '#f6a07c', scarf: '#5fd068', mallet: '#5fd068' },
+  { kind: 'bunny', fur: '#d9cdf0', furDk: '#b7a6dd', belly: '#f6f0ff', inner: '#ff9fc1', scarf: '#ffb020', mallet: '#ffb020' },
+];
+const MALLET_LEN = 36, ARM_U = 31, ARM_F = 31, SHOULDER = 22, SHOULDER_Y = -54;
+function drawArm(c, side, tip, st, wig) {
+  const sx = side * SHOULDER, sy = SHOULDER_Y;
+  const a = side * 0.26 + (wig || 0), dx = Math.sin(a), dy = -Math.cos(a);
+  let hx = tip.x - dx * MALLET_LEN, hy = tip.y - dy * MALLET_LEN;
+  let vx = hx - sx, vy = hy - sy, d = Math.hypot(vx, vy);
+  const maxd = ARM_U + ARM_F - 0.6;
+  if (d > maxd) { const k = maxd / d; hx = sx + vx * k; hy = sy + vy * k; vx = hx - sx; vy = hy - sy; d = maxd; }
+  if (d < 12) { const k = 12 / Math.max(0.001, d); if (d < 0.001) { vx = 0; vy = -12; } else { vx *= k; vy *= k; } hx = sx + vx; hy = sy + vy; d = 12; }
+  const aa = (ARM_U * ARM_U - ARM_F * ARM_F + d * d) / (2 * d), h = Math.sqrt(Math.max(0, ARM_U * ARM_U - aa * aa));
+  const ux = vx / d, uy = vy / d;
+  const e1 = { x: sx + ux * aa - uy * h, y: sy + uy * aa + ux * h }, e2 = { x: sx + ux * aa + uy * h, y: sy + uy * aa - ux * h };
+  const s1 = side * (e1.x - sx) + (e1.y - sy) * 0.4, s2 = side * (e2.x - sx) + (e2.y - sy) * 0.4;
+  const el_ = s1 >= s2 ? e1 : e2;
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(sx, sy); c.lineTo(el_.x, el_.y); c.lineTo(hx, hy); c.lineWidth = 15; c.strokeStyle = INK; c.stroke(); c.lineWidth = 10.4; c.strokeStyle = st.fur; c.stroke();
+  circ(c, el_.x, el_.y, 5.4); c.fillStyle = st.fur; c.fill();   // the elbow joint
+  // mallet: wooden stick, round head
+  const mx = hx + dx * MALLET_LEN, my = hy + dy * MALLET_LEN;
+  c.beginPath(); c.moveTo(hx, hy); c.lineTo(mx, my); c.lineWidth = 6; c.strokeStyle = INK; c.stroke(); c.lineWidth = 3; c.strokeStyle = '#e6b673'; c.stroke();
+  circ(c, mx, my, 7.6); paint(c, st.mallet, 2.4);
+  circ(c, mx - 2.2, my - 2.4, 2.2); c.fillStyle = 'rgba(255,255,255,0.7)'; c.fill();
+  circ(c, hx, hy, 6.8); paint(c, st.fur, 2.4);   // the paw
+}
+function drawFace(c, st, f) {
+  // eyes
+  const ey = -88, ex = 10.5, lx = f.look * 2.4, ly = f.lookY * 1.6;
+  const mode = f.eyes;
+  for (const s of [-1, 1]) {
+    const x = s * ex;
+    if (mode === 'happy') {
+      c.beginPath(); c.arc(x, ey + 3, 4.6, Math.PI * 1.1, Math.PI * 1.9); c.lineWidth = 3; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke();
+    } else if (mode === 'blink') {
+      c.beginPath(); c.moveTo(x - 4.2, ey); c.lineTo(x + 4.2, ey); c.lineWidth = 3; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke();
+    } else if (mode === 'sad') {
+      ell(c, x, ey + 0.5, 4.4, 4.9); c.fillStyle = INK; c.fill();
+      circ(c, x - 1.4 + lx * 0.4, ey - 1.8, 1.7); c.fillStyle = '#fff'; c.fill();
+      ell(c, x + s * 2.5, ey + 9, 2.2, 3.4); c.fillStyle = '#8fd0ff'; c.fill();   // a tear
+    } else {
+      const big = mode === 'wide' ? 1.15 : 1;
+      ell(c, x, ey, 4.5 * big, 5.2 * big); c.fillStyle = INK; c.fill();
+      circ(c, x - 1.5 + lx, ey - 1.9 + ly, 1.8); c.fillStyle = '#fff'; c.fill();
+      circ(c, x + 1.6 + lx * 0.5, ey + 1.7 + ly * 0.5, 0.9); c.fillStyle = 'rgba(255,255,255,0.8)'; c.fill();
+    }
+  }
+  // brows when worried
+  if (f.worry > 0.05) {
+    for (const s of [-1, 1]) { c.beginPath(); c.moveTo(s * ex - s * 5.5, ey - 8 - f.worry * 2); c.lineTo(s * ex + s * 4.5, ey - 11); c.lineWidth = 2.4; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke(); }
+  }
+  // cheeks
+  ell(c, -19, -79, 5.2, 3.4); c.fillStyle = 'rgba(255,120,150,' + (0.35 + f.blush * 0.35) + ')'; c.fill();
+  ell(c, 19, -79, 5.2, 3.4); c.fill();
+  // muzzle, nose, mouth
+  ell(c, 0, -77, 12.5, 9.4); paint(c, st.belly, 0);
+  ell(c, 0, -81.5, 4.4, 3.2); c.fillStyle = INK; c.fill();
+  c.lineCap = 'round'; c.lineWidth = 2.4; c.strokeStyle = INK;
+  const m = f.mouth;
+  if (m === 'open') {
+    c.beginPath(); c.moveTo(-7, -75.5); c.quadraticCurveTo(0, -64, 7, -75.5); c.quadraticCurveTo(0, -73, -7, -75.5); c.closePath(); c.fillStyle = '#b8344e'; c.fill(); c.stroke();
+    ell(c, 0, -69.2, 3.4, 2); c.fillStyle = '#ff8aa1'; c.fill();
+  } else if (m === 'o') {
+    ell(c, 0, -71, 3.2, 4); c.fillStyle = '#b8344e'; c.fill(); c.stroke();
+  } else if (m === 'flat') {
+    c.beginPath(); c.moveTo(-5, -71.5); c.quadraticCurveTo(-2.5, -73.6, 0, -71.5); c.quadraticCurveTo(2.5, -69.6, 5, -71.5); c.stroke();
+  } else if (m === 'sad') {
+    c.beginPath(); c.moveTo(0, -81); c.lineTo(0, -77.5); c.moveTo(-5.5, -70.5); c.quadraticCurveTo(0, -75.5, 5.5, -70.5); c.stroke();
+  } else {
+    c.beginPath(); c.moveTo(0, -78); c.lineTo(0, -75.5); c.moveTo(-5.5, -74.5); c.quadraticCurveTo(0, -69.6, 5.5, -74.5); c.stroke();
+  }
+  if (f.sweat > 0.05) { c.save(); c.translate(24, -100 + f.sweat * 2); ell(c, 0, 0, 3, 4.6); c.fillStyle = '#8fd0ff'; c.fill(); c.lineWidth = 1.8; c.strokeStyle = INK; c.stroke(); c.restore(); }
+}
+// b: { x, y (feet), sc, style, bob, tilt, lean, jump, tips: [tipL, tipR] (world coords or null), face, wig }
+function drawBear(c, b) {
+  const st = STYLES[b.style % STYLES.length], sc = b.sc, f = b.face;
+  const oy = b.y - (b.jump || 0);
+  c.save(); c.translate(b.x, oy); c.scale(sc, sc);
+  // feet
+  for (const s of [-1, 1]) { ell(c, s * 15, -7, 12, 8); paint(c, st.fur, 2.6); }
+  c.save();
+  if (b.lean) { c.translate(0, -30); c.rotate(b.lean); c.translate(0, 30); }
+  // body
+  ell(c, 0, -37, 28, 31); paint(c, st.fur, 2.8);
+  ell(c, 0, -33, 17, 21); paint(c, st.belly, 0);
+  // arms (behind the head)
+  const tips = b.tips || [null, null];
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? -1 : 1;
+    let tip = tips[i] ? { x: (tips[i].x - b.x) / sc, y: (tips[i].y - oy) / sc } : { x: side * 34, y: -96 };
+    drawArm(c, side, tip, st, (b.wig || 0) * side);
+  }
+  // scarf
+  c.beginPath(); c.moveTo(-19, -58); c.quadraticCurveTo(0, -48, 19, -58); c.lineTo(17, -65); c.quadraticCurveTo(0, -57, -17, -65); c.closePath(); paint(c, st.scarf, 2.4);
+  c.beginPath(); c.moveTo(8, -54); c.lineTo(16, -40); c.lineTo(9, -40); c.lineTo(4, -52); c.closePath(); paint(c, st.scarf, 2.2);
+  // head
+  c.save(); c.translate(0, -86 + (b.bob || 0)); c.rotate(b.tilt || 0); c.translate(0, 86);
+  if (st.kind === 'bunny') {
+    for (const s of [-1, 1]) {
+      c.save(); c.translate(s * 13, -104); c.rotate(s * 0.16 + (b.earWig || 0) * s);
+      ell(c, 0, -15, 8.4, 21); paint(c, st.fur, 2.6);
+      ell(c, 0, -14, 4.2, 15); paint(c, st.inner, 0);
+      c.restore();
+    }
+  } else {
+    for (const s of [-1, 1]) { circ(c, s * 22, -106, 10.4); paint(c, st.fur, 2.6); circ(c, s * 22, -106, 5.2); paint(c, st.inner, 0); }
+  }
+  ell(c, 0, -86, 30, 27.5); paint(c, st.fur, 2.8);
+  drawFace(c, st, f);
+  c.restore();
+  c.restore();
+  c.restore();
+}
+// the pose of one bear this frame, from its animation state
+function bearFace(b) {
+  const f = { eyes: 'open', mouth: 'smile', look: b.look, lookY: -0.4, worry: 0, blush: 0.2, sweat: 0 };
+  if (b.sadT > 0) { f.eyes = 'sad'; f.mouth = 'sad'; f.worry = 1; f.blush = 0; }
+  else if (b.wrongT > 0) { f.eyes = 'wide'; f.mouth = 'o'; f.worry = 1; f.sweat = 1; f.blush = 0; }
+  else if (b.bowT > 0 || b.cheerT > 0.12 || b.happy > 0) { f.eyes = 'happy'; f.mouth = 'open'; f.blush = 1; }
+  else if (b.blink > 0) f.eyes = 'blink';
+  return f;
+}
+function armTip(b, side, target, u) {   // world position of a mallet head: rest -> the key -> rest
+  const sc = b.sc, rest = { x: b.x + side * 47 * sc, y: b.y - 113 * sc - (b.jump || 0) };
+  if (!target || u >= 1) return rest;
+  let e;
+  if (u < 0.3) e = easeOut(u / 0.3); else if (u < 0.45) e = 1; else e = 1 - easeInOut((u - 0.45) / 0.55);
+  return { x: lerp(rest.x, target.x, e), y: lerp(rest.y, target.y, e) };
+}
+function newBear(i) { return { i, style: i, x: 0, tx: 0, home: 0, look: 0, lookT: 0, arm: [{ t: 9, lane: 0, tgt: null }, { t: 9, lane: 0, tgt: null }], alt: 0, cheerT: 0, wrongT: 0, sadT: 0, bowT: 0, happy: 0, jump: 0, jv: 0, blink: 0, blinkT: rv(1.5, 3.5), idle: 0, wig: 0, earWig: 0, bubble: 0, free: false }; }
+
+function bearZoneX(p, bounds) { return { x0: LAY.kx0 + bounds[p] * LAY.kw, x1: LAY.kx0 + bounds[p + 1] * LAY.kw }; }
+function syncBears() {
+  const Z = chartZones(), P = Z.bounds.length - 1;
+  const key = P + ':' + Z.bounds.join(',') + ':' + LAY.W;
+  if (V.bears.length !== P) { V.bears = []; for (let i = 0; i < P; i++) V.bears.push(newBear(i)); V.zoneKey = ''; }
+  if (key !== V.zoneKey) {
+    V.zoneKey = key;
+    V.bears.forEach((b, i) => { const z = bearZoneX(i, Z.bounds); b.home = (z.x0 + z.x1) / 2; b.tx = b.home; if (!b.x || !V.ready) b.x = b.home; });
+  }
+}
+function armStrike(b, cx, ty, z0, z1, ok) {   // swing a mallet at x = cx: the arm on that side, the bear slides so that its shoulder is under the key
+  const side = Math.abs(cx - b.x) < 10 * b.sc ? ((b.alt ^= 1) * 2 - 1) : (cx < b.x ? -1 : 1), i = side < 0 ? 0 : 1;
+  b.arm[i] = { t: 0, tgt: { x: cx, y: ty } };
+  const half = Math.min(24 * b.sc, (z1 - z0) / 2);
+  b.tx = clamp(cx - side * 22 * b.sc, z0 + half, z1 - half);
+  b.look = clamp((cx - b.x) / 120, -1, 1); b.lookT = 1.2; b.idle = 0;
+  if (ok === 'good') { b.cheerT = 0.45; if (b.jump < 3 && !reduceMotion) b.jv = 50; }
+  else if (ok === 'bad') { b.wrongT = 0.9; }
+}
+function bearStrike(lane, pl, ok) {
+  const Z = chartZones(), p = clamp(pl === undefined ? Z.zone[lane] : pl, 0, V.bears.length - 1), b = V.bears[p];
+  if (!b) return;
+  const z = bearZoneX(p, Z.bounds);
+  armStrike(b, laneCx(lane), LAY.barBot + 5, z.x0, z.x1, ok);
+}
+function bearsUpdate(dt) {
+  syncBears();
+  const g = V.g, ch = g.chart, Z = chartZones();
+  for (const b of V.bears) {
+    b.sc = LAY.sc; b.y = LAY.stripBot - 6 * LAY.sc;
+    b.x += (b.tx - b.x) * (1 - Math.exp(-dt * 22));
+    b.idle += dt;
+    if (b.idle > 1.0 && V.phase !== 'title') b.tx += (b.home - b.tx) * (1 - Math.exp(-dt * 2.2));
+    if (b.lookT > 0) b.lookT -= dt; else b.look *= Math.exp(-dt * 3);
+    for (const a of b.arm) if (a.t < 5) a.t += dt;
+    b.cheerT = Math.max(0, b.cheerT - dt); b.wrongT = Math.max(0, b.wrongT - dt); b.sadT = Math.max(0, b.sadT - dt);
+    if (b.bowT > 0) b.bowT = Math.max(0, b.bowT - dt);
+    b.happy = Math.max(0, b.happy - dt);
+    // hop
+    b.jv -= 260 * dt; b.jump += b.jv * dt; if (b.jump < 0) { b.jump = 0; b.jv = 0; } if (b.jump > 14) { b.jump = 14; b.jv = Math.min(b.jv, 0); }
+    b.blinkT -= dt; if (b.blinkT <= 0) { b.blink = 0.12; b.blinkT = rv(2.2, 4.4); }
+    if (b.blink > 0) b.blink -= dt;
+    b.wig = b.bowT > 0 ? 0 : (b.cheerT > 0 ? Math.sin(V.clock * 28) * 0.16 : 0);
+    b.earWig = b.cheerT > 0 ? Math.sin(V.clock * 22) * 0.12 : 0;
+    // the head looks at the next waiting note of its zone
+    if (b.lookT <= 0 && V.phase === 'play') {
+      let nx = null;
+      for (let i = ch.open; i < ch.notes.length; i++) { const n = ch.notes[i]; if (n.state === 0 && Z.zone[n.lane] === b.i) { nx = n; break; } }
+      if (nx) b.look += (clamp((laneCx(nx.lane) - b.x) / 120, -1, 1) - b.look) * Math.min(1, dt * 6);
+    }
+  }
+}
+function placeBear(b, beatPhase, u) {
+  // returns the draw object for bear b
+  const bob = Math.sin(beatPhase * TAU) * 2.2;
+  let lean = 0;
+  if (b.bowT > 0) { const k = 1 - b.bowT / 1.4; lean = (k < 0.25 ? easeOut(k / 0.25) : k < 0.7 ? 1 : 1 - easeInOut((k - 0.7) / 0.3)) * 0.55; }
+  const tips = [null, null];
+  for (let i = 0; i < 2; i++) {
+    const a = b.arm[i], side = i === 0 ? -1 : 1;
+    tips[i] = armTip(b, side, a.tgt, a.t / 0.26);
+    if (b.bowT > 0 || b.sadT > 0) tips[i] = armTip(b, side, null, 1);
+  }
+  const tilt = b.wrongT > 0 ? Math.sin(Math.min(1, (0.9 - b.wrongT) / 0.25) * 1.57) * 0.3 * (b.i % 2 ? -1 : 1) : clamp(b.look * 0.07, -0.08, 0.08) + (b.sadT > 0 ? 0.12 : 0);
+  return { x: b.x, y: b.y, sc: b.sc, style: b.style, bob: b.sadT > 0 ? 5 : bob, tilt, lean, jump: b.jump, tips, face: bearFace(b), wig: b.wig, earWig: b.earWig };
+}
+
+// =====================================================================
+// BACKGROUND CACHE: sky, clouds, lane panels, wooden floor
+// =====================================================================
+function buildBg() {
+  const W = LAY.W, H = LAY.H, dpr = LAY.dpr;
+  bgCv.width = Math.round(W * dpr); bgCv.height = Math.round(H * dpr);
+  const c = bgCv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sky = c.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#bfe3ff'); sky.addColorStop(0.55, '#e3f3ff'); sky.addColorStop(1, '#fff1cf');
+  c.fillStyle = sky; c.fillRect(0, 0, W, H);
+  // sun
+  const sx = W * 0.86, sy = LAY.laneTop + 30;
+  const sg = c.createRadialGradient(sx, sy, 4, sx, sy, 90); sg.addColorStop(0, 'rgba(255,244,190,0.95)'); sg.addColorStop(1, 'rgba(255,244,190,0)');
+  c.fillStyle = sg; c.fillRect(sx - 100, sy - 100, 200, 200);
+  // clouds
+  const cl = [[0.12, 0.18, 1], [0.58, 0.1, 0.8], [0.4, 0.42, 0.7], [0.82, 0.55, 0.9], [0.2, 0.72, 0.8]];
+  for (const q of cl) {
+    const x = W * q[0], y = LAY.laneTop + (LAY.hitY - LAY.laneTop) * q[1], s = q[2] * Math.max(0.7, Math.min(1.4, LAY.W / 500 + 0.5)) * 26;
+    c.fillStyle = 'rgba(255,255,255,0.75)';
+    for (const o of [[-1.4, 0.2, 0.8], [-0.5, -0.4, 1], [0.5, -0.1, 1.1], [1.4, 0.25, 0.8], [0, 0.3, 1.2]]) { circ(c, x + o[0] * s, y + o[1] * s, o[2] * s * 0.8); c.fill(); }
+  }
+  // lane panels
+  const lt = LAY.laneTop, lh = LAY.hitY - lt;
+  for (let i = 0; i < 8; i++) {
+    const x = LAY.kx0 + i * LAY.kw;
+    c.fillStyle = i % 2 ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.48)'; c.fillRect(x, lt, LAY.kw, lh);
+    const g = c.createLinearGradient(0, LAY.hitY - lh * 0.4, 0, LAY.hitY);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, mixc(KC[i], [255, 255, 255], 0.2).replace('rgb', 'rgba').replace(')', ',0.32)'));
+    c.fillStyle = g; c.fillRect(x, LAY.hitY - lh * 0.4, LAY.kw, lh * 0.4);
+  }
+  c.strokeStyle = 'rgba(43,37,80,0.16)'; c.lineWidth = 1;
+  for (let i = 0; i <= 8; i++) { const x = Math.round(LAY.kx0 + i * LAY.kw) + 0.5; c.beginPath(); c.moveTo(x, lt); c.lineTo(x, LAY.hitY); c.stroke(); }
+  // behind the xylophone: warm wall
+  const wall = c.createLinearGradient(0, LAY.barTop - 6, 0, LAY.stripTop);
+  wall.addColorStop(0, '#ffe9bf'); wall.addColorStop(1, '#ffd89a');
+  c.fillStyle = wall; c.fillRect(0, LAY.barTop - 6, W, LAY.barH + 6);
+  c.fillStyle = INK; c.fillRect(0, LAY.barTop - 7, W, 2.5);
+  // floor
+  const fl = c.createLinearGradient(0, LAY.stripTop, 0, H);
+  fl.addColorStop(0, '#f1c98a'); fl.addColorStop(1, '#d99f5c');
+  c.fillStyle = fl; c.fillRect(0, LAY.stripTop, W, H - LAY.stripTop);
+  c.fillStyle = INK; c.fillRect(0, LAY.stripTop - 1, W, 2.5);
+  c.strokeStyle = 'rgba(120,70,30,0.22)'; c.lineWidth = 1.5;
+  for (let y = LAY.stripTop + 22; y < H; y += 22) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  for (let y = LAY.stripTop, r = 0; y < H; y += 22, r++) for (let x = (r % 2) * 40 + 10; x < W; x += 80) { c.beginPath(); c.moveTo(x, y); c.lineTo(x, Math.min(H, y + 22)); c.stroke(); }
+  bgDirty = false;
+}
+
+// =====================================================================
+// EFFECTS: sparks, floating notes, rings, judgement words. Reduced motion keeps only the words and a few sparks.
+// =====================================================================
+function addPart(p) { if (V.fxOff) return; if (V.parts.length >= VIEW.PARTS) V.parts.shift(); V.parts.push(p); }
+function sparks(x, y, n, cols, sp, life) {
+  if (reduceMotion) n = Math.min(n, 2);
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + rv(-1.1, 1.1), s = rv(0.4, 1) * (sp || 190);
+    addPart({ k: 'spark', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, g: 320, life: life || rv(0.35, 0.6), max: life || 0.5, size: rv(5, 10), col: cols[i % cols.length], rot: rv(0, 3) });
+  }
+}
+function noteBurst(x, y, col, n) {
+  if (reduceMotion) n = Math.min(n, 1);
+  for (let i = 0; i < n; i++) addPart({ k: 'note', x: x + rv(-8, 8), y, vx: rv(-40, 40), vy: rv(-150, -90), g: -10, life: 0.9, max: 0.9, size: rv(15, 21), col, rot: rv(-0.4, 0.4), dbl: Math.random() < 0.3 });
+}
+function ringWave(x, y, col, max) { addPart({ k: 'ring', x, y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: max || 60, col }); }
+function floatText(x, y, txt, col, size, life) { if (V.fxOff) return; if (V.texts.length > 12) V.texts.shift(); V.texts.push({ x, y, txt, col, size: size || 22, t: 0, max: life || 0.7 }); }
+function fxStep(dt) {
+  for (let i = V.parts.length - 1; i >= 0; i--) {
+    const p = V.parts[i]; p.life -= dt;
+    if (p.life <= 0) { V.parts.splice(i, 1); continue; }
+    p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+  for (let i = V.texts.length - 1; i >= 0; i--) { const t = V.texts[i]; t.t += dt; if (t.t >= t.max) V.texts.splice(i, 1); }
+  for (let i = 0; i < 8; i++) { V.press[i] += dt; V.glow[i] = Math.max(0, V.glow[i] - dt * 4); }
+  V.shake = Math.max(0, V.shake - dt); V.rail = Math.max(0, V.rail - dt);
+  const g = V.g;
+  const target = g && V.phase === 'play' && g.pStreak >= C.FLAME_AT ? Math.min(1, 0.35 + (g.pStreak - C.FLAME_AT) / 22) : 0;
+  V.flame += (target - V.flame) * Math.min(1, dt * (target > V.flame ? 6 : 3));
+  if (V.phase === 'ending') V.dim = Math.min(1, V.dim + dt * 1.3);
+  else V.dim = Math.max(0, V.dim - dt * 3);
+}
+function drawParts(c) {
+  for (const p of V.parts) {
+    const k = clamp(p.life / p.max, 0, 1);
+    c.save(); c.globalAlpha = Math.min(1, k * 1.6);
+    if (p.k === 'spark') { star4(c, p.x, p.y, p.size * (0.5 + 0.5 * k), p.rot + (p.max - p.life) * 4); c.fillStyle = p.col; c.fill(); c.lineWidth = 1.4; c.strokeStyle = INK; c.stroke(); }
+    else if (p.k === 'note') noteGlyph(c, p.x, p.y, p.size, p.col, p.rot + Math.sin((p.max - p.life) * 7) * 0.2, p.dbl);
+    else if (p.k === 'ring') { circ(c, p.x, p.y, p.size * (1 - k) + 6); c.lineWidth = 3.5 * k + 1; c.strokeStyle = p.col; c.stroke(); }
+    c.restore();
+  }
+}
+function drawTexts(c) {
+  for (const t of V.texts) {
+    const k = t.t / t.max, a = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+    c.save(); c.globalAlpha = a;
+    const y = t.y - 34 * easeOut(Math.min(1, k * 1.4)), s = t.size * (k < 0.12 ? 0.7 + k / 0.12 * 0.45 : 1.15 - Math.min(0.15, (k - 0.12) * 0.5));
+    outText(c, t.txt, t.x, y, s, t.col, s * 0.2);
+    c.restore();
+  }
+}
+
+// =====================================================================
+// SCENE DRAWING
+// =====================================================================
+function drawFlame(c, x, y, w, h, sway) {
+  c.beginPath(); c.moveTo(x - w / 2, y);
+  c.bezierCurveTo(x - w / 2, y - h * 0.35, x - w * 0.12 + sway, y - h * 0.58, x + sway, y - h);
+  c.bezierCurveTo(x + w * 0.12 + sway, y - h * 0.58, x + w / 2, y - h * 0.35, x + w / 2, y); c.closePath();
+}
+function drawFlames(c) {
+  if (V.flame < 0.02) return;
+  const L = LAY, f = V.flame, y = L.barTop + 4;
+  if (reduceMotion) {
+    const g = c.createLinearGradient(0, y - 46, 0, y); g.addColorStop(0, 'rgba(255,150,40,0)'); g.addColorStop(1, 'rgba(255,170,40,' + (0.55 * f) + ')');
+    c.fillStyle = g; c.fillRect(L.kx0, y - 46, L.kx1 - L.kx0, 46); return;
+  }
+  const t = V.clock;
+  for (let i = 0; i < 8; i++) {
+    const cx = laneCx(i);
+    for (let k = 0; k < 3; k++) {
+      const w = Math.min(L.kw, 90) * (k === 1 ? 0.5 : 0.34), h = clamp(L.kw * 0.55 + 14, 36, 62) * f * (k === 1 ? 1 : 0.62) * (0.8 + 0.2 * Math.sin(t * 17 + i * 1.9 + k * 2.3));
+      const ox = (k - 1) * Math.min(L.kw, 90) * 0.26, sway = Math.sin(t * 11 + i + k * 1.7) * w * 0.25;
+      drawFlame(c, cx + ox, y, w, h, sway);
+      const g = c.createLinearGradient(0, y, 0, y - h); g.addColorStop(0, 'rgba(255,90,30,0.9)'); g.addColorStop(0.55, 'rgba(255,170,40,0.9)'); g.addColorStop(1, 'rgba(255,230,100,0.55)');
+      c.fillStyle = g; c.fill();
+      drawFlame(c, cx + ox, y, w * 0.5, h * 0.6, sway * 0.6); c.fillStyle = 'rgba(255,245,190,0.85)'; c.fill();
+    }
+  }
+}
+function drawBeatLines(c, g, vt) {
+  const L = LAY, ch = g.chart, pps = L.ppb / ch.spb, laneH = L.hitY - L.laneTop;
+  const k0 = Math.ceil((vt - ch.t0) / ch.spb - 1e-6), k1 = Math.floor((vt + laneH / pps - ch.t0) / ch.spb);
+  c.save(); c.beginPath(); c.rect(L.kx0, L.laneTop, L.kx1 - L.kx0, laneH); c.clip();
+  for (let k = Math.max(k0, -C.COUNT_BEATS); k <= Math.min(k1, Math.ceil(ch.beats)); k++) {
+    const y = L.hitY - (ch.t0 + k * ch.spb - vt) * pps, bar = ((k % ch.meter) + ch.meter) % ch.meter === 0;
+    c.fillStyle = bar ? 'rgba(43,37,80,0.26)' : 'rgba(43,37,80,0.1)'; c.fillRect(L.kx0, y - (bar ? 1 : 0.5), L.kx1 - L.kx0, bar ? 2 : 1);
+  }
+  c.restore();
+}
+function drawNoteBlock(c, n, x, y, w, h, miss) {
+  const r = Math.min(h / 2, 15), lane = n.lane;
+  c.save();
+  if (miss) c.globalAlpha = 0.55;
+  const g = c.createLinearGradient(0, y, 0, y + h);
+  if (miss) { g.addColorStop(0, '#d9d5ea'); g.addColorStop(1, '#a9a4c4'); } else { g.addColorStop(0, KL[lane]); g.addColorStop(0.45, KC[lane]); g.addColorStop(1, KD[lane]); }
+  rrect(c, x, y, w, h, r); c.fillStyle = g; c.fill(); c.lineWidth = 2.6; c.lineJoin = 'round'; c.strokeStyle = INK; c.stroke();
+  if (!miss) { rrect(c, x + 5, y + 3, w - 10, Math.max(3, h * 0.2), 3); c.fillStyle = 'rgba(255,255,255,0.45)'; c.fill(); }
+  const fs = Math.min(h * 0.68, 24);
+  if (h >= 18) {
+    outText(c, NAMES[lane], x + w / 2, y + h / 2 + 1.5, fs, miss ? '#6e6a8c' : '#fff', fs * 0.2);
+    if (lane === 7) labelDot(c, x + w / 2, y + h / 2 - fs * 0.62 - 1, Math.max(1.8, fs * 0.1));
+  }
+  c.restore();
+}
+function drawNotes(c, g, vt) {
+  const L = LAY, ch = g.chart, pps = L.ppb / ch.spb, bw = Math.min(L.kw - 8, 132), h = L.noteH;
+  c.save(); c.beginPath(); c.rect(L.kx0, L.laneTop, L.kx1 - L.kx0, L.barTop + L.barH * 0.45 - L.laneTop); c.clip();
+  const ns = ch.notes;
+  for (let i = 0; i < ns.length; i++) {   // chord links first, under the blocks
+    const n = ns[i]; if (n.mi > i && n.state !== 1) {
+      const m = ns[n.mi], y = L.hitY - (n.t - vt) * pps - h / 2;
+      if (y < L.laneTop - h || y > L.hitY + L.barH) continue;
+      const x1 = laneCx(n.lane), x2 = laneCx(m.lane);
+      c.beginPath(); c.moveTo(x1, y); c.lineTo(x2, y); c.lineCap = 'round'; c.lineWidth = 11; c.strokeStyle = INK; c.stroke(); c.lineWidth = 6; c.strokeStyle = n.state === 2 ? '#c9c5dd' : '#fff'; c.stroke();
+    }
+  }
+  for (let i = ns.length - 1; i >= 0; i--) {
+    const n = ns[i]; if (n.state === 1) continue;
+    const bottom = L.hitY - (n.t - vt) * pps, top = bottom - h;
+    if (bottom < L.laneTop - 2 || top > L.hitY + L.barH) continue;
+    drawNoteBlock(c, n, laneCx(n.lane) - bw / 2, top, bw, h, n.state === 2);
+  }
+  c.restore();
+}
+function drawBars(c, g, vt) {
+  const L = LAY, ch = g.chart, bw = L.barW, bh = L.barH;
+  // which bars have a note in their window right now
+  const near = [9, 9, 9, 9, 9, 9, 9, 9];
+  if (V.phase === 'play') for (let i = ch.open; i < ch.notes.length; i++) { const n = ch.notes[i]; if (n.t - vt > 0.5) break; if (n.state === 0) near[n.lane] = Math.min(near[n.lane], Math.abs(n.t - vt)); }
+  // rails
+  for (const fy of [0.2, 0.78]) { const y = L.barTop + bh * fy; rrect(c, L.kx0 - 2, y - 4, L.kx1 - L.kx0 + 4, 8, 4); paint(c, '#c98a52', 2.2); }
+  const sz = Math.min(bw * 0.5, 26);
+  for (let i = 0; i < 8; i++) {
+    const cx = laneCx(i), pr = Math.max(0, 1 - V.press[i] / 0.16), dy = 4 * pr;
+    const x = cx - bw / 2, y = L.barTop + dy, h = bh - 2 * dy * 0 - 0;
+    c.save();
+    // soft shadow
+    rrect(c, x + 2, y + 5, bw, h, bw * 0.46); c.fillStyle = 'rgba(43,37,80,0.22)'; c.fill();
+    const gr = c.createLinearGradient(x, 0, x + bw, 0);
+    gr.addColorStop(0, KL[i]); gr.addColorStop(0.45, KC[i]); gr.addColorStop(1, KD[i]);
+    rrect(c, x, y, bw, h, bw * 0.46); c.fillStyle = gr; c.fill();
+    if (pr > 0) { rrect(c, x, y, bw, h, bw * 0.46); c.fillStyle = 'rgba(255,255,255,' + (0.4 * pr) + ')'; c.fill(); }
+    c.lineWidth = 2.8; c.lineJoin = 'round'; c.strokeStyle = INK; rrect(c, x, y, bw, h, bw * 0.46); c.stroke();
+    // shine + screws
+    rrect(c, x + bw * 0.16, y + bw * 0.34, Math.max(3, bw * 0.12), h - bw * 0.68, 3); c.fillStyle = 'rgba(255,255,255,0.5)'; c.fill();
+    for (const sy of [y + bw * 0.24, y + h - bw * 0.24]) { circ(c, cx, sy, Math.max(2.2, bw * 0.055)); c.fillStyle = INK; c.fill(); circ(c, cx - 0.6, sy - 0.6, Math.max(0.8, bw * 0.02)); c.fillStyle = 'rgba(255,255,255,0.7)'; c.fill(); }
+    // name
+    outText(c, NAMES[i], cx, y + h * 0.45, sz, '#fff', sz * 0.2);
+    if (i === 7) labelDot(c, cx, y + h * 0.45 - sz * 0.64, Math.max(1.8, sz * 0.1));
+    if (bw >= 34) { outText(c, KEYCAP[i], cx, y + h * 0.45 + sz * 0.95, Math.max(11, sz * 0.5), 'rgba(255,255,255,0.95)', Math.max(2, sz * 0.1)); }
+    if (near[i] < g.chart.win.good + 0.12) {   // tap now
+      const a = 1 - near[i] / (g.chart.win.good + 0.12);
+      rrect(c, x - 3, y - 3, bw + 6, h + 6, bw * 0.5); c.lineWidth = 4; c.strokeStyle = 'rgba(255,255,255,' + (0.35 + 0.6 * a) + ')'; c.stroke();
+    }
+    c.restore();
+    if (V.glow[i] > 0.02) {
+      const gl = c.createRadialGradient(cx, L.barTop, 2, cx, L.barTop, L.kw * 1.1);
+      gl.addColorStop(0, mixc(KC[i], [255, 255, 255], 0.35).replace('rgb', 'rgba').replace(')', ',' + (0.75 * V.glow[i]) + ')')); gl.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = gl; c.fillRect(cx - L.kw * 1.1, L.barTop - L.kw * 1.1, L.kw * 2.2, L.kw * 1.6);
+    }
+  }
+}
+function drawStrip(c, g, vt) {
+  const L = LAY, Z = chartZones(), P = Z.bounds.length - 1;
+  if (P > 1) {
+    for (let p = 0; p < P; p++) {
+      const z = bearZoneX(p, Z.bounds);
+      rrect(c, z.x0 + 3, L.stripTop + 5, z.x1 - z.x0 - 6, L.stripH - 9, 12); c.fillStyle = mixc(PCOL[p], [255, 255, 255], 0.55).replace('rgb', 'rgba').replace(')', ',0.5)'); c.fill();
+      c.lineWidth = 2.4; c.setLineDash([7, 5]); c.strokeStyle = PCOL[p]; c.stroke(); c.setLineDash([]);
+    }
+  }
+  for (let p = 0; p < V.bears.length; p++) {
+    const b = V.bears[p], bp = (V.phase === 'play' || V.phase === 'ending') ? (V.vt / g.chart.spb) : V.clock * 1.4;
+    drawBear(c, placeBear(b, bp - Math.floor(bp)));
+    if (b.wrongT > 0.2) {   // a "?" over the head
+      const bx = b.x + 26 * b.sc, by = b.y - 128 * b.sc;
+      c.save(); c.globalAlpha = Math.min(1, b.wrongT * 3);
+      circ(c, bx, by, 11 * b.sc + 3); paint(c, '#fff', 2.2); outText(c, '?', bx, by + 1, 16 * b.sc + 3, INK, 0);
+      c.restore();
+    }
+  }
+  if (P > 1) {
+    for (let p = 0; p < P; p++) {
+      const z = bearZoneX(p, Z.bounds), bx = z.x0 + 24, by = L.stripBot - 18;
+      circ(c, bx, by, 13); paint(c, PCOL[p], 2.2);
+      outText(c, String(p + 1), bx, by + 1, 16, '#fff', 3);
+    }
+  }
+}
+function drawRoll(c, g, vt) {
+  const L = LAY, ch = g.chart, x = L.kx0, w = L.kx1 - L.kx0, y = L.rollY, h = L.rollH;
+  rrect(c, x, y, w, h, 7); c.fillStyle = 'rgba(255,250,240,0.72)'; c.fill(); c.lineWidth = 1.8; c.strokeStyle = INK; c.stroke();
+  const ns = ch.notes, pad = 8, iw = w - pad * 2, ih = h - 8, r = clamp(iw / Math.max(1, ns.length) * 0.4, 1.2, 3);
+  for (let i = 0; i < ns.length; i++) {
+    const n = ns[i], px = x + pad + (n.beat / Math.max(1, ch.beats)) * iw, py = y + 4 + (7 - n.lane) / 7 * ih;
+    if (n.state === 1) { circ(c, px, py, r + 0.5); c.fillStyle = KC[n.lane]; c.fill(); c.lineWidth = 0.8; c.strokeStyle = INK; c.stroke(); }
+    else if (n.state === 2) { c.beginPath(); c.moveTo(px - r, py - r); c.lineTo(px + r, py + r); c.moveTo(px + r, py - r); c.lineTo(px - r, py + r); c.lineWidth = 1.2; c.strokeStyle = '#8a85a8'; c.stroke(); }
+    else { circ(c, px, py, r); c.fillStyle = 'rgba(43,37,80,0.28)'; c.fill(); }
+  }
+  const k = (vt - ch.t0) / ch.spb / Math.max(1, ch.beats);
+  if (k > -0.05 && k < 1.02) { const px = x + pad + clamp(k, 0, 1) * iw; c.beginPath(); c.moveTo(px, y + 2); c.lineTo(px, y + h - 2); c.lineWidth = 2; c.strokeStyle = 'rgba(224,54,79,0.8)'; c.stroke(); }
+}
+function render() {
+  const c = ctx, L = LAY, g = V.g;
+  c.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+  if (bgDirty) buildBg();
+  c.clearRect(0, 0, L.W, L.H);
+  c.drawImage(bgCv, 0, 0, L.W, L.H);
+  const vt = V.vt, showNotes = V.phase === 'play' || V.phase === 'ending';
+  c.save();
+  if (V.shake > 0 && !reduceMotion) c.translate(Math.sin(V.clock * 90) * V.shakeA * Math.min(1, V.shake * 4), Math.cos(V.clock * 70) * V.shakeA * 0.5 * Math.min(1, V.shake * 4));
+  const Z = chartZones();
+  if (Z.bounds.length > 2) {   // ensemble: tint every player's lanes
+    for (let i = 0; i < 8; i++) { c.fillStyle = mixc(PCOL[Z.zone[i]], [255, 255, 255], 0.2).replace('rgb', 'rgba').replace(')', ',0.12)'); c.fillRect(L.kx0 + i * L.kw, L.laneTop, L.kw, L.hitY - L.laneTop); }
+  }
+  if (showNotes) { drawBeatLines(c, g, vt); drawNotes(c, g, vt); }
+  drawStrip(c, g, vt);
+  drawBars(c, g, vt);
+  drawFlames(c);
+  drawParts(c); drawTexts(c);
+  c.restore();
+  if (showNotes) drawRoll(c, g, vt);
+  if (V.dim > 0.01) { c.fillStyle = 'rgba(43,37,80,' + (0.38 * V.dim) + ')'; c.fillRect(0, 0, L.W, L.H); }
+}
+
+// =====================================================================
+// MASCOT CANVASES (title / pause / result): a small xylophone and the bear(s) playing it
+// =====================================================================
+const MASC = new Map();
+function drawMascot(cv, t, kind, P) {
+  let m = MASC.get(cv.id);
+  P = P || 1;
+  if (!m || m.P !== P) { m = { P, bears: [], step: -1, press: [9, 9, 9, 9, 9, 9, 9, 9], t: 0 }; for (let i = 0; i < P; i++) m.bears.push(newBear(i)); MASC.set(cv.id, m); }
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height, dt = Math.min(0.05, Math.max(0, t - m.t)); m.t = t;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  const sky = c.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#bfe3ff'); sky.addColorStop(1, '#fff1cf');
+  rrect(c, 0, 0, W, H, 26); c.fillStyle = sky; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+  c.save(); rrect(c, 0, 0, W, H, 26); c.clip();
+  c.fillStyle = 'rgba(255,255,255,0.8)'; for (const q of [[60, 36, 1], [430, 28, 0.8], [330, 70, 0.6]]) for (const o of [[-18, 4, 12], [0, -5, 15], [18, 3, 12]]) { circ(c, q[0] + o[0] * q[2], q[1] + o[1] * q[2], o[2] * q[2]); c.fill(); }
+  const fy = H - 36; c.fillStyle = '#f1c98a'; c.fillRect(0, fy, W, 40); c.fillStyle = INK; c.fillRect(0, fy - 1, W, 3);
+  const bx0 = 40, bwAll = W - 80, kw = bwAll / 8, by = 14, bh = H * 0.3, bw = Math.min(kw - 6, 54);
+  for (const fyy of [0.2, 0.78]) { rrect(c, bx0 - 4, by + bh * fyy - 4, bwAll + 8, 8, 4); paint(c, '#c98a52', 2.4); }
+  // the tune: a little tune (solo) or a scale (ensemble)
+  const solo = [4, 4, 5, 5, 4, 4, 2, 4, 4, 2, 2, 1], scale = [0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1];
+  const seq = P > 1 ? scale : solo, period = P > 1 ? 0.3 : 0.5;
+  const bounds = P === 1 ? [0, 8] : P === 2 ? [0, 4, 8] : P === 3 ? [0, 3, 6, 8] : [0, 2, 4, 6, 8];
+  const active = kind === 'title';
+  const step = active ? Math.floor(t / period) : -1;
+  if (step !== m.step && step >= 0) {
+    m.step = step; const lane = seq[step % seq.length]; m.press[lane] = 0;
+    const own = bounds.findIndex((b, i) => i < bounds.length - 1 && lane >= b && lane < bounds[i + 1]);
+    const b = m.bears[own];
+    armStrike(b, bx0 + (lane + 0.5) * kw, by + bh + 5, bx0 + bounds[own] * kw, bx0 + bounds[own + 1] * kw, 'good');
+  }
+  for (let i = 0; i < 8; i++) {
+    m.press[i] += dt;
+    const cx = bx0 + (i + 0.5) * kw, pr = Math.max(0, 1 - m.press[i] / 0.16), y = by + 3 * pr;
+    const gr = c.createLinearGradient(cx - bw / 2, 0, cx + bw / 2, 0); gr.addColorStop(0, KL[i]); gr.addColorStop(0.45, KC[i]); gr.addColorStop(1, KD[i]);
+    rrect(c, cx - bw / 2, y, bw, bh, bw * 0.46); c.fillStyle = gr; c.fill(); c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
+    rrect(c, cx - bw * 0.3, y + bw * 0.34, bw * 0.12, bh - bw * 0.68, 3); c.fillStyle = 'rgba(255,255,255,0.5)'; c.fill();
+    outText(c, NAMES[i], cx, y + bh * 0.46, Math.min(bw * 0.5, 24), '#fff', 4);
+    if (i === 7) labelDot(c, cx, y + bh * 0.46 - 15, 2.4);
+  }
+  const sc = clamp(P === 1 ? 1.14 : P === 2 ? 1.06 : P === 3 ? 0.96 : 0.86, 0.5, 1.3);
+  for (let i = 0; i < P; i++) {
+    const b = m.bears[i]; b.sc = sc; b.y = H - 6; b.home = bx0 + ((bounds[i] + bounds[i + 1]) / 2) * kw;
+    if (!b.x) { b.x = b.home; b.tx = b.home; }
+    b.x += (b.tx - b.x) * (1 - Math.exp(-dt * 20)); b.idle += dt; if (b.idle > 0.9) b.tx += (b.home - b.tx) * (1 - Math.exp(-dt * 2));
+    for (const a of b.arm) a.t += dt;
+    b.cheerT = Math.max(0, b.cheerT - dt); b.jv -= 260 * dt; b.jump += b.jv * dt; if (b.jump < 0) { b.jump = 0; b.jv = 0; }
+    b.blinkT -= dt; if (b.blinkT <= 0) { b.blink = 0.12; b.blinkT = rv(2.2, 4.4); } if (b.blink > 0) b.blink -= dt;
+    b.look *= Math.exp(-dt * 3); b.wig = b.cheerT > 0 ? Math.sin(t * 28) * 0.16 : 0;
+    b.sadT = kind === 'over-sad' ? 1 : 0; b.bowT = 0; b.happy = kind === 'over' ? 1 : 0;
+    if (kind === 'pause') { b.blink = 1; }
+    const bp = t * 1.6;
+    const o = placeBear(b, bp - Math.floor(bp));
+    if (kind === 'over') { o.jump = Math.abs(Math.sin(t * 5 + i)) * 10; const w = Math.sin(t * 9) * 0.5; o.tips = [{ x: b.x - 40 * sc + w * 10, y: b.y - 120 * sc }, { x: b.x + 40 * sc - w * 10, y: b.y - 120 * sc }]; }
+    drawBear(c, o);
+  }
+  c.restore();
+}
+
+// =====================================================================
+// EVENTS from the logic -> picture, sound, HUD
+// =====================================================================
+function pump() {
+  const g = V.g, ev = g.events;
+  for (let i = 0; i < ev.length; i++) handleEvent(ev[i]);
+  ev.length = 0;
+}
+function handleEvent(e) {
+  const L = LAY, g = V.g;
+  switch (e.e) {
+    case 'hit': {
+      const x = laneCx(e.lane), y = L.barTop;
+      V.glow[e.lane] = 1;
+      const good = e.js !== 'close';
+      bearStrike(e.lane, e.pl, good ? 'good' : null);
+      if (e.js === 'perfect') { sparks(x, y, 12, [KC[e.lane], '#fff', '#ffe27a'], 230); noteBurst(x, y - 6, KC[e.lane], 2); if (!reduceMotion) ringWave(x, y, '#fff', L.kw * 0.9); }
+      else if (e.js === 'good') { sparks(x, y, 7, [KC[e.lane], '#fff'], 190); noteBurst(x, y - 6, KC[e.lane], 1); }
+      else sparks(x, y, 3, ['#fff'], 120);
+      floatText(x, L.barTop - 14, JS_TEXT[e.js], JS_COL[e.js], e.js === 'perfect' ? 23 : 20);
+      if (e.chord && e.mate >= 0) { floatText((x + laneCx(e.mate)) / 2, L.barTop - 44, '화음!', '#9b6bff', 23, 0.9); if (!V.ff) Sound.chord(); }
+      pop(el.pillScore);
+      break;
+    }
+    case 'miss': {
+      const x = laneCx(e.lane);
+      V.glow[e.lane] = 0;
+      floatText(x, L.barTop - 14, '빠졌어요', '#6e6a8c', 17, 0.8);
+      const b = V.bears[clamp(e.pl, 0, V.bears.length - 1)]; if (b) b.wrongT = 0.9;
+      if (!V.ff) Sound.miss();
+      break;
+    }
+    case 'stray': {
+      const x = laneCx(e.lane);
+      floatText(x, L.barTop - 14, '앗!', '#e0364f', 22, 0.7);
+      bearStrike(e.lane, e.pl, 'bad');
+      break;
+    }
+    case 'strain': updatePips(); break;
+    case 'relief': updatePips(); break;
+    case 'combo': {
+      if (!V.ff) Sound.combo(Math.min(5, Math.floor(e.combo / C.MULT_EVERY)));
+      if (!V.fxOff) floatText(L.W / 2, L.laneTop + (L.hitY - L.laneTop) * 0.62, e.combo + ' 연속!' + (e.mult > 1 ? ' ×' + e.mult : ''), '#ffb800', 26, 0.9);
+      pop(el.chipCombo);
+      break;
+    }
+    case 'heart': {
+      updateHearts(true);
+      V.shake = 0.3; V.shakeA = 5;
+      for (const b of V.bears) b.sadT = 1.1;
+      if (!V.ff) { Sound.heartLoss(); buzz([60, 40, 90]); }
+      break;
+    }
+    case 'heartUp': updateHearts(false); if (!V.ff) Sound.heartUp(); floatText(L.W / 2, L.laneTop + 40, '하트 +1', '#ff5470', 24, 1.1); break;
+    case 'song': {
+      el.hTitle.textContent = e.title;
+      V.songShown = e.L;
+      setTimeout(() => { if (V.g === g && V.phase === 'play' && V.songShown === e.L) showBanner(e.title, (e.L + 1) + '번째 곡 · ' + e.bpm + ' BPM'); }, V.ff ? 0 : Math.max(0, (e.countT - g.t) * 1000 - 250));
+      Sch.start(g.chart, g.t);
+      V.countShown = -1;
+      if (g.mode === 'coop') {
+        const zk = g.chart.zone.bounds.join(',');
+        if (V.lastZoneKey && V.lastZoneKey !== zk) setTimeout(() => { if (V.g === g && V.phase === 'play') floatText(L.W / 2, L.laneTop + 90, '구역이 바뀌었어요!', INK, 22, 2.2); }, V.ff ? 0 : Math.max(0, (e.countT - g.t) * 1000 + 300));
+        V.lastZoneKey = zk;
+      }
+      break;
+    }
+    case 'songEnd': {
+      const r = e.rec, great = r.pct >= C.HEAL_PCT;
+      stamp(r.pct >= C.HEAL_PCT ? '대성공!' : r.pct >= 80 ? '곡 완성!' : r.pct >= C.DONE_PCT ? '연주 끝!' : '아쉬워요', '완성도 ' + r.pct + '%' + (r.bonus ? ' · 보너스 +' + r.bonus : ''));
+      for (const b of V.bears) { b.bowT = 1.4; b.jv = r.pct >= 80 ? 70 : 0; b.cheerT = r.pct >= 50 ? 1 : 0; }
+      if (!V.fxOff && r.pct >= 50) { const cols = KC; for (let i = 0; i < 4; i++) sparks(rv(L.W * 0.15, L.W * 0.85), L.barTop - 30, 10, cols, 260, 0.9); for (let i = 0; i < 3; i++) noteBurst(rv(L.W * 0.2, L.W * 0.8), L.barTop - 20, KC[(i * 3) % 8], 2); }
+      if (!V.ff) { if (r.pct >= C.DONE_PCT) Sound.fanfare(great); else Sound.heartLoss(); }
+      pop(el.pillScore);
+      break;
+    }
+    case 'over': beginEnding(); break;
+    default: break;
+  }
+}
+function pop(node) { if (V.ff || reduceMotion) return; restartAnim(node, 'pop'); }
+function showBanner(title, sub) { el.bnTitle.textContent = title; el.bnSub.textContent = sub; restartAnim(el.banner, 'show'); }
+function stamp(title, sub) { if (V.ff) return; el.stTitle.textContent = title; el.stSub.textContent = sub; restartAnim(el.stamp, 'show'); }
+
+// =====================================================================
+// HUD
+// =====================================================================
+const hud = { score: -1, hearts: -1, strain: -1, lim: -1, combo: -1, mult: -1, done: -1, sub: '' };
+function buildPips() {
+  const lim = M.strainLimit(V.g.chart.lv, V.g.P);
+  if (hud.lim === lim && el.pips.childNodes.length === lim) return;
+  hud.lim = lim; el.pips.innerHTML = '';
+  for (let i = 0; i < lim; i++) el.pips.appendChild(document.createElement('i'));
+  hud.strain = -1;
+}
+function updatePips() {
+  buildPips();
+  const s = V.g.strain, nodes = el.pips.childNodes;
+  for (let i = 0; i < nodes.length; i++) nodes[i].classList.toggle('on', i < s);
+  hud.strain = s;
+}
+function updateHearts(hurt) {
+  const g = V.g, svgs = el.hearts.querySelectorAll('svg');
+  svgs.forEach((s, i) => {
+    const lost = i >= g.hearts;
+    if (hurt && lost && !s.classList.contains('lost') && !reduceMotion) restartAnim(s, 'hurt');
+    s.classList.toggle('lost', lost);
+  });
+  el.hearts.classList.toggle('low', g.hearts === 1 && V.phase === 'play');
+  hud.hearts = g.hearts;
+}
+function updateHud() {
+  const g = V.g; if (!g || el.hud.hidden) return;
+  const sc = Math.round(g.score);
+  if (sc !== hud.score) { hud.score = sc; el.hScore.textContent = fmtNum(sc); }
+  if (g.hearts !== hud.hearts) updateHearts(false);
+  if (g.strain !== hud.strain || M.strainLimit(g.chart.lv, g.P) !== hud.lim) updatePips();
+  const mult = M.multOf(g.combo);
+  if (g.combo !== hud.combo || mult !== hud.mult) {
+    hud.combo = g.combo; hud.mult = mult; el.cbN.textContent = g.combo; el.cbMul.textContent = mult > 1 ? ' ×' + mult : '';
+    el.chipCombo.classList.toggle('off', g.combo < 2);
+  }
+  const ch = g.chart, shown = Math.round(M.completeness(ch) * 100) * (ch.notes.some((n) => n.state !== 0) ? 1 : 0);
+  if (shown !== hud.done) { hud.done = shown; el.dnN.textContent = shown + '%'; }
+  const sub = (g.mode === 'coop' ? '합주 ' + g.P + '명 · ' : '') + (ch.L + 1) + '번째 곡 · ' + ch.bpm + ' BPM';
+  if (sub !== hud.sub) { hud.sub = sub; el.hSub.textContent = sub; }
+  if (el.hTitle.textContent !== ch.title) el.hTitle.textContent = ch.title;
+}
+
+// =====================================================================
+// INPUT: pointer + touch + mouse (one count per finger), keyboard. A key is played the moment a finger lands on it.
+// =====================================================================
+const contacts = new Map();   // key (source:id) -> contact { keys:Set, lane, dead }
+const recent = [];            // { t, src, x, y, srcs:Set, ct }
+let lastTouchAt = -1e9;
+function releaseAll() { contacts.clear(); recent.length = 0; V.keysDown.clear(); }
+function canTap() { return V.phase === 'play' && V.live && !V.paused && V.ready && V.resumeLeft <= 0 && !V.sync.open && !!V.g && !V.g.over; }
+function doTap(lane, perfMs) {
+  if (!canTap()) return null;
+  const g = V.g;
+  let at;
+  if (V.ff) at = g.t;
+  else {
+    const now = Clock.songAt(performance.now());
+    at = clamp(Clock.songAt(perfMs === undefined ? performance.now() : perfMs), now - 0.15, now + 0.03);
+  }
+  at -= V.offset / 1000;
+  const r = MELODY.tap(g, lane, at);
+  V.taps++;
+  if (r.k === null) { pump(); return r; }
+  V.press[lane] = 0; V.glow[lane] = Math.max(V.glow[lane], 0.5);
+  if (V.logOn) V.log.push({ lane, k: r.k, js: r.js || null, at, g: g.t });
+  if (!V.ff) {
+    if (r.k === 'hit') { if (r.js === 'close') Sound.note(lane, 'close', 0.9); else { Sound.note(lane, 'ok', 1); if (r.js === 'perfect') Sound.ting(lane); } }
+    else if (r.k === 'free') Sound.note(lane, 'ok', 0.75);
+    else if (r.k === 'off') Sound.thud(lane, 0.55);
+    else if (r.k === 'stray') Sound.thud(lane, 1);
+  }
+  if (r.k === 'free') { const b = V.bears[clamp(chartZones().zone[lane], 0, V.bears.length - 1)]; if (b) bearStrike(lane, undefined, 'good'); }
+  else if (r.k === 'off') bearStrike(lane, undefined, 'bad');
+  pump();
+  return r;
+}
+function ctKey(src, id) { return src + ':' + id; }
+function endContact(ct) { if (ct.dead) return; ct.dead = true; for (const k of ct.keys) contacts.delete(k); }
+function pressAt(src, id, x, y, isTouch, perfMs) {
+  const now = performance.now();
+  if (isTouch) lastTouchAt = now; else if (src === 'mouse' && now - lastTouchAt < 700) return false;
+  Sound.ensure();
+  const k = ctKey(src, id);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const r = recent[i];
+    if (now - r.t > 400) { recent.splice(i, 1); continue; }
+    if (now - r.t < 120 && !r.srcs.has(src) && Math.abs(r.x - x) < 9 && Math.abs(r.y - y) < 9) {   // the same finger seen through another event path
+      r.srcs.add(src);
+      if (r.ct && !r.ct.dead) { r.ct.keys.add(k); contacts.set(k, r.ct); }
+      return false;
+    }
+  }
+  const ex = contacts.get(k); if (ex) endContact(ex);   // the old contact's "up" never came
+  const rec = { t: now, src, x, y, srcs: new Set([src]), ct: null };
+  recent.push(rec);
+  if (!canTap()) return false;
+  if (y < LAY.rollY) return false;
+  const lane = laneAtX(x);
+  const ct = { keys: new Set([k]), lane, dead: false };
+  rec.ct = ct; contacts.set(k, ct);
+  doTap(lane, perfMs);
+  return true;
+}
+function pressEnd(src, id) { const ct = contacts.get(ctKey(src, id)); if (ct) endContact(ct); }
+stage.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button > 0) return;   // left button only
+  if (pressAt('pointer', e.pointerId, e.clientX, e.clientY, e.pointerType !== 'mouse', Clock.evPerf(e))) e.preventDefault();
+});
+window.addEventListener('pointerup', (e) => pressEnd('pointer', e.pointerId));
+window.addEventListener('pointercancel', (e) => pressEnd('pointer', e.pointerId));
+stage.addEventListener('touchstart', (e) => {
+  lastTouchAt = performance.now();
+  for (const t of e.changedTouches) pressAt('touch', t.identifier, t.clientX, t.clientY, true, Clock.evPerf(e));
+  if (e.cancelable) e.preventDefault();   // no emulated mouse events, no scrolling
+}, { passive: false });
+window.addEventListener('touchmove', () => { lastTouchAt = performance.now(); }, { passive: true });
+window.addEventListener('touchend', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+window.addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) pressEnd('touch', t.identifier); }, { passive: true });
+stage.addEventListener('mousedown', (e) => { if (e.button > 0) return; pressAt('mouse', 0, e.clientX, e.clientY, false, Clock.evPerf(e)); });
+window.addEventListener('mouseup', () => pressEnd('mouse', 0));
+
+function onBtnOrLink(e) { return e.target && e.target.closest && e.target.closest('a,button'); }
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const code = e.code;
+  Sound.ensure();
+  if (code === 'KeyM') { if (!e.repeat) { Sound.setMuted(!Sound.muted); uiMute(); } return; }
+  if (V.sync.open) {
+    if (code === 'Escape') { e.preventDefault(); if (!e.repeat) closeSync(); return; }
+    if ((code === 'Space' || code === 'Enter' || code in KEYLANE) && !onBtnOrLink(e)) { e.preventDefault(); if (!e.repeat) syncTap(Clock.evPerf(e)); }
+    return;
+  }
+  if (V.phase === 'title') {
+    if (code === 'Space' || code === 'Enter') { if (onBtnOrLink(e)) return; e.preventDefault(); if (!e.repeat) startRound(); }
+    else if (code === 'ArrowLeft' || code === 'ArrowRight') { e.preventDefault(); setSel(code === 'ArrowRight' ? 'coop' : 'solo', SEL.players, true); }
+    else if ((code === 'ArrowUp' || code === 'ArrowDown') && SEL.mode === 'coop') { e.preventDefault(); setSel('coop', clamp(SEL.players + (code === 'ArrowDown' ? 1 : -1), 2, 4), true); }
+    return;
+  }
+  if (V.phase === 'over') {
+    if (code === 'Space' || code === 'Enter' || code === 'KeyR') { if (e.target && e.target.closest && e.target.closest('a')) return; e.preventDefault(); if (V.overShown && !e.repeat) startRound(); }
+    return;
+  }
+  if (code === 'Escape' || code === 'KeyP') { e.preventDefault(); if (e.repeat) return; if (V.paused) resumeGame(); else pauseGame(); return; }
+  if (V.paused) {
+    if (code === 'Space' || code === 'Enter') { if (onBtnOrLink(e)) return; e.preventDefault(); if (!e.repeat) resumeGame(); }
+    return;
+  }
+  if (code in KEYLANE) { e.preventDefault(); if (!e.repeat && !V.keysDown.has(code)) { V.keysDown.add(code); doTap(KEYLANE[code], Clock.evPerf(e)); } }
+  else if (code === 'Space') e.preventDefault();
+});
+window.addEventListener('keyup', (e) => { V.keysDown.delete(e.code); });
+
+// buttons. A tap can come as pointer, touch or mouse events (and a click for keyboards), so every on-screen control listens on all of them;
+// a 120 ms window per control keeps one tap = one action.
+function onTap(node, fn) {
+  let sx = 0, sy = 0, armed = false, lastAt = -1e9;
+  const fire = (e) => { const t = performance.now(); if (t - lastAt < 120) return; lastAt = t; Sound.ensure(); fn(e); };
+  const down = (x, y) => { sx = x; sy = y; armed = true; };
+  const up = (x, y) => { const ok = armed && Math.hypot(x - sx, y - sy) < 16; armed = false; return ok; };
+  node.addEventListener('pointerdown', (e) => { e.stopPropagation(); if (e.pointerType === 'mouse' && e.button > 0) return; if (e.pointerType !== 'mouse') lastTouchAt = performance.now(); down(e.clientX, e.clientY); });
+  node.addEventListener('pointerup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('touchstart', (e) => { e.stopPropagation(); lastTouchAt = performance.now(); const t = e.changedTouches[0]; if (t) down(t.clientX, t.clientY); }, { passive: true });
+  node.addEventListener('touchend', (e) => {
+    lastTouchAt = performance.now();
+    const t = e.changedTouches[0];
+    if (t && up(t.clientX, t.clientY)) fire(e);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  node.addEventListener('mousedown', (e) => { e.stopPropagation(); if (e.button <= 0 && performance.now() - lastTouchAt > 700) down(e.clientX, e.clientY); });
+  node.addEventListener('mouseup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('click', (e) => { armed = false; fire(e); });
+}
+onTap(el.btnStart, () => { Sound.tick(); startRound(); });
+onTap($('btnAgain'), () => { if (!V.overShown) return; Sound.tick(); startRound(); });
+onTap(el.btnPause, () => { Sound.tick(); pauseGame(); });
+onTap($('btnResume'), () => { Sound.tick(); resumeGame(); });
+onTap(el.btnMute, () => { Sound.setMuted(!Sound.muted); uiMute(); Sound.tick(); });
+onTap(el.btnPauseRetry, () => {
+  if (!V.retryArmed) {   // one more tap within three seconds, so a stray tap cannot throw the round away
+    V.retryArmed = true; el.btnPauseRetry.textContent = '정말 처음부터? 한 번 더 눌러요'; el.btnPauseRetry.classList.add('arm');
+    clearTimeout(V.retryT); V.retryT = setTimeout(disarmRetry, 3000);
+  } else { disarmRetry(); startRound(); }
+});
+onTap($('btnPauseTitle'), () => { Sound.tick(); toTitle(); });
+onTap($('btnOverTitle'), () => { Sound.tick(); toTitle(); });
+for (const b of [el.btnMuteT, el.btnMuteP, el.btnMuteR]) onTap(b, () => { Sound.setMuted(!Sound.muted); uiMute(); Sound.tick(); });
+onTap($('btnSyncT'), () => openSync('title'));
+onTap($('btnSyncP'), () => openSync('pause'));
+onTap($('btnSyncDone'), () => closeSync());
+onTap($('btnSyncMinus'), () => setOffset(V.offset - 10));
+onTap($('btnSyncPlus'), () => setOffset(V.offset + 10));
+onTap($('btnSyncReset'), () => { setOffset(0); syncReset(); });
+onTap($('btnSyncRetry'), () => syncReset());
+onTap(el.btnSolo, () => { Sound.tick(); setSel('solo', SEL.players, true); });
+onTap(el.btnEns, () => { Sound.tick(); setSel('coop', SEL.players, true); });
+el.btnP.forEach((b, i) => onTap(b, () => { Sound.tick(); setSel('coop', i + 2, true); }));
+function disarmRetry() { V.retryArmed = false; clearTimeout(V.retryT); el.btnPauseRetry.textContent = '처음부터'; el.btnPauseRetry.classList.remove('arm'); }
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { releaseAll(); pauseGame(); } });
+window.addEventListener('pagehide', () => { releaseAll(); pauseGame(); });
+window.addEventListener('blur', () => { V.keysDown.clear(); });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (e.cancelable && (!e.target.closest || !e.target.closest('.overlay'))) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try {
+      if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); }
+    } catch (err) { /* follow the link */ }
+  });
+}
+// the audio engine stopped under us (phone call, lock screen): pause instead of drifting
+function onAudioState() {
+  const c = Sound.ctx; if (!c) return;
+  if (c.state !== 'running' && V.phase === 'play' && V.ready && !V.paused) pauseGame();
+}
+
+// =====================================================================
+// 박자 맞추기 (sync calibration): a circle blinks at 90 BPM with a click; tap on every blink. The first two taps are warm-up,
+// the median of the other eight (tap time minus click time) becomes the offset. Positive = the player is late, so judging subtracts it.
+// =====================================================================
+const SYNC_PERIOD = 60 / VIEW.SYNC_BPM;
+const Sync = { timer: 0, next: 0, wait: 0, started: false, base: 0 };
+function syncUi() {
+  const S = V.sync, n = S.taps.length;
+  el.syncDots.innerHTML = '';
+  for (let i = 0; i < VIEW.SYNC_TAPS; i++) { const d = document.createElement('i'); if (i < VIEW.SYNC_SKIP) d.className = 'skip'; if (i < n) d.classList.add('on'); el.syncDots.appendChild(d); }
+  el.syncMsg.innerHTML = S.msg || '&nbsp;';
+  el.syncVal.textContent = (V.offset > 0 ? '+' : '') + V.offset + 'ms';
+}
+function syncReset() {
+  const S = V.sync; S.taps = []; S.done = false; S.msg = ''; S.tapEvents = 0;
+  el.syncHelp.innerHTML = Sound.unavailable ? '소리를 쓸 수 없어요. 깜빡임만 보고 탭해 봐요.' : '원이 깜빡일 때 아무 데나 탭해요.<br>소리가 늦게 들리면 꼭 해 봐요.';
+  Sync.started = false; Sync.wait = 0; stopSyncTimer();
+  Sound.ensure(); syncUi();
+}
+function stopSyncTimer() { clearInterval(Sync.timer); Sync.timer = 0; }
+function syncBegin() {
+  Sync.base = performance.now() + 1000;
+  Sync.started = true; Sync.next = 0;
+  stopSyncTimer(); Sync.timer = setInterval(syncSchedule, 25);
+}
+const syncSongAt = (perfMs) => (perfMs - Sync.base) / 1000;
+function syncSchedule() {
+  if (!V.sync.open || !Sync.started || !Sound.running() || Sound.muted) return;
+  const now = performance.now(), sNow = syncSongAt(now), cNow = Sound.ctx.currentTime;
+  for (let guard = 0; guard < 8; guard++) {
+    const s = Sync.next * SYNC_PERIOD;
+    if (s > sNow + VIEW.LOOK) break;
+    Sync.next++;
+    const at = cNow + (s - sNow);
+    if (at >= cNow - 0.005) Sound.wood(at, 880, 0.5);
+  }
+}
+function syncTap(perfMs) {
+  const S = V.sync;
+  if (!S.open || !Sync.started || S.done) return;
+  const s = syncSongAt(perfMs);
+  if (s < -SYNC_PERIOD * 0.4) return;
+  S.tapEvents++;
+  const d = s - Math.round(s / SYNC_PERIOD) * SYNC_PERIOD;
+  S.taps.push(d);
+  Sound.tick();
+  if (S.taps.length >= VIEW.SYNC_TAPS) {
+    const use = S.taps.slice(VIEW.SYNC_SKIP).sort((a, b) => a - b), m = use.length, med = m % 2 ? use[(m - 1) / 2] : (use[m / 2 - 1] + use[m / 2]) / 2;
+    const ms = clamp(Math.round(med * 1000), -200, 200);
+    setOffset(ms, true);
+    S.done = true; S.msg = Math.abs(ms) < 8 ? '거의 딱 맞아요' : (ms > 0 ? '+' : '') + ms + 'ms로 맞췄어요';
+  }
+  syncUi();
+}
+el.scrSync.addEventListener('pointerdown', (e) => {
+  Sound.ensure();
+  if (!V.sync.open || (e.target.closest && e.target.closest('button'))) return;
+  if (e.pointerType === 'mouse' && e.button > 0) return;
+  syncTap(Clock.evPerf(e));
+});
+function setOffset(ms, quiet) {
+  V.offset = clamp(Math.round(ms), -200, 200); store.set(KEY_OFFSET, String(V.offset));
+  el.pOffset.textContent = '박자 보정 ' + (V.offset > 0 ? '+' : '') + V.offset + 'ms';
+  if (!quiet) { V.sync.msg = ''; Sound.tick(); }
+  syncUi();
+}
+function openSync(from) {
+  const S = V.sync;
+  S.open = true; S.from = from;
+  el.scrTitle.hidden = true; el.scrPause.hidden = true; el.scrSync.hidden = false;
+  syncReset();
+}
+function closeSync() {
+  const S = V.sync; if (!S.open) return;
+  S.open = false; stopSyncTimer(); Sync.started = false;
+  el.scrSync.hidden = true;
+  if (S.from === 'pause') el.scrPause.hidden = false; else el.scrTitle.hidden = false;
+}
+function updateSync(dt, ts) {
+  const S = V.sync;
+  if (!S.open) return;
+  if (!Sync.started) {
+    Sync.wait += dt;
+    if (!Sound.ctx || Sound.running() || Sync.wait > 0.8) syncBegin();
+    return;
+  }
+  const s = syncSongAt(ts), ph = s - Math.floor(s / SYNC_PERIOD) * SYNC_PERIOD;
+  el.syncDot.classList.toggle('lit', s >= 0 && ph < 0.16);
+}
+
+// =====================================================================
+// FLOW: title -> play (songs one after another) -> ending (the stage dims) -> over
+// =====================================================================
+function uiMute() {
+  const t = Sound.muted ? '소리 켜기' : '소리 끄기';
+  el.btnMuteT.textContent = t; el.btnMuteP.textContent = t; el.btnMuteR.textContent = t;
+  el.btnMute.classList.toggle('muted', Sound.muted); el.btnMute.setAttribute('aria-label', t);
+}
+const bestOf = (mode) => (mode === 'coop' ? V.bestCoop : V.best);
+function uiBest() {
+  V.best = Math.max(V.best, readInt(KEY_BEST)); V.bestCoop = Math.max(V.bestCoop, readInt(KEY_COOP));
+  const b = bestOf(SEL.mode);
+  el.bestLab.textContent = SEL.mode === 'coop' ? '합주 최고 기록' : '내 최고 기록';
+  if (b > 0) { el.tBest.className = ''; el.tBest.textContent = fmtNum(b) + '점'; }
+  else { el.tBest.className = 'none'; el.tBest.textContent = '아직 기록이 없어요'; }
+}
+function setSel(mode, players, save) {
+  SEL.mode = mode === 'coop' ? 'coop' : 'solo'; SEL.players = clamp(players | 0, 2, 4);
+  if (save) { store.set(KEY_MODE, SEL.mode); store.set(KEY_PPL, SEL.players); }
+  const coop = SEL.mode === 'coop';
+  el.btnSolo.classList.toggle('on', !coop); el.btnEns.classList.toggle('on', coop);
+  el.btnSolo.setAttribute('aria-checked', coop ? 'false' : 'true'); el.btnEns.setAttribute('aria-checked', coop ? 'true' : 'false');
+  el.pplLabel.hidden = !coop; el.pplRow.hidden = !coop;
+  el.btnP.forEach((b, i) => { b.classList.toggle('on', SEL.players === i + 2); b.setAttribute('aria-checked', SEL.players === i + 2 ? 'true' : 'false'); });
+  el.modeLine.textContent = coop
+    ? '한 곡의 음을 건반 구역별로 나눠 맡아요. 한 명이 놓치면 그 음이 빠지니까 모두 힘을 합쳐요!'
+    : '곡이 끝나면 더 빠르고 어려운 다음 곡이 이어져요. 하트 3개가 다 떨어지면 끝나요.';
+  el.btnStart.textContent = coop ? '합주 시작' : '연주 시작';
+  uiBest();
+  if (V.phase === 'title') { newIdle(); }
+}
+function freshSeed() { return (Date.now() ^ Math.floor(Math.random() * 4294967296)) | 0; }
+function mkGame(seed) { return MELODY.create(seed, { mode: SEL.mode, players: SEL.players, song: SONG_PARAM, level: LEVEL_PARAM }); }
+function resetView() {
+  V.lastZoneKey = '';
+  V.parts.length = 0; V.texts.length = 0; V.press = [9, 9, 9, 9, 9, 9, 9, 9]; V.glow = [0, 0, 0, 0, 0, 0, 0, 0];
+  V.shake = 0; V.dim = 0; V.flame = 0; V.countShown = -1; V.resumeLeft = 0; V.endKind = ''; V.endT = 0; V.curBeat = -1; V.vt = 0; V.songShown = -1;
+  V.coach = 0; V.keysDown.clear(); V.bears = []; V.zoneKey = '';
+  el.banner.className = 'big'; el.stamp.className = 'big'; el.count.className = 'big'; el.coach.classList.remove('show');
+  hud.score = hud.hearts = hud.strain = hud.lim = hud.combo = hud.mult = hud.done = -1; hud.sub = '';
+}
+function newIdle() { V.g = mkGame(V.nextSeed); V.live = false; V.ready = false; resetView(); V.vt = -1; }
+function startRound(seed) {
+  Sound.ensure();
+  const explicit = seed !== undefined;
+  const sd = explicit ? seed | 0 : V.nextSeed;
+  V.runCount++;
+  Sch.stop(); Sound.bedOn();
+  V.live = false; resetView();
+  V.g = mkGame(sd);
+  V.nextSeed = explicit || RUN_SEED !== null ? (sd + 1) | 0 : freshSeed();
+  V.phase = 'play'; V.paused = false; V.ready = false; V.waitT = 0; V.audioClock = false; V.overShown = false; V.overT = 0; V.newRecord = false; V.result = null; V.live = true;
+  V.bestAtStart = readInt(SEL.mode === 'coop' ? KEY_COOP : KEY_BEST);
+  V.coach = SEL.mode === 'solo' ? 1 : 0;
+  document.body.classList.remove('paused'); disarmRetry();
+  el.scrTitle.hidden = true; el.scrPause.hidden = true; el.scrOver.hidden = true; el.scrSync.hidden = true; V.sync.open = false; el.hud.hidden = false;
+  layout();
+  updateHud(); updateHearts(false); updatePips();
+}
+function toTitle() {
+  Sch.stop(); stopSyncTimer(); V.sync.open = false;
+  V.phase = 'title'; V.paused = false; V.live = false;
+  document.body.classList.remove('paused');
+  el.hud.hidden = true; el.scrPause.hidden = true; el.scrOver.hidden = true; el.scrSync.hidden = true; el.scrTitle.hidden = false;
+  V.nextSeed = V.nextSeed || freshSeed();
+  newIdle(); uiBest(); layout();
+}
+function beginClock() {
+  V.audioClock = Sound.running();
+  Clock.anchor(0, performance.now());
+  V.ready = true; V.vt = 0;
+  if (V.audioClock) { Sound.bedOn(); Sch.start(V.g.chart, -1); }
+  if (Sound.unavailable && !V.noAudioShown) { V.noAudioShown = true; floatText(LAY.W / 2, LAY.laneTop + 60, '소리를 쓸 수 없는 브라우저예요', INK, 17, 2.2); }
+}
+function reanchor() {
+  Clock.anchor(V.g.t + VIEW.GRACE, performance.now());
+  Sound.bedOn(); Sch.start(V.g.chart, V.g.t + VIEW.GRACE);
+}
+function pauseGame() {
+  if (V.paused || !V.live || V.phase !== 'play' || !V.ready) return;
+  V.paused = true; document.body.classList.add('paused');
+  V.resumeLeft = 0; el.count.className = 'big';
+  Sound.bedOff(); Sch.stop(); releaseAll();
+  el.pOffset.textContent = '박자 보정 ' + (V.offset > 0 ? '+' : '') + V.offset + 'ms';
+  el.scrPause.hidden = false; disarmRetry();
+}
+function resumeGame() {
+  if (!V.paused) return;
+  V.paused = false; document.body.classList.remove('paused');
+  el.scrPause.hidden = true; disarmRetry();
+  Sound.ensure();
+  V.resumeLeft = VIEW.RESUME_T; V.resumeShown = 0;
+}
+function updateResume(dt) {
+  const before = V.resumeLeft;
+  if (Sound.ctx && !Sound.running()) { Sound.unlock(); if (Sound.ctx.state !== 'running' && !Sound.muted) return; }
+  V.resumeLeft = Math.max(0, V.resumeLeft - dt);
+  const n = Math.ceil(V.resumeLeft / 0.5 - 1e-6);
+  if (n > 0 && n !== V.resumeShown) { V.resumeShown = n; el.count.textContent = String(n); restartAnim(el.count, 'show'); Sound.tick(); }
+  if (before > 0 && V.resumeLeft <= 0) { el.count.className = 'big'; reanchor(); }
+}
+function beginEnding() {
+  if (V.phase === 'ending' || V.phase === 'over') return;
+  const g = V.g, res = g.result;
+  V.phase = 'ending'; V.endT = 0; V.finalScore = res.score;
+  Sch.stop();
+  const key = g.mode === 'coop' ? KEY_COOP : KEY_BEST;
+  const prev = Math.max(V.bestAtStart, readInt(key));
+  V.newRecord = V.finalScore > prev && V.finalScore > 0;
+  if (V.newRecord) { if (g.mode === 'coop') V.bestCoop = V.finalScore; else V.best = V.finalScore; store.set(key, String(V.finalScore)); }
+  V.result = res;
+  el.count.className = 'big'; el.coach.classList.remove('show');
+  for (const b of V.bears) { b.sadT = 3; b.bowT = 0; }
+  V.shake = 0.3; V.shakeA = 4; buzz([60, 40, 100]);
+  if (!V.ff) Sound.over();
+}
+function updateEnding(dt) {
+  V.endT += dt;
+  if (V.endT >= (reduceMotion ? 0.8 : VIEW.FAIL_T)) showOver();
+}
+function showOver() {
+  const res = V.result, g = V.g, coop = g.mode === 'coop';
+  V.phase = 'over'; V.overT = 0; V.overShown = false; V.overCount = 0;
+  el.rScore.textContent = '0';
+  el.rTitle.textContent = coop ? '합주가 끝났어요' : '연주가 끝났어요';
+  const done = res.songs;
+  el.rLine.textContent = done >= 1 ? done + '곡을 연주했어요' : '다음엔 첫 곡을 끝까지 해 봐요';
+  el.rBadge.hidden = !V.newRecord;
+  el.rSongs.innerHTML = '';
+  for (const s of res.log) {
+    const li = document.createElement('li'); if (s.partial) li.className = 'part';
+    li.innerHTML = '<span class="t"></span><span class="bar"><i></i></span><b></b>';
+    li.firstChild.textContent = s.title + (s.partial ? ' (중간에)' : '');
+    li.querySelector('i').style.width = s.pct + '%'; li.querySelector('b').textContent = s.pct + '%';
+    el.rSongs.appendChild(li);
+  }
+  el.rSongs.scrollTop = el.rSongs.scrollHeight;
+  el.rTeam.hidden = !coop;
+  if (coop) {
+    el.rTeam.innerHTML = '';
+    res.pl.forEach((p, i) => { const s = document.createElement('span'); s.style.borderColor = PCOL[i]; s.innerHTML = '<b></b> 친 음 <b></b> · 놓침 <b></b>'; const bs = s.querySelectorAll('b'); bs[0].textContent = (i + 1) + 'P'; bs[1].textContent = p.hit; bs[2].textContent = p.miss; el.rTeam.appendChild(s); });
+  }
+  el.rSongsN.textContent = done + '곡'; el.rPerfect.textContent = res.stats.perfect; el.rCombo.textContent = res.maxCombo;
+  const bits = []; if (RUN_SEED !== null) bits.push('시드 ' + g.seed); if (SONG_PARAM) bits.push('곡 ' + SONG_PARAM);
+  el.rSeed.hidden = !bits.length; el.rSeed.textContent = bits.join(' · ');
+  el.hud.hidden = true; el.scrOver.hidden = false;
+  if (!V.ff && V.newRecord) Sound.record();
+}
+
+// =====================================================================
+// PER-FRAME
+// =====================================================================
+function updateBeat() {
+  const g = V.g, ch = g.chart, vt = V.vt;
+  if (vt < ch.countT || vt >= ch.t0) return;
+  const k = Math.floor((vt - ch.countT) / ch.spb);
+  if (k !== V.countShown) {
+    V.countShown = k;
+    if (!V.fxOff) { el.count.textContent = ['하나', '둘', '셋', '넷'][clamp(k, 0, 3)]; restartAnim(el.count, 'show'); }
+  }
+}
+function stepTo(target) {
+  const g = V.g;
+  let guard = 0;
+  while (g.t < target - 1e-9 && !g.over && guard++ < 60) { M.step(g, Math.min(1 / 30, target - g.t)); pump(); }
+}
+function updatePlay(dt, ts) {
+  const g = V.g;
+  if (!V.ready) {
+    V.waitT += dt;
+    if (!Sound.ctx || Sound.running() || V.waitT > 0.8) beginClock();
+    return;
+  }
+  if (V.resumeLeft > 0) { updateResume(dt); return; }
+  const target = Clock.songAt(ts) - VIEW.GRACE;
+  if (target - g.t > 0.5) { pauseGame(); return; }   // the page stalled for half a second: don't skip notes silently
+  stepTo(target);
+  if (g.over) return;
+  V.vt = g.t + VIEW.GRACE;
+  Sch.tick();
+  updateBeat();
+  if (V.coach === 1) {
+    if (g.t > 0.4 && g.chart.L === 0 && g.stats.perfect + g.stats.good + g.stats.close < 3) el.coach.classList.add('show');
+    else { el.coach.classList.remove('show'); if (g.stats.perfect + g.stats.good + g.stats.close >= 3) V.coach = 2; }
+  }
+}
+let titleStep = -1;
+function update(dt, ts) {
+  if (V.phase === 'play' && V.live) updatePlay(dt, ts);
+  else if (V.phase === 'ending') updateEnding(dt);
+  else if (V.phase === 'over') {
+    V.overT += dt;
+    if (V.overT > VIEW.OVER_LOCK) V.overShown = true;
+    if (V.overCount < 1) { V.overCount = Math.min(1, V.overCount + dt / 0.7); el.rScore.textContent = fmtNum(V.finalScore * easeOut(V.overCount)); }
+  } else if (V.phase === 'title') {
+    // the stage plays by itself behind the title card
+    const k = Math.floor(V.clock / 0.55);
+    if (k !== titleStep) { titleStep = k; const lane = [4, 4, 5, 5, 4, 4, 2, 4, 4, 2, 2, 1][k % 12]; V.press[lane] = 0; V.glow[lane] = 0.6; bearStrike(lane, undefined, 'good'); }
+    V.vt = -1;
+  }
+  if (V.bears.length || V.g) bearsUpdate(dt);
+  fxStep(dt);
+}
+let lastTs = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  if (dt < 0) dt = 0;
+  if (dt > 0.05) dt = 0.05;
+  updateSync(dt, ts);
+  if (!V.paused) { V.clock += dt; update(dt, ts); }
+  render();
+  updateHud();
+  const P = SEL.mode === 'coop' ? SEL.players : 1;
+  if (!el.scrTitle.hidden) drawMascot(el.mascot, V.clock, 'title', P);
+  else if (!el.scrPause.hidden) drawMascot(el.mascotP, V.clock, 'pause', 1);
+  else if (!el.scrOver.hidden) drawMascot(el.mascotR, V.clock, V.result && V.result.songs >= 1 ? 'over' : 'over-sad', V.result && V.result.P > 1 ? V.result.P : 1);
+}
+
+// =====================================================================
+// TEST HOOKS: window.__game (the real UI, with a fast-forward for bots) and window.__melody (the pure logic)
+// =====================================================================
+const hook = {
+  get state() {
+    const g = V.g, ch = g.chart;
+    return {
+      phase: V.phase, paused: V.paused, live: V.live, ready: V.ready, t: g.t, vt: V.vt, score: Math.round(g.score), combo: g.combo, maxCombo: g.maxCombo, pStreak: g.pStreak,
+      hearts: g.hearts, strain: g.strain, strainLimit: M.strainLimit(ch.lv, g.P), over: g.over, result: g.result, seed: g.seed, mode: g.mode, players: g.P, gphase: g.phase,
+      L: ch.L, song: ch.id, title: ch.title, bpm: ch.bpm, notes: ch.notes.length, win: ch.win, pct: Math.round(M.completeness(ch) * 100), songsDone: g.songsDone, log: g.log.slice(),
+      stats: JSON.parse(JSON.stringify(g.stats)), best: V.best, bestCoop: V.bestCoop, newRecord: V.newRecord, muted: Sound.muted, finalScore: V.finalScore, overShown: V.overShown,
+      resumeLeft: V.resumeLeft, offset: V.offset, parts: V.parts.length, audio: Sound.ctx ? Sound.ctx.state : 'none', syncOpen: V.sync.open, taps: V.taps, flame: V.flame,
+      zones: ch.zone ? ch.zone.zone.slice() : null, sel: { mode: SEL.mode, players: SEL.players }, endKind: V.endKind, pl: g.pl.map((p) => Object.assign({}, p)),
+    };
+  },
+  songNow() { return Clock.songAt(performance.now()); },
+  // upcoming notes with the DOM time at which a perfect tap (including the player's offset) should land; for real-time bots
+  upcoming(horizon) {
+    const now = performance.now(), s = Clock.songAt(now), off = V.offset / 1000;
+    return { perfNow: now, songNow: s, items: V.g.chart.notes.filter((n) => n.state === 0 && n.t >= s - 0.25 && n.t <= s + (horizon || 1.5)).map((n) => ({ id: n.id, lane: n.lane, t: n.t, mi: n.mi, pl: n.pl, perfMs: (n.t + off) * 1000 + Clock.base })) };
+  },
+  keyPoint(lane) { return { x: laneCx(lane), y: LAY.barTop + LAY.barH * 0.5 }; },
+  rects() {
+    const r = (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, cx: b.x + b.width / 2, cy: b.y + b.height / 2 }; };
+    return { start: r(el.btnStart), pause: r(el.btnPause), mute: r(el.btnMute), hud: r(el.hud), solo: r(el.btnSolo), ens: r(el.btnEns), p: el.btnP.map(r), resume: r($('btnResume')), again: r($('btnAgain')), overTitle: r($('btnOverTitle')) };
+  },
+  log(on) { V.logOn = !!on; if (on) V.log = []; return V.log; },
+  getLog() { return V.log; },
+  notes() { return V.g.chart.notes.map((n) => ({ id: n.id, t: n.t, lane: n.lane, state: n.state, js: n.js, mi: n.mi, pl: n.pl })); },
+  start(seed, opts) { if (opts && opts.mode) { SEL.mode = opts.mode === 'coop' ? 'coop' : 'solo'; } if (opts && opts.players) SEL.players = clamp(opts.players, 2, 4); startRound(seed); },
+  tap(lane) { return doTap(lane); },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  setSel(mode, players) { setSel(mode, players, true); },
+  openSync(from) { openSync(from || 'title'); }, closeSync() { closeSync(); },
+  setBest(v) { V.best = v; store.set(KEY_BEST, String(v)); uiBest(); },
+  setOffset(ms) { setOffset(ms); },
+  layout() { return Object.assign({}, LAY); },
+  // fast-forward without drawing or sound: policy(game, dt) is called every 1/60 s slice before the step
+  step(sec, policy, opts) {
+    V.ff = true; V.fxOff = !(opts && opts.fx);
+    try {
+      if (V.phase === 'play' && V.live && !V.ready) { V.ready = true; }
+      const dt = 1 / 60, n = Math.ceil(sec / dt);
+      for (let i = 0; i < n; i++) {
+        if (V.paused) break;
+        V.clock += dt;
+        if (V.phase === 'play' && V.live) {
+          if (V.resumeLeft > 0) V.resumeLeft = 0;
+          if (policy) policy(V.g, dt);
+          M.step(V.g, dt); pump(); V.vt = V.g.t + VIEW.GRACE; updateBeat(); bearsUpdate(dt); fxStep(dt);
+        } else if (V.phase === 'ending') { updateEnding(dt); fxStep(dt); }
+        else break;
+      }
+    } finally { V.ff = false; V.fxOff = false; if (V.phase === 'play' && V.live && V.ready) reanchor(); }
+  },
+  raw: { Logic: MELODY, V, LAY, Sound, Clock, Sch, store, hud, render, layout, showOver, beginEnding, el, ctx, drawBear, drawMascot, handleEvent, SEL },
+};
+hook.Logic = MELODY;
+window.__melody = MELODY;
+window.__game = hook;
+
+// =====================================================================
+// BOOT
+// =====================================================================
+V.nextSeed = RUN_SEED !== null ? RUN_SEED : freshSeed();
+uiMute();
+setSel(SEL.mode, SEL.players, false);
+newIdle(); uiBest(); layout(); syncUi();
+el.pOffset.textContent = '박자 보정 ' + (V.offset > 0 ? '+' : '') + V.offset + 'ms';
+requestAnimationFrame(frame);
+(function waitFonts() {
+  try {
+    if (!document.fonts || !document.fonts.load) return;
+    const t = new Promise((res) => setTimeout(res, 1500));
+    Promise.race([Promise.all([document.fonts.load('30px "Black Han Sans"'), document.fonts.load('20px "Gowun Dodum"')]), t]).catch(() => { /* fallback fonts are fine */ });
+  } catch (e) { /* ignore */ }
+})();
+})();
+</script>
+</body>
+</html>

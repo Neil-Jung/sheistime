@@ -1,0 +1,2238 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>쓱쓱</title>
+<meta name="theme-color" content="#14305e">
+<meta name="description" content="얼음판 위로 동글동글 스톤을 던지고, 쓱쓱 문질러서 과녁 한가운데에 멈춰요! 혼자서는 컴퓨터와 연승 도전, 한 화면에서 2팀 대결과 던지는 사람 + 쓱쓱 담당 2:2 협동 모드까지 즐겨요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
+<style>
+/* World: a bright curling rink seen from above at a slight angle. Pale blue ice with pebbles, a blue / white / red house, pastel rails, a dark navy arena around.
+   Round granite stones with a team-coloured cap and a handle (red ring / yellow star, no faces). The sheet, stones and sweeping effects are one canvas;
+   the HUD, the team panels, the spin buttons and the screens are DOM. */
+:root {
+  --bg0: #0f2347;
+  --bg1: #1b3d78;
+  --paper: #f4faff;
+  --paper-2: #dcefff;
+  --ink: #1b2a4a;
+  --muted: #5d7089;
+  --gold: #ffd23f;
+  --gold-d: #d99a12;
+  --coral: #ff6b5e;
+  --coral-d: #d9473b;
+  --sky: #59b4ff;
+  --good: #2fb872;
+  --bad: #ff5d5d;
+  --hud-bg: rgba(12, 32, 66, 0.92);
+  --dim: #b9d4f2;
+  --t0: #ff5d63; --t0d: #c92f3b; --t0l: #ffb0b3;
+  --t1: #ffc83a; --t1d: #d99a12; --t1l: #fff0a8;
+  --font-d: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif;
+  --font-b: "Gowun Dodum", "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; overflow: hidden; background: var(--bg0); color: var(--paper);
+  font-family: var(--font-b); font-weight: 400; word-break: keep-all;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  overscroll-behavior: none; touch-action: none;
+}
+#app { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--bg0); }
+#cv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; z-index: 1; }
+#probe { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+button { font-family: var(--font-b); cursor: pointer; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- play HUD ---------- */
+#stage { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+#stage > * { position: absolute; }
+#hud { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+.icon-btn {
+  flex: none; width: 44px; height: 44px; border-radius: 14px; padding: 0; pointer-events: auto;
+  border: 2px solid rgba(244, 250, 255, 0.9); background: var(--hud-bg); color: var(--paper);
+  display: grid; place-items: center; touch-action: manipulation; box-shadow: 0 3px 0 rgba(4, 14, 34, 0.55);
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(4, 14, 34, 0.55); }
+.icon-btn svg { width: 22px; height: 22px; display: block; }
+#btnMute .off { display: none; }
+#btnMute.muted .on { display: none; }
+#btnMute.muted .off { display: block; }
+.pill {
+  flex: none; height: 40px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; border-radius: 14px; white-space: nowrap;
+  background: var(--hud-bg); border: 2px solid rgba(244, 250, 255, 0.35); color: var(--paper);
+}
+.pill small { font-family: var(--font-d); font-size: 13px; color: var(--dim); padding-top: 2px; }
+.pill b { font-family: var(--font-d); font-weight: normal; font-size: 21px; line-height: 1; color: var(--gold); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.pill b i { font-style: normal; font-size: 14px; color: var(--dim); }
+.pill.pop b { animation: pop 0.3s ease-out; }
+@keyframes pop { 0% { transform: scale(1.35); } 100% { transform: none; } }
+#pTime { min-width: 72px; border-color: rgba(255, 210, 63, 0.8); }
+#pTime.low { border-color: var(--bad); } #pTime.low b { color: #ff8a8a; animation: lowT 0.5s ease-in-out infinite alternate; }
+#pTime.off { opacity: 0.55; }
+@keyframes lowT { from { transform: scale(1); } to { transform: scale(1.16); } }
+#pIce b { font-size: 16px; color: #9be8ff; padding-top: 2px; }
+#pIce.slow b { color: #b8c4d8; } #pIce.fast b { color: #7ff0ff; }
+#pStreak b { color: #9be8b0; }
+.sp { flex: 1 1 0; min-width: 0; }
+#stage.dim #hud, #stage.dim .tp, #stage.dim #coach, #stage.dim .spin { visibility: hidden; }
+
+/* team panels */
+.tp {
+  --acc: var(--t0); display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 8px; border-radius: 16px; overflow: hidden; pointer-events: none;
+  background: var(--hud-bg); border: 3px solid rgba(244, 250, 255, 0.22); color: var(--paper); transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s; opacity: 0.86;
+}
+.tp[data-t="1"] { --acc: var(--t1); }
+.tp.on { opacity: 1; border-color: var(--acc); box-shadow: 0 0 0 3px rgba(244, 250, 255, 0.1), 0 0 22px -2px var(--acc); }
+.tp .dot { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 3px solid #0a1a38; background: radial-gradient(circle at 35% 30%, #fff 0, var(--acc) 45%, rgba(0, 0, 0, 0.35) 140%); position: relative; }
+.tp .dot::after { content: ''; position: absolute; left: 50%; top: 50%; width: 14px; height: 4px; margin: -2px 0 0 -7px; border-radius: 2px; background: rgba(255, 255, 255, 0.85); }
+.tp .who { min-width: 0; flex: 1 1 auto; line-height: 1.1; }
+.tp .nm { display: block; font-family: var(--font-d); font-size: 18px; padding-top: 2px; color: var(--acc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp .role { display: block; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp .pips { display: flex; flex-wrap: wrap; gap: 3px; max-width: 108px; justify-content: flex-end; }
+.tp .pips i { display: block; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--acc); background: var(--acc); }
+.tp .pips i.used { background: transparent; opacity: 0.4; }
+.tp .pips i.now { box-shadow: 0 0 0 2px #fff; }
+.tp .ham { display: none; flex: none; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--gold); color: #3b2a00; white-space: nowrap; }
+.tp .ham.on { display: inline-block; }
+.tp .sc { flex: none; min-width: 1.1em; text-align: right; font-family: var(--font-d); font-size: 30px; line-height: 1; padding-top: 3px; color: #fff; font-variant-numeric: tabular-nums; }
+.tp .sc.pop { animation: pop 0.45s ease-out; }
+.tp .ends { display: none; }
+.tp.side { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 10px 10px; }
+.tp.side .hd { display: flex; align-items: center; gap: 8px; }
+.tp.side .pips { justify-content: flex-start; max-width: none; }
+.tp.side .sc { text-align: center; font-size: 46px; }
+.tp.side .ham { align-self: flex-start; }
+.tp.side .ends { display: flex; flex-wrap: wrap; gap: 3px; }
+.tp.side .ends i { font-style: normal; flex: 1 0 22px; max-width: 34px; text-align: center; font-family: var(--font-d); font-size: 13px; line-height: 20px; height: 22px; border-radius: 6px; background: rgba(244, 250, 255, 0.12); color: #fff; }
+.tp.side .ends i.cur { outline: 2px solid var(--gold); outline-offset: -1px; }
+.tp .hd { display: contents; }
+.tp.side .nm { font-size: 18px; } .tp.side .role { white-space: normal; font-size: 12.5px; }
+.tp.side .hd { gap: 6px; } .tp.side .dot { width: 22px; height: 22px; border-width: 2.5px; } .tp.side .dot::after { width: 10px; height: 3px; margin: -1.5px 0 0 -5px; }
+.land .tp.side { padding: 8px 8px; } .land .tp.side .sc { font-size: 38px; }
+.wide .tp.side .nm { font-size: 22px; } .wide .tp.side .dot { width: 30px; height: 30px; } .wide .tp.side .role { font-size: 14px; } .wide .tp.side .pips i { width: 16px; height: 16px; } .wide .tp.side .ends i { font-size: 15px; height: 26px; line-height: 24px; } .wide .tp.side .sc { font-size: 56px; }
+
+/* spin buttons */
+.spin {
+  width: 54px; height: 54px; border-radius: 50%; padding: 0; pointer-events: auto; touch-action: manipulation; display: grid; place-items: center; align-content: center; gap: 0;
+  border: 3px solid rgba(244, 250, 255, 0.85); background: rgba(12, 32, 66, 0.82); color: var(--paper); box-shadow: 0 3px 0 rgba(4, 14, 34, 0.5);
+}
+.spin svg { width: 26px; height: 26px; display: block; }
+.spin span { font-size: 11px; line-height: 1; margin-top: -2px; font-weight: 700; }
+.spin.on { background: var(--gold); border-color: #fff; color: #3b2a00; box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.45), 0 3px 0 rgba(4, 14, 34, 0.5); }
+.spin:active { transform: translateY(2px); }
+.spin:focus-visible, .icon-btn:focus-visible, .btn:focus-visible, .back:focus-visible, .mode:focus-visible, .size:focus-visible, .team:focus-visible, .next:focus-visible { outline: 3px solid var(--coral); outline-offset: 3px; }
+.next {
+  display: none; width: 160px; pointer-events: auto; touch-action: manipulation; min-height: 48px; padding: 0 22px; border-radius: 16px; border: 3px solid var(--ink); background: var(--gold); color: #3b2a00;
+  font-family: var(--font-d); font-size: 21px; padding-top: 3px; box-shadow: 0 4px 0 var(--gold-d); white-space: nowrap;
+}
+.next:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-d); }
+
+/* floating text */
+#coach {
+  display: flex; align-items: center; justify-content: center; padding: 6px 14px 5px; border-radius: 20px; text-align: center; pointer-events: none; line-height: 1.25; word-break: keep-all;
+  background: rgba(244, 250, 255, 0.96); color: var(--ink); font-size: 15px; font-weight: 700; border: 2.5px solid var(--ink); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25); transition: opacity 0.3s;
+}
+#coach.off { opacity: 0; }
+#toast { z-index: 8; display: flex; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.25s, transform 0.25s; transform: translateY(-4px); }
+#toast span { display: inline-block; max-width: 100%; padding: 6px 16px 4px; border-radius: 18px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); font-family: var(--font-d); font-size: 17px; line-height: 1.3; text-align: center; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3); }
+#toast.show { opacity: 1; transform: none; }
+#toast.warn span { background: #ffe4df; border-color: var(--coral-d); }
+#stage.dim #toast { visibility: hidden; }
+#banner { display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; z-index: 9; }
+#banner.on { display: flex; animation: bannerIn 1.5s ease-out forwards; }
+#banner.short.on { animation: bannerIn 1s ease-out forwards; }
+#banner.long.on { animation: bannerIn 2.6s ease-out forwards; }
+#banner .b1 { font-family: var(--font-d); font-size: min(13vmin, 70px); line-height: 1.1; color: var(--gold); -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 rgba(4, 14, 34, 0.4); white-space: nowrap; }
+#banner.t0 .b1 { color: var(--t0l); } #banner.t1 .b1 { color: var(--t1l); }
+#banner .b2 { margin-top: 6px; max-width: 94%; padding: 6px 16px 5px; border-radius: 999px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); font-family: var(--font-d); font-size: min(4.4vmin, 19px); line-height: 1.25; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3); }
+#banner .b2:empty { display: none; }
+@keyframes bannerIn { 0% { opacity: 0; transform: scale(0.6) rotate(-3deg); } 14% { opacity: 1; transform: scale(1.1) rotate(1deg); } 24% { transform: scale(1) rotate(0); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1.05); } }
+body.paused #banner { animation-play-state: paused; }
+
+/* ---------- screens ---------- */
+.overlay {
+  position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 60px) calc(env(safe-area-inset-right, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 16px) calc(env(safe-area-inset-left, 0px) + 14px);
+  overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; background: rgba(8, 24, 56, 0.12);
+}
+.overlay[hidden] { display: none; }
+#scrTitle { background: rgba(8, 24, 56, 0.05); }
+#scrPause { justify-content: center; background: #14305e; z-index: 30; }
+#scrOver { background: rgba(8, 24, 56, 0.6); }
+.card {
+  position: relative; overflow: hidden; flex: none; width: min(420px, 100%); margin: auto;
+  background: var(--paper); color: var(--ink); border: 3px solid var(--ink); border-radius: 26px;
+  box-shadow: 0 8px 0 rgba(4, 14, 34, 0.55), 0 0 40px rgba(89, 180, 255, 0.18); padding: 22px 16px 16px; text-align: center;
+  animation: cardIn 0.35s cubic-bezier(.2, 1.4, .4, 1);
+}
+.card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 10px; background: linear-gradient(90deg, var(--t0) 0 33%, var(--sky) 33% 66%, var(--t1) 66% 100%); }
+@keyframes cardIn { from { transform: translateY(18px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.back {
+  position: absolute; left: calc(env(safe-area-inset-left, 0px) + 10px); top: calc(env(safe-area-inset-top, 0px) + 10px);
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: var(--hud-bg); color: var(--paper); border: 2px solid rgba(244, 250, 255, 0.9); border-radius: 15px;
+  text-decoration: none; font-size: 16px; z-index: 2; font-weight: 700;
+}
+.mascot { display: block; width: 240px; height: 140px; margin: 0 auto; border-radius: 18px; border: 3px solid var(--ink); }
+.tag-top { display: inline-block; margin-top: 8px; font-size: 13px; letter-spacing: 1px; color: #fff; background: var(--sky); padding: 3px 10px 2px; border-radius: 7px; transform: rotate(-2deg); font-weight: 700; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+.logo { margin: 4px 0 0; font-family: var(--font-d); font-weight: normal; font-size: 62px; line-height: 1.05; letter-spacing: 2px; white-space: nowrap; }
+.logo span { display: inline-block; -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); animation: logoIn 0.6s cubic-bezier(.2, 1.6, .4, 1) both, wob 3.2s ease-in-out infinite; }
+.logo span:nth-child(1) { color: var(--t0); rotate: -4deg; } .logo span:nth-child(2) { color: var(--sky); rotate: 3deg; animation-delay: 0.08s, 0.3s; }
+@keyframes logoIn { from { transform: translateY(-30px) scale(0.5); opacity: 0; } to { opacity: 1; } }
+@keyframes wob { 0%, 80%, 100% { translate: 0 0; } 88% { translate: 0 -7px; } 95% { translate: 0 0; } }
+.hook { margin: 6px 0 4px; font-size: 15.5px; line-height: 1.45; color: var(--ink); }
+.pick-label { margin: 10px 0 5px; font-size: 13px; color: var(--muted); text-align: left; }
+.modes, .sizes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mode, .size {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 60px; padding: 6px 3px;
+  border-radius: 16px; border: 3px solid rgba(27, 42, 74, 0.25); background: rgba(27, 42, 74, 0.05); color: var(--muted); touch-action: manipulation; font-family: var(--font-b);
+}
+.mode b, .size b { font-family: var(--font-d); font-weight: normal; font-size: 18px; line-height: 1.1; padding-top: 3px; color: var(--ink); white-space: nowrap; }
+.mode small, .size small { font-size: 11.5px; line-height: 1.2; white-space: nowrap; }
+.mode.on, .size.on { border-color: var(--ink); background: #ffe9a8; color: var(--ink); box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.55); }
+.mode.on::after, .size.on::after { content: '\2713'; position: absolute; right: -4px; top: -7px; width: 18px; height: 18px; border: 2px solid var(--paper); border-radius: 50%; background: var(--ink); color: var(--gold); font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.mode:active, .size:active { transform: translateY(2px); }
+.team-row { margin-top: 8px; display: flex; }
+.team {
+  flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 14px; border: 3px solid rgba(27, 42, 74, 0.25); background: rgba(27, 42, 74, 0.05);
+  color: var(--ink); font-family: var(--font-b); font-weight: 700; font-size: 14.5px; touch-action: manipulation;
+}
+.team i { display: inline-block; width: 38px; height: 20px; border-radius: 999px; background: #b9c6d8; position: relative; transition: background 0.15s; flex: none; }
+.team i::after { content: ''; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); transition: left 0.15s; }
+.team.on { border-color: var(--ink); background: #ffe9a8; }
+.team.on i { background: var(--good); } .team.on i::after { left: 21px; }
+.mode-line { margin: 10px 0 0; font-size: 14px; color: var(--muted); line-height: 1.5; min-height: 6.4em; text-align: left; }
+.mode-line b { color: #b4680a; }
+.best-line { margin: 8px auto 0; width: fit-content; padding: 3px 16px 2px; border-radius: 999px; background: rgba(27, 42, 74, 0.07); border: 2px solid rgba(27, 42, 74, 0.5); font-size: 15px; color: var(--ink); font-weight: 700; }
+.best-line b { color: #b4680a; font-weight: normal; font-family: var(--font-d); font-size: 21px; }
+.best-line b.none { font-family: var(--font-b); font-weight: 700; font-size: 15px; color: var(--muted); }
+.btn {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 58px; border-radius: 18px;
+  border: 3px solid var(--ink); background: var(--gold); color: #3b2a00;
+  font-family: var(--font-d); font-size: 28px; letter-spacing: 1px; text-decoration: none; padding-top: 3px;
+  box-shadow: 0 5px 0 var(--gold-d); touch-action: manipulation; pointer-events: auto;
+}
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--gold-d); }
+.btn.sub { background: rgba(27, 42, 74, 0.07); color: var(--ink); border: 2.5px solid rgba(27, 42, 74, 0.7); box-shadow: 0 4px 0 rgba(27, 42, 74, 0.25); font-family: var(--font-b); font-weight: 700; font-size: 17px; min-height: 48px; margin-top: 10px; padding-top: 0; }
+.btn.sub:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(27, 42, 74, 0.25); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 .btn.sub { font-size: 16px; min-height: 46px; margin-top: 10px; padding: 0 4px; }
+.keyhint { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+.keyhint.desk { display: none; }
+@media (hover: hover) and (pointer: fine) { .keyhint.desk { display: block; } }
+.res-title { margin: 2px 0 0; font-size: 30px; font-weight: normal; font-family: var(--font-d); color: var(--ink); line-height: 1.2; }
+.pause-line { margin: 8px 0 12px; font-size: 16px; color: var(--muted); line-height: 1.45; }
+.res-big { margin: 4px 0 0; font-family: var(--font-d); font-size: 60px; line-height: 1.1; color: #c4780a; font-variant-numeric: tabular-nums; }
+.res-big small { font-family: var(--font-b); font-weight: 700; font-size: 22px; color: var(--ink); margin-left: 4px; }
+.res-big .t0 { color: var(--t0d); } .res-big .t1 { color: var(--t1d); } .res-big .vs { color: var(--muted); font-size: 0.6em; padding: 0 6px; }
+.badge { display: inline-block; margin-top: 2px; padding: 4px 16px 5px; border-radius: 12px; background: var(--coral); color: #fff; font-family: var(--font-d); font-size: 21px; border: 2.5px solid var(--ink); animation: wob2 0.9s ease-in-out infinite; }
+@keyframes wob2 { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.07); } }
+.sb { margin: 10px 0 0; width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 14px; }
+.sb th, .sb td { padding: 3px 2px 1px; border-radius: 8px; background: rgba(27, 42, 74, 0.07); text-align: center; font-family: var(--font-d); font-weight: normal; color: var(--ink); min-width: 24px; }
+.sb th { background: none; color: var(--muted); font-family: var(--font-b); font-size: 11.5px; }
+.sb td.nm { text-align: left; padding-left: 8px; white-space: nowrap; }
+.sb tr.w td { background: #fff0bd; }
+.sb td.tot { font-size: 18px; background: rgba(27, 42, 74, 0.14); }
+.sb .d0 { box-shadow: inset 4px 0 0 var(--t0); } .sb .d1 { box-shadow: inset 4px 0 0 var(--t1); }
+.stats { margin: 10px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stats div { background: rgba(27, 42, 74, 0.07); border: 1px solid rgba(27, 42, 74, 0.3); border-radius: 12px; padding: 5px 2px 4px; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.stats b { display: block; font-weight: normal; font-family: var(--font-d); font-size: 19px; color: var(--ink); margin-top: 1px; white-space: nowrap; }
+.goal { margin: 6px 0 0; font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+.goal b { color: #b4680a; font-weight: 700; }
+.seed { margin: 6px 0 0; font-size: 11px; color: var(--muted); opacity: 0.8; }
+
+@media (max-width: 380px) { .logo { font-size: 54px; } .mode b, .size b { font-size: 16px; } .mode small, .size small { font-size: 10.5px; } }
+@media (max-height: 860px) { .mascot { height: 112px; width: 192px; } }
+@media (max-height: 760px) { .mascot { height: 112px; width: 192px; } .logo { font-size: 52px; } .hook { font-size: 14.5px; } .mode-line { min-height: 5.8em; font-size: 13.5px; } }
+@media (max-height: 640px) { .mascot, .tag-top { display: none; } }
+@media (max-height: 540px) and (orientation: landscape) {
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .opt { min-width: 0; }
+  .hook { display: none; }
+  .overlay { padding: calc(env(safe-area-inset-top, 0px) + 8px) calc(env(safe-area-inset-right, 0px) + 120px) calc(env(safe-area-inset-bottom, 0px) + 12px) calc(env(safe-area-inset-left, 0px) + 120px); }
+  .card { padding: 14px 16px 12px; width: min(640px, 100%); }
+  .mascot, .tag-top, .keyhint { display: none; }
+  .logo { font-size: 40px; margin-top: 6px; }
+  .pick-label { margin: 6px 0 3px; font-size: 12px; }
+  .mode, .size { min-height: 46px; padding: 3px 4px; }
+  .mode small, .size small { display: none; }
+  .mode b, .size b { font-size: 18px; }
+  .team-row { margin-top: 6px; } .team { min-height: 38px; }
+  .mode-line { margin-top: 6px; min-height: 0; font-size: 12.5px; }
+  .res-title { font-size: 22px; } .res-big { font-size: 42px; }
+  .stats { margin: 6px 0 2px; } .stats b { font-size: 17px; }
+  .sb { margin-top: 4px; font-size: 12px; }
+  .btn { min-height: 48px; font-size: 22px; } .btn.sub { min-height: 42px; margin-top: 6px; font-size: 15px; }
+  .row2 .btn.sub { min-height: 42px; }
+  .pause-line { margin: 4px 0 6px; font-size: 14px; }
+  .goal { margin-top: 2px; font-size: 13px; }
+  .badge { font-size: 16px; padding: 2px 12px 3px; }
+  .back { min-height: 40px; }
+}
+@media (max-height: 540px) and (orientation: landscape) and (max-width: 760px) {
+  .overlay { padding-left: calc(env(safe-area-inset-left, 0px) + 14px); padding-right: calc(env(safe-area-inset-right, 0px) + 14px); padding-top: calc(env(safe-area-inset-top, 0px) + 52px); }
+  .best-line { display: none; }
+}
+@media (max-height: 430px) and (orientation: landscape) { .stats, .goal, .seed { display: none; } }
+@media (min-width: 600px) and (min-height: 700px) { .overlay { padding-top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+@media (min-width: 900px) and (min-height: 760px) { .card { width: min(500px, 100%); } .hook { font-size: 17px; } .mode-line { font-size: 15px; } }
+@media (min-width: 900px) and (min-height: 940px) { .mascot { width: 280px; height: 164px; } }
+@media (prefers-reduced-motion: reduce) {
+  .logo span, .badge, .card, .pill.pop b, #pTime.low b, .tp .sc.pop { animation: none; }
+  #banner.on, #banner.long.on, #banner.short.on { animation: none; opacity: 1; }
+  #toast, #coach { transition: none; }
+}
+/* 큰 버튼 고정: 카드가 화면보다 길면 카드 안쪽이 스크롤되고, 시작·다시 하기 버튼은 화면 아래에 늘 붙어 있어요 */
+.card { overflow: clip; }
+.card .dock { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); z-index: 3; margin: 0 -16px; padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 10px); background: var(--paper); }
+.card .dock .btn { margin-top: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="쓱쓱 컬링 얼음판"></canvas>
+  <div id="probe"></div>
+  <div class="sr" id="live" role="status" aria-live="polite"></div>
+
+  <div id="stage" hidden>
+    <div id="hud">
+      <button class="icon-btn" id="btnPause" type="button" aria-label="일시정지">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg>
+      </button>
+      <button class="icon-btn" id="btnMute" type="button" aria-label="소리 끄기">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+      </button>
+      <span class="sp"></span>
+      <div class="pill" id="pEnd" aria-label="엔드"><small>엔드</small><b><span id="eV">1</span><i id="eMax">/3</i></b></div>
+      <div class="pill" id="pIce" aria-label="얼음 상태"><small>얼음</small><b id="iceV">보통</b></div>
+      <div class="pill" id="pTime" aria-label="남은 시간"><small>시간</small><b id="tV">15</b></div>
+      <div class="pill" id="pStreak" aria-label="연승"><small>연승</small><b id="stV">0</b></div>
+    </div>
+    <div class="tp" id="tpA" data-t="0">
+      <div class="hd"><span class="dot"></span><span class="who"><span class="nm">빨강 팀</span><span class="role"></span></span></div>
+      <span class="ham">마지막 돌</span>
+      <span class="pips"></span>
+      <div class="ends"></div>
+      <b class="sc">0</b>
+    </div>
+    <div class="tp" id="tpB" data-t="1">
+      <div class="hd"><span class="dot"></span><span class="who"><span class="nm">노랑 팀</span><span class="role"></span></span></div>
+      <span class="ham">마지막 돌</span>
+      <span class="pips"></span>
+      <div class="ends"></div>
+      <b class="sc">0</b>
+    </div>
+    <button class="spin" id="btnSpinL" type="button" aria-label="왼쪽 회전" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4v5h5"/></svg><span>왼쪽</span>
+    </button>
+    <button class="spin" id="btnSpinR" type="button" aria-label="오른쪽 회전" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></svg><span>오른쪽</span>
+    </button>
+    <button class="next" id="btnNext" type="button">다음 엔드 ▶</button>
+    <div id="coach" class="off"></div>
+    <div id="toast"><span id="toastTxt"></span></div>
+    <div id="banner"><div class="b1"></div><div class="b2"></div></div>
+  </div>
+
+  <!-- title -->
+  <section class="overlay" id="scrTitle">
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <canvas class="mascot" id="mascotT" width="480" height="280" aria-hidden="true"></canvas>
+      <span class="tag-top">스톤 던지기 + 쓱쓱 문지르기</span>
+      <h1 class="logo" aria-label="쓱쓱"><span>쓱</span><span>쓱</span></h1>
+      <p class="hook">스톤을 뒤로 당겼다 놓아 던지고, 굴러가는 동안 얼음을 쓱쓱 문질러요.<br>과녁 한가운데에 가까운 팀이 점수를 얻어요!</p>
+      <p class="pick-label">누구와 겨룰까요?</p>
+      <div class="modes" role="radiogroup" aria-label="모드 고르기">
+        <button class="mode on" id="btnSolo" type="button" role="radio" aria-checked="true"><b>혼자서</b><small>컴퓨터와 연승</small></button>
+        <button class="mode" id="btnVersus" type="button" role="radio" aria-checked="false"><b>2팀 대결</b><small>번갈아 던져요</small></button>
+        <button class="mode" id="btnCoop" type="button" role="radio" aria-checked="false"><b>2:2 협동</b><small>던지기 + 쓱쓱</small></button>
+      </div>
+      <div class="opts">
+        <div class="opt">
+          <p class="pick-label">몇 엔드를 겨룰까요?</p>
+          <div class="sizes" role="radiogroup" aria-label="엔드 수">
+            <button class="size" id="btnE3" type="button" role="radio" aria-checked="true"><b>3엔드</b><small>짧게</small></button>
+            <button class="size" id="btnE4" type="button" role="radio" aria-checked="false"><b>4엔드</b><small>보통</small></button>
+            <button class="size" id="btnE5" type="button" role="radio" aria-checked="false"><b>5엔드</b><small>길게</small></button>
+          </div>
+        </div>
+        <div class="opt">
+          <p class="pick-label">한 팀 스톤은 몇 개일까요?</p>
+          <div class="sizes" role="radiogroup" aria-label="스톤 수">
+            <button class="size" id="btnS4" type="button" role="radio" aria-checked="true"><b>4개</b><small>가볍게</small></button>
+            <button class="size" id="btnS5" type="button" role="radio" aria-checked="false"><b>5개</b><small>보통</small></button>
+            <button class="size" id="btnS6" type="button" role="radio" aria-checked="false"><b>6개</b><small>넉넉히</small></button>
+          </div>
+        </div>
+      </div>
+      <div class="team-row" id="aidRow">
+        <button class="team" id="btnAid" type="button" role="switch" aria-checked="true"><i></i><span id="aidTxt">조준 도우미 켜짐</span></button>
+      </div>
+      <p class="mode-line" id="modeLine"></p>
+      <p class="best-line" id="bestLine">내 최고 기록 <b id="tBest" class="none">아직 없어요</b></p>
+      <div class="dock">
+        <button class="btn" id="btnStart" type="button">시작하기</button>
+      </div>
+      <p class="keyhint desk">마우스로 스톤을 눌러 뒤로 끌었다 놓아요 · ←→ 각도 · 스페이스 길게 눌러 세기, 떼면 던져요 · 굴러가는 동안 마우스로 쓱쓱, 또는 ←→·스페이스 연타 · Q/E 회전 · P 멈춤 · M 소리</p>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="overlay" id="scrPause" hidden>
+    <div class="card">
+      <h2 class="res-title">잠깐 쉬어요</h2>
+      <p class="pause-line" id="pauseLine">스톤도 시간도 멈췄어요.<br>준비되면 계속해요.</p>
+      <div class="dock">
+        <button class="btn" id="btnResume" type="button">계속하기</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnPauseRetry" type="button">처음부터 다시</button>
+        <button class="btn sub" id="btnPauseTitle" type="button">모드 고르기</button>
+      </div>
+      <button class="btn sub" id="btnMuteP" type="button">소리 끄기</button>
+      <a class="btn sub" id="lnkMenu" href="../../index.html">← 게임 목록</a>
+      <p class="keyhint desk">P · Esc로 계속하고, R로 처음부터 다시 해요</p>
+    </div>
+  </section>
+
+  <!-- final result -->
+  <section class="overlay" id="scrOver" hidden>
+    <a href="../../index.html" class="back">← 게임 목록</a>
+    <div class="card">
+      <h2 class="res-title" id="rTitle" role="status">결과</h2>
+      <div class="res-big" id="rBigBox"></div>
+      <div class="badge" id="rBadge" hidden>새 기록이에요!</div>
+      <table class="sb" id="rSb"></table>
+      <div class="stats" id="rStats">
+        <div><span id="rS1l">연승</span><b id="rS1">0</b></div>
+        <div><span id="rS2l">상대 수준</span><b id="rS2">1</b></div>
+        <div><span id="rS3l">얼음</span><b id="rS3">보통</b></div>
+      </div>
+      <p class="goal" id="rLine"></p>
+      <p class="best-line" id="rBestLine">최고 기록 <b id="rBest" class="none">아직 없어요</b></p>
+      <div class="dock">
+        <button class="btn" id="btnAgain" type="button">다시 하기</button>
+      </div>
+      <div class="row2">
+        <button class="btn sub" id="btnOverTitle" type="button">모드 고르기</button>
+        <a class="btn sub" href="../../index.html">← 게임 목록</a>
+      </div>
+      <p class="keyhint desk">Enter · R 키로도 다시 할 수 있어요</p>
+    </div>
+  </section>
+</div>
+<script>
+'use strict';
+(() => {
+//#LOGIC-START
+// ---------------------------------------------------------------------
+// Pure game logic: no DOM, no audio, no wall clock, no unseeded randomness. A match moves only through update(G, dt) (a fixed STEP inside) and
+// shoot / setSweep / setAim / setSpin / skipEnd, so it is deterministic for (seed, input sequence) and runs from Node.
+//
+// World (units): the sheet is x in [-HALF_W, HALF_W] (right of the thrower is +x), y runs from the hack (0) towards the house; the button sits
+// at (0, TEE_Y). A stone is a disc of radius R. Heading phi is measured from +y towards +x (clockwise seen from above).
+// Physics @ 1/120 s: constant ice deceleration A0 * iceK; sweeping (0..1, smoothed) lowers it by up to SWEEP_FRIC and lowers the curl by SWEEP_CURL.
+// Spin (-1 left, +1 right) turns the heading of the thrown stone (curl, stronger when slow). Stone vs stone: equal masses, restitution REST_E,
+// tangential friction COL_MU, positional separation. Out of play: centre beyond a side line, fully beyond the back line, knocked far behind
+// the hack, or (once at rest) not fully past the far hog line.
+// Match: ends x perTeam stones per team, teams alternate (the team WITHOUT the hammer throws first, the hammer team throws last). The team that
+// scored gives up the hammer, a blank end keeps it. Score = stones closer to the button than the opponent's closest, counted inside the house.
+// Ties after the last end play extra ends (EXTRA_MAX), then a seeded coin flip.
+// AI (per team level 0..10, -1 = random thrower): candidate shots (draws, takeouts, guards, come-arounds) are simulated with this very physics and
+// scored by a position heuristic; noise on aim and speed shrinks with the level down to a floor; level >= 6 sweeps to fix its own weight.
+// ---------------------------------------------------------------------
+const STEP = 1 / 120;
+const R = 11;
+const HALF_W = 110;
+const TEE_Y = 440;
+const RINGS = [66, 44, 22, 9];
+const HOG_Y = 210;
+const A0 = 45;
+const SWEEP_FRIC = 0.38;
+const SWEEP_CURL = 0.7;
+const CURL_W = 0.042;
+const V_MIN = 110, V_MAX = 300, V_CAP = 420;
+const REST_E = 0.9, COL_MU = 0.06;
+const STOP_V = 1;
+const MAX_ANG = 0.6;
+const ICE_K = [0.84, 1, 1.2];
+const ICE_NAME = ['빠른 얼음', '보통 얼음', '느린 얼음'];
+const SETTLE_T = 0.3;
+const INTRO_T = 1.3, END_T = 4.2, MAX_ROLL_T = 30, EXTRA_MAX = 3;
+const SWEEP_TAU_UP = 0.12, SWEEP_TAU_DN = 0.4;
+const TAU = Math.PI * 2;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);
+function gauss(rng) { let u = 0; while (u === 0) u = rng(); const v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); }
+
+// ---------------------------------------------------------------------
+// GEOMETRY / SCORING
+// ---------------------------------------------------------------------
+// The first end of a match is a warm-up: the stone starts closer and the house is bigger.
+function geoFor(easy) {
+  const k = easy ? 1.3 : 1;
+  const rings = RINGS.map((r) => r * k), outer = rings[0];
+  return { easy: !!easy, startY: easy ? 120 : 0, k, rings, outer, backY: TEE_Y + outer };
+}
+function distToButton(s) { return Math.hypot(s.x, s.y - TEE_Y); }
+// stones in play -> { team (-1 = nobody scores), pts, ids, tie, items }. A stone counts when it touches the house (distance <= outer ring + R).
+function houseScore(list, geo) {
+  const outer = (geo ? geo.outer : RINGS[0]) + R + 1e-9, items = [];
+  for (const s of list) {
+    if (s.alive === false || s.out) continue;
+    const d = distToButton(s);
+    if (d <= outer) items.push({ id: s.id, team: s.team, d });
+  }
+  items.sort((a, b) => a.d - b.d || a.id - b.id);
+  if (!items.length) return { team: -1, pts: 0, ids: [], tie: false, items };
+  const first = items[0], opp = items.find((i) => i.team !== first.team);
+  if (opp && Math.abs(opp.d - first.d) < 0.05) return { team: -1, pts: 0, ids: [], tie: true, items };
+  const ids = [];
+  for (const it of items) { if (it.team !== first.team) break; ids.push(it.id); }
+  return { team: first.team, pts: ids.length, ids, tie: false, items };
+}
+function ringIndex(d, geo) { const rs = geo ? geo.rings : RINGS; for (let i = rs.length - 1; i >= 0; i--) if (d <= rs[i]) return i; return -1; }
+
+// ---------------------------------------------------------------------
+// DIFFICULTY CURVE
+// ---------------------------------------------------------------------
+// AI base level by consecutive wins (the first two opponents are easy): 0.5, 1.5, then +1.2 per win up to 10; +0.35 per end inside a match.
+function aiBaseLevel(streak) { streak = Math.max(0, streak | 0); return streak < 2 ? 0.5 + streak : Math.min(10, 3 + (streak - 2) * 1.2); }
+function aiLevelFor(streak, endIdx) {
+  const lv = aiBaseLevel(streak) + 0.35 * Math.max(0, endIdx | 0);
+  return Math.min(10, streak < 2 ? Math.min(lv, 2.2) : lv);
+}
+// seconds per throw for a human: 15 s at first, one second less per win down to 7 s (relaxed in the warm-up end and in the party modes)
+function turnLimitFor(mode, streak, easy) {
+  if (mode === 'coop') return 26;
+  if (mode === 'versus') return 22;
+  return Math.max(7, 15 - Math.max(0, streak | 0)) + (easy ? 6 : 0);
+}
+// aiming aids: 2 = curved dotted path + ghost stop, 1 = short dotted direction, 0 = gauge only. Only the easy stages get them.
+function aidFor(streak) { return streak < 3 ? 2 : streak < 6 ? 1 : 0; }
+function noiseFor(lv) {
+  lv = clampN(lv, 0, 10);
+  return { ang: Math.max(0.014, 0.075 - 0.0065 * lv), spd: Math.max(0.02, 0.09 - 0.0078 * lv), mistake: Math.max(0.08, 0.28 - 0.025 * lv), bias: Math.max(5, 14 - 1.1 * lv) };
+}
+
+// ---------------------------------------------------------------------
+// PHYSICS
+// ---------------------------------------------------------------------
+function mkStone(id, team) {
+  return { id, team, x: 0, y: 0, vx: 0, vy: 0, spin: 0, rot: 0, alive: true, out: null, moving: false, entered: false, thrown: false, hitT: 0 };
+}
+function copyStone(s) { return { id: s.id, team: s.team, x: s.x, y: s.y, vx: s.vx, vy: s.vy, spin: s.spin, rot: s.rot, alive: s.alive, out: s.out, moving: s.moving, entered: s.entered, thrown: s.thrown, hitT: 0 }; }
+function emit(W, e) { if (W.ev) W.ev.push(e); }
+function speedOf(power) { return V_MIN + (V_MAX - V_MIN) * clampN(power, 0, 1); }
+function powerOf(speed) { return clampN((speed - V_MIN) / (V_MAX - V_MIN), 0, 1); }
+// put a new stone on the sheet and set it going
+function launchStone(W, id, team, ang, power, spin) {
+  ang = clampN(ang, -MAX_ANG, MAX_ANG);
+  const v = speedOf(power), s = mkStone(id, team);
+  s.x = 0; s.y = W.geo.startY; s.vx = v * Math.sin(ang); s.vy = v * Math.cos(ang); s.spin = spin > 0 ? 1 : spin < 0 ? -1 : 0; s.moving = true; s.thrown = true;
+  W.stones.push(s); W.active = s;
+  return s;
+}
+function putOut(W, s, why) {
+  s.alive = false; s.out = why; s.moving = false;
+  emit(W, { t: 'out', id: s.id, team: s.team, why, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
+}
+// one fixed step; W = { stones, iceK, geo, active, sw, ev }. Returns true while anything is still moving.
+function physStep(W) {
+  const st = W.stones, n = st.length, dt = STEP, ice = W.iceK, act = W.active, sw = W.sw || 0, geo = W.geo;
+  let moving = false;
+  for (let i = 0; i < n; i++) {
+    const s = st[i];
+    if (!s.alive) continue;
+    let vx = s.vx, vy = s.vy;
+    if (vx === 0 && vy === 0) { s.moving = false; continue; }
+    let v = Math.sqrt(vx * vx + vy * vy);
+    const isA = s === act;
+    if (isA && s.spin !== 0) {
+      const w = s.spin * CURL_W * (1 - SWEEP_CURL * sw) * (1 + 0.9 * clampN((110 - v) / 110, 0, 1));
+      const a = w * dt, c = Math.cos(a), sn = Math.sin(a);
+      const nx = vx * c + vy * sn, ny = -vx * sn + vy * c; vx = nx; vy = ny;
+    }
+    const v2 = v - ice * A0 * (isA ? 1 - SWEEP_FRIC * sw : 1) * dt;
+    if (v2 < STOP_V) { s.vx = 0; s.vy = 0; s.moving = false; continue; }
+    const k = (v2 > V_CAP ? V_CAP : v2) / v;
+    s.vx = vx * k; s.vy = vy * k; s.x += s.vx * dt; s.y += s.vy * dt; s.moving = true; moving = true;
+    if (s.spin !== 0) s.rot += s.spin * 1.1 * dt * Math.min(1, v2 / 70);
+    if (isA && !s.entered && W.ev && Math.hypot(s.x, s.y - TEE_Y) < geo.outer + R) { s.entered = true; emit(W, { t: 'house', id: s.id, team: s.team, x: s.x, y: s.y }); }
+  }
+  // stone vs stone: equal masses
+  const md = 2 * R, md2 = md * md;
+  for (let it = 0; it < 2; it++) {
+    for (let i = 0; i < n; i++) {
+      const a = st[i];
+      if (!a.alive) continue;
+      for (let j = i + 1; j < n; j++) {
+        const b = st[j];
+        if (!b.alive) continue;
+        const dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+        if (d2 >= md2) continue;
+        const d = Math.sqrt(d2) || 1e-6, nx = d2 > 1e-12 ? dx / d : 0, ny = d2 > 1e-12 ? dy / d : 1;
+        const ov = (md - d) * 0.5;
+        a.x -= nx * ov; a.y -= ny * ov; b.x += nx * ov; b.y += ny * ov;
+        const rvx = b.vx - a.vx, rvy = b.vy - a.vy, vn = rvx * nx + rvy * ny;
+        if (vn < 0) {
+          const j1 = -(1 + REST_E) * vn * 0.5;
+          a.vx -= j1 * nx; a.vy -= j1 * ny; b.vx += j1 * nx; b.vy += j1 * ny;
+          const tx = rvx - vn * nx, ty = rvy - vn * ny, tl = Math.sqrt(tx * tx + ty * ty);
+          if (tl > 1e-6) {
+            const jt = Math.min(COL_MU * j1 * 2, tl * 0.5) / tl;
+            a.vx += tx * jt; a.vy += ty * jt; b.vx -= tx * jt; b.vy -= ty * jt;
+          }
+          if (it === 0) {
+            a.moving = true; b.moving = true; moving = true;
+            if (-vn > 4) { emit(W, { t: 'hit', a: a.id, b: b.id, x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5, nx, ny, s: -vn }); a.hitT = 0.25; b.hitT = 0.25; }
+          }
+        }
+      }
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const s = st[i];
+    if (!s.alive) continue;
+    if (s.vx !== 0 || s.vy !== 0) {
+      moving = true; s.moving = true;
+      if (Math.abs(s.x) > HALF_W) putOut(W, s, 'side');
+      else if (s.y - R > geo.backY) putOut(W, s, 'back');
+      else if (s.y < -45) putOut(W, s, 'hog');
+    }
+  }
+  return moving;
+}
+// when everything has stopped: stones that did not fully pass the far hog line leave the sheet
+function finalizeRest(W) {
+  for (const s of W.stones) if (s.alive && s.y - R < HOG_Y) putOut(W, s, 'hog');
+}
+function anyMoving(W) { for (const s of W.stones) if (s.alive && (s.vx !== 0 || s.vy !== 0)) return true; return false; }
+function runUntilRest(W, maxSteps) {
+  const lim = maxSteps || MAX_ROLL_T / STEP;
+  for (let i = 0; i < lim; i++) { if (!physStep(W) && !anyMoving(W)) return i; }
+  for (const s of W.stones) { s.vx = 0; s.vy = 0; s.moving = false; }
+  return lim;
+}
+// a lone stone on an empty sheet. sweep = constant sweep level while it runs. Returns the end point and (optionally) the path.
+function simLone(geo, iceK, ang, power, spin, sweep, wantPath) {
+  const W = { stones: [], iceK, geo, active: null, sw: sweep || 0, ev: null };
+  const s = launchStone(W, 1, 0, ang, power, spin), pts = wantPath ? [{ x: s.x, y: s.y }] : null;
+  let i = 0;
+  for (; i < 4000; i++) {
+    physStep(W);
+    if (pts && i % 4 === 0) pts.push({ x: s.x, y: s.y });
+    if (!s.alive || (s.vx === 0 && s.vy === 0)) break;
+  }
+  if (pts) pts.push({ x: s.x, y: s.y });
+  return { x: s.x, y: s.y, t: i * STEP, out: s.out, pts };
+}
+
+// ---------------------------------------------------------------------
+// SWEEP GESTURE (a finger scrubbing back and forth) and key taps
+// ---------------------------------------------------------------------
+const SWEEP_WIN = 0.3, SWEEP_FULL_PX = 110, SWEEP_TAP_WIN = 0.6;
+function makeSweeper() { return { pts: [], taps: [] }; }
+function sweepPush(sw, t, x, y) {
+  sw.pts.push({ t, x, y });
+  while (sw.pts.length > 2 && sw.pts[0].t < t - SWEEP_WIN - 0.05) sw.pts.shift();
+}
+function sweepTap(sw, t) { sw.taps.push(t); while (sw.taps.length && sw.taps[0] < t - SWEEP_TAP_WIN) sw.taps.shift(); }
+function sweepClear(sw) { sw.pts.length = 0; sw.taps.length = 0; }
+// 0..1: path length in the last 0.3 s, full credit only when the finger reverses direction (a scrub), a single swipe counts for little, a still finger for nothing
+function sweepLevel(sw, t) {
+  let lvl = 0;
+  const p = sw.pts, n = p.length;
+  if (n >= 2 && p[n - 1].t >= t - 0.15) {
+    let len = 0, ax = 0, ay = 0, first = -1;
+    for (let i = 0; i < n; i++) if (p[i].t >= t - SWEEP_WIN) { first = i; break; }
+    if (first >= 0) {
+      for (let i = first + 1; i < n; i++) { const dx = p[i].x - p[i - 1].x, dy = p[i].y - p[i - 1].y; len += Math.hypot(dx, dy); ax += Math.abs(dx); ay += Math.abs(dy); }
+      let rev = 0, last = 0, acc = 0;
+      const useX = ax >= ay;
+      for (let i = first + 1; i < n; i++) {
+        const d = useX ? p[i].x - p[i - 1].x : p[i].y - p[i - 1].y;
+        if (Math.abs(d) < 0.5) continue;
+        const sg = d > 0 ? 1 : -1;
+        if (last !== 0 && sg !== last) { if (acc >= 3) rev++; acc = 0; }
+        acc += Math.abs(d); last = sg;
+      }
+      lvl = clampN(len / SWEEP_FULL_PX, 0, 1) * (rev >= 1 ? 1 : 0.3);
+    }
+  }
+  if (sw.taps.length) { let c = 0; for (const x of sw.taps) if (x >= t - SWEEP_TAP_WIN) c++; lvl = Math.max(lvl, clampN(c / 4, 0, 1)); }
+  return lvl < 0.12 ? 0 : lvl;
+}
+
+// ---------------------------------------------------------------------
+// AI
+// ---------------------------------------------------------------------
+function solveDraw(geo, iceK, tx, ty, spin, rangeScale) {
+  const sy = geo.startY, wantR = Math.hypot(tx, ty - sy) * (rangeScale || 1), wantA = Math.atan2(tx, ty - sy);
+  let ang = wantA, v = Math.sqrt(2 * A0 * iceK * wantR), power = powerOf(v);
+  for (let it = 0; it < 4; it++) {
+    const r = simLone(geo, iceK, ang, power, spin, 0, false);
+    const rr = Math.hypot(r.x, r.y - sy);
+    if (rr < 1) { power = Math.min(1, power + 0.1); continue; }
+    const a = Math.atan2(r.x, r.y - sy);
+    ang = clampN(ang + (wantA - a), -MAX_ANG, MAX_ANG);
+    v = speedOf(power) * Math.sqrt(wantR / rr);
+    power = powerOf(v);
+    if (Math.abs(rr - wantR) < 1.5 && Math.abs(wantA - a) < 0.002) break;
+  }
+  return { ang, power };
+}
+function evalWorld(stones, team, leftMe, leftOpp, geo, lv) {
+  const hs = houseScore(stones, geo), outer = geo.outer + R;
+  let v = 0, gm = 0, go = 0;
+  if (hs.team >= 0) v += (hs.team === team ? 1 : -1) * hs.pts * 10;
+  for (const s of stones) {
+    if (!s.alive) continue;
+    const d = distToButton(s);
+    if (d <= outer) { const w = 2.5 * (1 - d / outer); v += s.team === team ? w : -w; }
+    else if (lv >= 5 && s.y > HOG_Y + R && s.y < TEE_Y - outer - R && Math.abs(s.x) < 48) { if (s.team === team) gm++; else go++; }
+  }
+  if (lv >= 5 && leftMe + leftOpp > 0) v += hs.team === team ? gm * 1.2 - go * 0.4 : gm * 0.2 - go * 0.8;
+  return v;
+}
+function simShot(G, team, ang, power, spin) {
+  const W = { stones: G.stones.filter((s) => s.alive).map(copyStone), iceK: G.iceK, geo: G.geo, active: null, sw: 0, ev: null };
+  launchStone(W, 999, team, ang, power, spin);
+  runUntilRest(W);
+  finalizeRest(W);
+  return W.stones;
+}
+function randomPlan(G) {
+  const r = G.rng;
+  return { kind: 'random', ang: (r() * 2 - 1) * 0.45, power: r(), spin: r() < 0.4 ? 0 : r() < 0.5 ? -1 : 1, tx: 0, ty: TEE_Y, sweep: false, sweepBias: 0 };
+}
+// choose a throw for `team` at level lv (0..10) with the current stones
+function planShot(G, team, lv) {
+  if (lv < 0) return randomPlan(G);
+  const geo = G.geo, iceK = G.iceK, opp = 1 - team, rng = G.rng, nz = noiseFor(lv);
+  const alive = G.stones.filter((s) => s.alive), theirs = alive.filter((s) => s.team === opp);
+  const leftMe = G.left[team] - 1, leftOpp = G.left[opp];
+  const cands = [];
+  const sweeps = lv >= 6;
+  const addDraw = (kind, tx, ty, spin) => {
+    const sol = solveDraw(geo, iceK, tx, ty, spin, sweeps ? 0.88 : 1);
+    cands.push({ kind, ang: sol.ang, power: sol.power, spin, tx, ty });
+  };
+  const T = TEE_Y;
+  addDraw('draw', 0, T, 0);
+  if (lv >= 2) {
+    for (const [x, y] of [[-16, T], [16, T], [0, T - 28], [0, T + 22], [-30, T - 20], [30, T - 20]]) addDraw('draw', x, y, 0);
+  }
+  if (lv >= 3) {
+    const cl = theirs.slice().sort((a, b) => distToButton(a) - distToButton(b)).slice(0, 3);
+    for (const t of cl) {
+      for (const pw of [0.6, 0.82]) cands.push({ kind: 'takeout', ang: Math.atan2(t.x, t.y - geo.startY), power: pw, spin: 0, tx: t.x, ty: t.y });
+    }
+  }
+  if (lv >= 5 && leftMe >= 1) {
+    for (const [x, y] of [[0, T - 150], [-24, T - 140], [24, T - 140]]) addDraw('guard', x, y, 0);
+  }
+  if (lv >= 7) {
+    for (const sp of [-1, 1]) for (const [x, y] of [[0, T], [sp * 22, T - 8]]) addDraw('draw', x, y, sp);
+  }
+  const scored = [];
+  for (const c of cands) {
+    const res = simShot(G, team, c.ang, c.power, c.spin);
+    scored.push({ c, v: evalWorld(res, team, leftMe, leftOpp, geo, lv) });
+  }
+  scored.sort((a, b) => b.v - a.v);
+  let pick = scored[0];
+  if (scored.length > 1 && rng() < nz.mistake) pick = scored[Math.min(scored.length - 1, 1 + ((rng() * Math.min(3, scored.length - 1)) | 0))];
+  const c = pick.c;
+  const v = speedOf(c.power) * (1 + gauss(rng) * nz.spd);
+  return {
+    kind: c.kind, ang: clampN(c.ang + gauss(rng) * nz.ang, -MAX_ANG, MAX_ANG), power: powerOf(v), spin: c.spin, tx: c.tx, ty: c.ty,
+    sweep: sweeps && c.kind !== 'takeout', sweepBias: gauss(rng) * nz.bias,
+  };
+}
+// the AI's brush: sweep while the stone would stop short of the target (it never sweeps below level 6)
+function aiSweepLevel(G) {
+  const p = G.aiPlan, s = G.active;
+  if (!p || !p.sweep || !s) return 0;
+  const v = Math.hypot(s.vx, s.vy);
+  if (v < 1) return 0;
+  // where would it stop if the brushes stopped now? (the sweep effect fades with SWEEP_TAU_DN, so a little extra distance is still coming)
+  const dirY = s.vy / v, dt = 1 / 30;
+  let vv = v, y = s.y, sw = G.sw;
+  for (let i = 0; i < 900 && vv > 1; i++) {
+    sw -= sw * (1 - Math.exp(-dt / SWEEP_TAU_DN));
+    vv -= G.iceK * A0 * (1 - SWEEP_FRIC * sw) * dt;
+    if (vv <= 1) break;
+    y += vv * dirY * dt;
+  }
+  return y < p.ty + p.sweepBias ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------
+// MATCH
+// ---------------------------------------------------------------------
+function newGame(o) {
+  o = o || {};
+  const seed = (o.seed | 0) >>> 0, rng = mulberry32(seed);
+  const mode = o.mode === 'versus' || o.mode === 'coop' ? o.mode : 'solo';
+  const streak = Math.max(0, o.streak | 0);
+  const lvBase = mode === 'solo' ? [null, o.lv !== undefined && o.lv !== null ? o.lv : aiBaseLevel(streak)] : (o.lvBase || [null, null]);
+  let ice = o.ice;
+  if (ice === undefined || ice === null) { const r = rng(); ice = o.easyIce ? (r < 0.5 ? -1 : 0) : (r < 0.25 ? -1 : r < 0.75 ? 0 : 1); } else rng();
+  const G = {
+    seed, rng, mode, streak, ends: clampN(o.ends | 0 || 3, 1, 9), perTeam: clampN(o.perTeam | 0 || 4, 1, 8), ice, iceK: ICE_K[ice + 1],
+    lvBase, lv: [null, null], easyFirst: o.easyFirst !== false, aid: o.aid === undefined ? aidFor(streak) : o.aid,
+    hammer: o.hammer !== undefined ? o.hammer : (mode === 'solo' ? 1 : (rng() < 0.5 ? 0 : 1)),
+    endNo: 0, extra: 0, final: false, coin: false, winner: -1, score: [[], []], total: [0, 0], endRes: null,
+    stones: [], left: [0, 0], throwNo: 0, first: 0, cur: 0, active: null, sw: 0, sweepIn: 0, aiPlan: null, spinSel: [0, 0], hint: null,
+    phase: 'intro', introT: INTRO_T, endT: 0, turnT: 0, turnLimit: 15, thinkT: 0, settleT: 0, rollT: 0, acc: 0, clock: 0, geo: geoFor(false), nextId: 1,
+    humanThrows: 0, ev: [], tutorial: o.tutorial !== false,
+  };
+  G.tLimitBase = o.turnLimit !== undefined ? o.turnLimit : null;
+  G.hammer0 = G.hammer;
+  beginEnd(G);
+  return G;
+}
+function isAI(G, team) { return G.lv[team] !== null && G.lv[team] !== undefined; }
+function beginEnd(G) {
+  G.endNo++;
+  const easy = G.easyFirst && G.endNo === 1;
+  G.geo = geoFor(easy);
+  G.stones = []; G.left = [G.perTeam, G.perTeam]; G.throwNo = 0; G.first = 1 - G.hammer; G.active = null; G.sw = 0; G.sweepIn = 0; G.aiPlan = null; G.endRes = null;
+  for (let t = 0; t < 2; t++) G.lv[t] = G.lvBase[t] === null || G.lvBase[t] === undefined ? null : (G.lvBase[t] < 0 ? -1 : Math.min(10, G.lvBase[t] + 0.35 * (G.endNo - 1) * (G.mode === 'solo' ? 1 : 0)));
+  if (G.mode === 'solo' && G.lv[1] !== null && G.lv[1] >= 0 && G.streak < 2) G.lv[1] = Math.min(G.lv[1], 2.2);
+  G.phase = 'intro'; G.introT = INTRO_T;
+  emit(G, { t: 'endStart', end: G.endNo, hammer: G.hammer, easy });
+}
+function teamOfThrow(G, k) { return (G.first + k) % 2; }
+function beginThrow(G) {
+  G.cur = teamOfThrow(G, G.throwNo);
+  G.phase = 'ready'; G.active = null; G.sw = 0; G.sweepIn = 0; G.aiPlan = null; G.hint = null;
+  const human = !isAI(G, G.cur);
+  G.turnLimit = G.tLimitBase !== null ? G.tLimitBase : turnLimitFor(G.mode, G.streak, G.geo.easy);
+  G.turnT = G.turnLimit;
+  G.thinkT = human ? 0 : (G.lv[G.cur] >= 6 ? 0.9 : 1.3);
+  emit(G, { t: 'turn', team: G.cur, left: G.left[G.cur], human });
+}
+function setAim(G, ang, power, spin) { G.hint = { ang, power, spin }; }
+function setSpin(G, team, v) { G.spinSel[team] = v > 0 ? 1 : v < 0 ? -1 : 0; }
+function setSweep(G, level) { G.sweepIn = clampN(level || 0, 0, 1); }
+// throw the next stone of the current team. spin undefined -> the selected spin.
+function shoot(G, ang, power, spin) {
+  if (G.phase !== 'ready') return false;
+  if (spin === undefined) spin = G.spinSel[G.cur];
+  const s = launchStone(G, G.nextId++, G.cur, ang, power, spin);
+  G.left[G.cur]--; G.phase = 'rolling'; G.settleT = 0; G.rollT = 0; G.sw = 0; G.sweepIn = 0;
+  if (!isAI(G, G.cur)) G.humanThrows++;
+  emit(G, { t: 'throw', team: G.cur, id: s.id, ang: clampN(ang, -MAX_ANG, MAX_ANG), power: clampN(power, 0, 1), spin: s.spin, x: s.x, y: s.y });
+  return true;
+}
+function finishThrow(G) {
+  finalizeRest(G);
+  G.active = null; G.sw = 0; G.sweepIn = 0;
+  G.throwNo++;
+  if (G.throwNo >= G.perTeam * 2) closeEnd(G); else beginThrow(G);
+}
+function closeEnd(G) {
+  const hs = houseScore(G.stones, G.geo);
+  const p0 = hs.team === 0 ? hs.pts : 0, p1 = hs.team === 1 ? hs.pts : 0;
+  G.score[0].push(p0); G.score[1].push(p1); G.total[0] += p0; G.total[1] += p1;
+  G.endRes = { end: G.endNo, team: hs.team, pts: hs.pts, ids: hs.ids, tie: hs.tie, hammerBefore: G.hammer };
+  if (hs.team >= 0) G.hammer = 1 - hs.team;   // the team that scored gives the hammer up; a blank end keeps it
+  const planned = G.ends + G.extra;
+  if (G.endNo >= planned) {
+    if (G.total[0] !== G.total[1]) { G.final = true; G.winner = G.total[0] > G.total[1] ? 0 : 1; }
+    else if (G.extra < EXTRA_MAX) G.extra++;
+    else { G.final = true; G.coin = true; G.winner = G.rng() < 0.5 ? 0 : 1; }
+  }
+  G.phase = 'endResult'; G.endT = END_T; G.active = null;
+  emit(G, { t: 'endScore', end: G.endNo, team: hs.team, pts: hs.pts, ids: hs.ids, tie: hs.tie, final: G.final });
+}
+function skipEnd(G) { if (G.phase === 'endResult') G.endT = 0; }
+function leaveEnd(G) {
+  if (G.final) { G.phase = 'over'; emit(G, { t: 'over', winner: G.winner, coin: G.coin }); }
+  else beginEnd(G);
+}
+function tickStep(G) {
+  G.clock += STEP;
+  const ph = G.phase;
+  if (ph === 'intro') { G.introT -= STEP; if (G.introT <= 0) beginThrow(G); }
+  else if (ph === 'ready') {
+    if (isAI(G, G.cur)) {
+      G.thinkT -= STEP;
+      if (G.thinkT <= 0) {
+        const plan = planShot(G, G.cur, G.lv[G.cur]);
+        G.aiPlan = plan;
+        shoot(G, plan.ang, plan.power, plan.spin);
+        G.aiPlan = plan;
+      }
+    } else {
+      G.turnT -= STEP;
+      if (G.turnT <= 0) {
+        emit(G, { t: 'timeout', team: G.cur });
+        const h = G.hint || { ang: 0, power: 0.42, spin: G.spinSel[G.cur] };
+        shoot(G, h.ang, h.power > 0.05 ? h.power : 0.42, h.spin);
+      }
+    }
+  } else if (ph === 'rolling') {
+    G.rollT += STEP;
+    const ai = isAI(G, G.cur);
+    if (ai && ((G.clock / STEP) | 0) % 4 === 0) G.sweepIn = aiSweepLevel(G);
+    const tgt = G.sweepIn, tau = tgt > G.sw ? SWEEP_TAU_UP : SWEEP_TAU_DN;
+    G.sw += (tgt - G.sw) * (1 - Math.exp(-STEP / tau));
+    if (G.sw < 0.003) G.sw = 0;
+    const mv = physStep(G);
+    for (const s of G.stones) if (s.hitT > 0) s.hitT -= STEP;
+    if (!mv && !anyMoving(G)) { G.settleT += STEP; if (G.settleT >= SETTLE_T) finishThrow(G); }
+    else G.settleT = 0;
+    if (G.rollT > MAX_ROLL_T && G.phase === 'rolling') { for (const s of G.stones) { s.vx = 0; s.vy = 0; s.moving = false; } finishThrow(G); }
+  } else if (ph === 'endResult') {
+    G.endT -= STEP;
+    if (G.endT <= 0) leaveEnd(G);
+  }
+}
+function update(G, dt) {
+  if (G.phase === 'over') return;
+  G.acc += Math.min(dt, 0.25);
+  let guard = 0;
+  while (G.acc >= STEP && guard++ < 40 && G.phase !== 'over') { G.acc -= STEP; tickStep(G); }
+}
+// aim preview for the view: path of a lone stone (no other stones), with the stop point
+function previewPath(G, ang, power, spin, sweep) {
+  const r = simLone(G.geo, G.iceK, ang, power, spin || 0, sweep || 0, true);
+  return { pts: r.pts, stop: { x: r.x, y: r.y }, out: r.out };
+}
+// how far (distance) a lone straight stone goes at this power with a constant sweep level (used by tests and the view's gauge)
+function rangeOf(iceK, power, sweep) { const v = speedOf(power); return (v * v) / (2 * iceK * A0 * (1 - SWEEP_FRIC * (sweep || 0))); }
+function stateHash(G) {
+  return JSON.stringify([G.phase, G.endNo, G.total, G.hammer, G.throwNo, G.stones.map((s) => [s.id, s.team, +s.x.toFixed(3), +s.y.toFixed(3), s.alive ? 1 : 0, s.out])]);
+}
+//#LOGIC-END
+
+// =====================================================================
+// VIEW: everything from here on touches the DOM, the canvas or the audio
+// =====================================================================
+const KEY_BEST = 'arcade.curling.best';      // solo record: longest win streak (a plain number)
+const KEY_MUTE = 'arcade.curling.muted';
+const INK = '#1b2a4a';
+const FONT_D = '"Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif';
+const FONT_B = '"Gowun Dodum", "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "WenQuanYi Zen Hei", sans-serif';
+const TEAMS = [
+  { name: '빨강', c: '#ff5d63', d: '#c92f3b', l: '#ffb0b3', mark: 'ring' },
+  { name: '노랑', c: '#ffc83a', d: '#d99a12', l: '#fff0a8', mark: 'star' },
+];
+const QS = new URLSearchParams(location.search);
+const seedParam = QS.get('seed');
+const BASE_SEED = seedParam !== null && seedParam !== '' ? (+seedParam | 0) : null;
+const reduceMotion = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* storage unavailable */ } },
+};
+function readNum(k) { const v = parseInt(store.get(k, ''), 10); return isFinite(v) && v > 0 ? v : 0; }
+function vib(p) { try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(p); } catch (e) { /* ignore */ } }
+const vr = (a, b) => a + (b - a) * Math.random();   // cosmetic randomness only: never touches the game logic
+const clamp = clampN;
+const nowS = () => performance.now() / 1000;
+const WX = HALF_W + 14, VY0 = -34, VY1 = 536;       // the drawn sheet: rails included, from behind the hack to the far board
+
+// =====================================================================
+// AUDIO (all synthesized with Web Audio)
+// =====================================================================
+const Sound = {
+  ctx: null, master: null, noiseBuf: null, voices: 0, last: {}, gl: null, sc: null,
+  muted: store.get(KEY_MUTE, '0') === '1',
+  ensure() {
+    try {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.55;
+        this.master.connect(this.ctx.destination);
+        const sr = this.ctx.sampleRate, len = Math.floor(sr * 1);
+        this.noiseBuf = this.ctx.createBuffer(1, len, sr);
+        const d = this.noiseBuf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { this.ctx = null; }
+  },
+  setMuted(m) {
+    this.muted = m; store.set(KEY_MUTE, m ? '1' : '0');
+    if (this.master && this.ctx) { try { this.master.gain.setTargetAtTime(m ? 0 : 0.55, this.ctx.currentTime, 0.02); } catch (e) { /* ignore */ } }
+  },
+  ok() { return this.ctx && !this.muted && this.ctx.state === 'running'; },
+  gate(name, ms) { const n = performance.now(); if (n - (this.last[name] || 0) < ms) return false; this.last[name] = n; return true; },
+  tone(type, f0, f1, dur, vol, delay, attack, pri) {
+    if (!this.ok() || (!pri && this.voices >= 14)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t);
+      if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + (attack || 0.005));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(this.master);
+      this.voices++; o.onended = () => { this.voices--; };
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* ignore */ }
+  },
+  noise(dur, freq, q, vol, delay, type, pri, f1) {
+    if (!this.ok() || (!pri && this.voices >= 14)) return;
+    try {
+      const c = this.ctx, t = c.currentTime + (delay || 0);
+      const s = c.createBufferSource(); s.buffer = this.noiseBuf;
+      const f = c.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+      if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(this.master);
+      this.voices++; s.onended = () => { this.voices--; };
+      s.start(t, Math.random() * 0.9); s.stop(t + dur + 0.05);
+    } catch (e) { /* ignore */ }
+  },
+  // 스르르 (the stone gliding: pitch follows its speed) and 쓱쓱 (the brush: a fast scratchy flutter that follows the sweep level), both looping and driven every frame
+  loops(v, sw) {
+    if (!this.ctx) return;
+    if (!this.ok()) { if (this.gl) { this.gl.g.gain.value = 0; this.sc.g.gain.value = 0; } return; }
+    try {
+      const c = this.ctx, t = c.currentTime;
+      if (!this.gl) {
+        const mk = (type, f, q) => {
+          const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true;
+          const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+          const g = c.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(this.master); s.start(0, Math.random() * 0.5);
+          return { s, f: fl, g };
+        };
+        this.gl = mk('bandpass', 500, 0.9); this.sc = mk('highpass', 2600, 0.7);
+        const o = c.createOscillator(), og = c.createGain(); o.type = 'sine'; o.frequency.value = 90; og.gain.value = 0; o.connect(og); og.connect(this.master); o.start(); this.gl.o = o; this.gl.og = og;
+      }
+      const lv = clamp(v / 260, 0, 1);
+      this.gl.g.gain.setTargetAtTime(v > 4 ? 0.02 + 0.13 * lv : 0, t, 0.06);
+      this.gl.f.frequency.setTargetAtTime(380 + v * 5.2, t, 0.06);
+      this.gl.o.frequency.setTargetAtTime(60 + v * 0.35, t, 0.08);
+      this.gl.og.gain.setTargetAtTime(v > 4 ? 0.012 + 0.03 * lv : 0, t, 0.08);
+      const flut = 0.55 + 0.45 * Math.sin(t * 78);
+      this.sc.g.gain.setTargetAtTime(sw > 0.05 ? (0.03 + 0.17 * sw) * flut : 0, t, 0.02);
+      this.sc.f.frequency.setTargetAtTime(2200 + 1400 * Math.sin(t * 39) * sw + 600 * sw, t, 0.02);
+    } catch (e) { /* ignore */ }
+  },
+  // 휙: the throw
+  throw(p) { this.noise(0.22, 700 + 900 * p, 0.8, 0.07 + 0.08 * p, 0, 'bandpass', true, 260); this.tone('sine', 150 + 60 * p, 70, 0.14, 0.18, 0, 0.004, true); },
+  // 딱: stone on stone
+  clack(s) { if (!this.gate('clack', 40)) return; const k = clamp(s / 220, 0.15, 1); this.tone('square', 900 + 500 * k, 300, 0.05, 0.05 + 0.08 * k, 0, 0.002, true); this.tone('triangle', 380 + 160 * k, 190, 0.12, 0.08 + 0.14 * k, 0, 0.003, true); this.noise(0.04, 3200, 0.9, 0.05 + 0.1 * k, 0, 'highpass', true); },
+  // 띠링: the stone reaches the house
+  house() { this.tone('sine', 1175, 1175, 0.2, 0.1, 0, 0.004, true); this.tone('sine', 1568, 1568, 0.3, 0.09, 0.09, 0.004, true); },
+  out() { if (!this.gate('out', 90)) return; this.noise(0.28, 1500, 0.8, 0.07, 0, 'bandpass', false, 380); },
+  turn() { this.tone('sine', 700, 940, 0.09, 0.06, 0, 0.004, true); },
+  tick() { this.tone('square', 1500, 1500, 0.05, 0.05, 0, 0.002, true); },
+  tickLast() { this.tone('square', 1900, 1900, 0.09, 0.07, 0, 0.002, true); },
+  score(n) { const seq = [0, 4, 7, 12].slice(0, Math.min(4, 2 + n)); seq.forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.22, 0.11, i * 0.09, 0.005, true); this.tone('sine', f * 2, f * 2, 0.14, 0.035, i * 0.09, 0.004, true); }); },
+  blank() { this.tone('sine', 520, 460, 0.2, 0.07, 0, 0.005, true); },
+  win() { [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => { const f = 523.25 * Math.pow(2, s / 12); this.tone('triangle', f, f, 0.24, 0.1, i * 0.08, 0.005, true); this.tone('sine', f * 2, f * 2, 0.16, 0.035, i * 0.08, 0.004); }); this.noise(0.5, 5000, 0.6, 0.05, 0.6, 'highpass', true); },
+  over() { this.tone('sine', 880, 660, 0.35, 0.1, 0, 0.005, true); this.tone('sine', 660, 440, 0.45, 0.1, 0.18, 0.005, true); },
+  ui() { this.tone('sine', 880, 1100, 0.06, 0.08, 0, 0.005, true); },
+  end() { this.tone('triangle', 523, 523, 0.1, 0.08, 0, 0.004, true); this.tone('triangle', 784, 784, 0.16, 0.08, 0.09, 0.004, true); },
+};
+
+// =====================================================================
+// STATE + DOM
+// =====================================================================
+const S = {
+  view: 'title', mode: 'solo', ends: 3, perTeam: 4, aidOn: true, G: null, paused: false, clock: 0, sig: '', gameNo: 0, streak: 0, best: 0, newRecord: false,
+  resultShown: false, pendingOver: 0, W: 1, H: 1, dpr: 1, cls: 'port', area: null, vw: null, pad: null, bg: null, trail: null, bgDirty: true, bgKey: '', trailDirty: true,
+  parts: [], rings: [], floats: [], outAnim: [], bannerT: 0, toastT: 0, coachT: 0, coachMsg: '', lowTick: -1, shake: 0, flash: 0, isTouch: false,
+  aim: { active: false, ang: 0, power: 0, ax: 0, ay: 0, px: 0, py: 0, dist: 0 }, sweepLvl: 0, lastTrail: null, hintT: 0, sweepTipShown: false, aimTipShown: false, usedSweep: false,
+  scoreFx: null, panelSig: '', endShown: 0, perf: { ms: 0, max: 0, frames: 0 }, padGlow: 0, scrubX: 0, thinkMsg: '', quick: false,
+};
+const el = {
+  cv: $('cv'), stage: $('stage'), hud: $('hud'), btnPause: $('btnPause'), btnMute: $('btnMute'),
+  pEnd: $('pEnd'), eV: $('eV'), eMax: $('eMax'), pIce: $('pIce'), iceV: $('iceV'), pTime: $('pTime'), tV: $('tV'), pStreak: $('pStreak'), stV: $('stV'),
+  tp: [$('tpA'), $('tpB')], spinL: $('btnSpinL'), spinR: $('btnSpinR'), btnNext: $('btnNext'),
+  coach: $('coach'), toast: $('toast'), toastTxt: $('toastTxt'), banner: $('banner'), b1: $('banner').children[0], b2: $('banner').children[1], live: $('live'),
+  scrTitle: $('scrTitle'), scrPause: $('scrPause'), scrOver: $('scrOver'), mascot: $('mascotT'),
+  modes: { solo: $('btnSolo'), versus: $('btnVersus'), coop: $('btnCoop') }, btnE: [$('btnE3'), $('btnE4'), $('btnE5')], btnS: [$('btnS4'), $('btnS5'), $('btnS6')],
+  aidRow: $('aidRow'), btnAid: $('btnAid'), aidTxt: $('aidTxt'), modeLine: $('modeLine'), bestLine: $('bestLine'), tBest: $('tBest'),
+};
+const ctx = el.cv.getContext('2d');
+function setText(n, s) { if (n._t !== s) { n._t = s; n.textContent = s; } }
+function setCls(n, name, on) { const c = n._c || (n._c = {}); on = !!on; if (c[name] !== on) { c[name] = on; n.classList.toggle(name, on); } }
+function setStyle(n, prop, v) { const c = n._s || (n._s = {}); if (c[prop] !== v) { c[prop] = v; n.style[prop] = v; } }
+function setBox(n, r) { setStyle(n, 'left', Math.round(r.x) + 'px'); setStyle(n, 'top', Math.round(r.y) + 'px'); if (r.w !== undefined) setStyle(n, 'width', Math.round(r.w) + 'px'); if (r.h !== undefined) setStyle(n, 'height', Math.round(r.h) + 'px'); }
+function rectOf(n) { if (!n) return null; const r = n.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, cx: r.left + r.width / 2, cy: r.top + r.height / 2 }; }
+const say = (text) => setText(el.live, text);
+function teamName(G, t) { if (G && G.mode === 'solo') return t === 0 ? '내 팀' : '컴퓨터'; return TEAMS[t].name + ' 팀'; }
+const isHumanTurn = (G) => !!G && G.phase === 'ready' && !isAI(G, G.cur);
+
+// =====================================================================
+// LAYOUT
+// =====================================================================
+let dprCap = 2;
+function safeInsets() {
+  const pcs = getComputedStyle($('probe'));
+  return { t: parseFloat(pcs.paddingTop) || 0, b: parseFloat(pcs.paddingBottom) || 0, l: parseFloat(pcs.paddingLeft) || 0, r: parseFloat(pcs.paddingRight) || 0 };
+}
+function layoutSig() { return window.innerWidth + 'x' + window.innerHeight + ':' + S.view + ':' + (S.G ? S.G.mode + S.G.perTeam + ':' + S.G.endNo : S.mode); }
+function classFor(W, H) { return W >= 1000 && H >= 600 && W / H >= 1.3 ? 'wide' : W > H * 1.05 ? 'land' : 'port'; }
+function layout() {
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+  S.W = W; S.H = H; S.dpr = dpr;
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  if (el.cv.width !== pw || el.cv.height !== ph) { el.cv.width = pw; el.cv.height = ph; }
+  S.sig = layoutSig(); S.bgDirty = true; S.trailDirty = true;
+  S.cls = classFor(W, H);
+  if (S.view !== 'play' || !S.G) {
+    const sa0 = safeInsets();
+    S.area = { x: sa0.l + 6, y: sa0.t + 6, w: Math.max(60, W - sa0.l - sa0.r - 12), h: Math.max(60, H - sa0.t - sa0.b - 12), x1: W - sa0.r - 6, y1: H - sa0.b - 6 };
+    fitView(); S.pad = null;
+    return;
+  }
+  const G = S.G, cls = S.cls, coop = G.mode === 'coop', solo = G.mode === 'solo';
+  for (const c of ['port', 'land', 'wide']) setCls(el.stage, c, c === cls);
+  const sa = safeInsets(), m = 8;
+  const x0 = sa.l + m, x1 = W - sa.r - m, y0 = sa.t + m, yb = H - sa.b - m;
+  let ax0 = x0, ax1 = x1, ay0 = y0, ay1 = yb;
+  const side = cls !== 'port';
+  setCls(el.tp[0], 'side', side); setCls(el.tp[1], 'side', side);
+  setStyle(el.pStreak, 'display', side && solo ? 'flex' : 'none');
+  S.pad = null;
+  const padH = coop ? (cls === 'wide' ? 96 : cls === 'land' ? 66 : 88) : 0;
+  if (!side) {
+    const hw = Math.min(x1 - x0, 600), hx = x0 + (x1 - x0 - hw) / 2, tpH = 50;
+    setBox(el.hud, { x: hx, y: y0, w: hw });
+    const top = y0 + 44 + 6;
+    setBox(el.tp[1], { x: hx, y: top, w: hw, h: tpH });
+    setBox(el.tp[0], { x: hx, y: yb - tpH, w: hw, h: tpH });
+    ay0 = top + tpH + 6; ay1 = yb - tpH - 6;
+    if (coop) { S.pad = { x: hx, y: ay1 - padH, w: hw, h: padH }; ay1 -= padH + 6; }
+  } else {
+    const pwid = cls === 'wide' ? clamp(Math.round(W * 0.17), 200, 260) : clamp(Math.round(W * 0.14), 112, 140);
+    setBox(el.tp[0], { x: x0, y: y0, w: pwid }); setBox(el.tp[1], { x: x1 - pwid, y: y0, w: pwid });
+    ax0 = x0 + pwid + 8; ax1 = x1 - pwid - 8;
+    const aw = ax1 - ax0, availH = yb - y0, below = coop ? padH + 10 : 0;
+    if (cls === 'wide') {
+      // a roomy board: HUD, sheet and (2:2) brush pad form one block, centred between the team panels
+      const sc = Math.min(aw / (VY1 - VY0), (availH - 52 - below) / (2 * WX), 2.8), sheetH = 2 * WX * sc, gy = y0 + Math.max(0, (availH - 52 - sheetH - below) / 2);
+      setBox(el.hud, { x: ax0, y: gy, w: aw });
+      ay0 = gy + 52; ay1 = ay0 + sheetH;
+      if (coop) S.pad = { x: ax0, y: ay1 + 10, w: aw, h: padH };
+    } else {
+      setBox(el.hud, { x: ax0, y: y0, w: aw });
+      ay0 = y0 + 44 + 6;
+      if (coop) { S.pad = { x: ax0, y: yb - padH, w: aw, h: padH }; ay1 = yb - padH - 6; }
+    }
+  }
+  S.area = { x: ax0, y: ay0, w: Math.max(60, ax1 - ax0), h: Math.max(60, ay1 - ay0), x1: ax1, y1: ay1 };
+  const a = S.area;
+  fitView();
+  const bx = S.vw.box, sp = 54;
+  // spin buttons sit in the ice margins at the throwing end
+  if (!side) {
+    const lx = Math.max(a.x, bx.x - sp - 6), rx = Math.min(a.x1 - sp, bx.x + bx.w + 6);
+    const roomL = bx.x - a.x >= sp + 8;
+    setBox(el.spinL, { x: roomL ? lx : bx.x + 6, y: bx.y + bx.h - sp - 6 }); setBox(el.spinR, { x: roomL ? rx : bx.x + bx.w - sp - 6, y: bx.y + bx.h - sp - 6 });
+  } else {
+    setBox(el.spinL, { x: bx.x + 6, y: bx.y + 6 }); setBox(el.spinR, { x: bx.x + 6, y: bx.y + bx.h - sp - 6 });
+  }
+  // the coach bubble goes where it hides nothing: on the empty ice before the hack (portrait), or in the free strip above / below the sheet (landscape)
+  if (!side) setBox(el.coach, { x: bx.x + 4, y: bx.y + bx.h * 0.55, w: bx.w - 8 });
+  else {
+    const below = a.y1 - (bx.y + bx.h), above = bx.y - a.y, ch = 38;
+    if (below >= ch + 4) setBox(el.coach, { x: a.x + 4, y: bx.y + bx.h + Math.min(10, (below - ch) / 2), w: a.w - 8 });
+    else if (above >= ch + 4) setBox(el.coach, { x: a.x + 4, y: bx.y - ch - 4, w: a.w - 8 });
+    else setBox(el.coach, { x: a.x + 4, y: bx.y + bx.h - ch - 4, w: a.w - 8 });
+  }
+  setBox(el.toast, { x: a.x, y: side ? a.y + 4 : a.y + 52, w: a.w });
+  setBox(el.banner, { x: a.x, y: a.y + a.h * 0.22, w: a.w, h: Math.min(170, a.h * 0.45) });
+  setBox(el.btnNext, { x: a.x + a.w / 2 - 80, y: a.y1 - 56 });
+  S.panelSig = '';
+}
+// world -> screen: sx = a*x + c*y + e, sy = b*x + d*y + f. Portrait: the throw goes up the screen. Landscape: the sheet is laid on its side and the throw goes left to right.
+function fitView() {
+  const a = S.area, port = S.cls === 'port', L = VY1 - VY0, Wd = 2 * WX;
+  const sw = port ? Wd : L, sh = port ? L : Wd;
+  const s = Math.min(a.w / sw, a.h / sh, 2.8);
+  const pw = sw * s, ph = sh * s, ox = a.x + (a.w - pw) / 2, oy = a.y + (a.h - ph) / 2;
+  S.vw = port ? { s, port, a: s, b: 0, c: 0, d: -s, e: ox + WX * s, f: oy + VY1 * s } : { s, port, a: 0, b: s, c: s, d: 0, e: ox - VY0 * s, f: oy + WX * s };
+  S.vw.box = { x: ox, y: oy, w: pw, h: ph };
+  S.bgDirty = true; S.trailDirty = true;
+}
+const toScr = (x, y) => { const v = S.vw; return [v.a * x + v.c * y + v.e, v.b * x + v.d * y + v.f]; };
+function toWorld(sx, sy) { const v = S.vw, det = v.a * v.d - v.b * v.c; return [(v.d * (sx - v.e) - v.c * (sy - v.f)) / det, (-v.b * (sx - v.e) + v.a * (sy - v.f)) / det]; }
+function vecToWorld(dx, dy) { const v = S.vw, det = v.a * v.d - v.b * v.c; return [(v.d * dx - v.c * dy) / det, (-v.b * dx + v.a * dy) / det]; }
+function vecToScr(dx, dy) { const v = S.vw; return [v.a * dx + v.c * dy, v.b * dx + v.d * dy]; }
+
+// =====================================================================
+// ART: the rink, the stones, the brushes
+// =====================================================================
+function ell(g, x, y, rx, ry, rot) { g.beginPath(); g.ellipse(x, y, Math.max(0.01, rx), Math.max(0.01, ry), rot || 0, 0, TAU); }
+function rrect(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r); g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+}
+function hash2(a, b, c) { let h = Math.imul(a + 374761393, 668265263) ^ Math.imul(b + 1274126177, 2246822519) ^ Math.imul((c || 0) + 97, 3266489917); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function makeCv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function lerpCol(a, b, t) {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)], pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  return 'rgb(' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(',') + ')';
+}
+function gaugeCol(p) { return p < 0.5 ? lerpCol('#4cd980', '#ffd23f', p * 2) : lerpCol('#ffd23f', '#ff5d5d', (p - 0.5) * 2); }
+
+function buildBg() {
+  const G = S.G, v = S.vw; if (!v) return;
+  const W = S.W, H = S.H, dpr = S.dpr, geo = G ? G.geo : geoFor(false);
+  if (!S.bg) S.bg = makeCv(1, 1);
+  const c = S.bg; c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // arena: deep blue, soft lights in the crowd
+  const gr = g.createLinearGradient(0, 0, W * 0.3, H); gr.addColorStop(0, '#244f94'); gr.addColorStop(0.55, '#16356b'); gr.addColorStop(1, '#0c1f45');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  const n = Math.round(W * H / 6500);
+  for (let i = 0; i < n; i++) {
+    const x = hash2(i, 1, 3) * W, y = hash2(i, 2, 3) * H, k = hash2(i, 3, 3);
+    g.fillStyle = k < 0.3 ? 'rgba(255,180,190,0.10)' : k < 0.6 ? 'rgba(255,225,140,0.10)' : 'rgba(170,210,255,0.12)';
+    ell(g, x, y, 3 + k * 5, 3 + k * 5); g.fill();
+  }
+  g.setTransform(dpr * v.a, dpr * v.b, dpr * v.c, dpr * v.d, dpr * v.e, dpr * v.f);
+  g.lineJoin = 'round';
+  // rails (with a soft shadow on the arena floor)
+  g.save(); g.shadowColor = 'rgba(2,10,30,0.55)'; g.shadowBlur = 14 * dpr; g.shadowOffsetY = 6 * dpr;
+  g.fillStyle = '#5f86c2'; rrect(g, -WX, VY0, WX * 2, VY1 - VY0, 10); g.fill(); g.restore();
+  g.fillStyle = '#7ea3dc'; g.save(); rrect(g, -WX, VY0, WX * 2, VY1 - VY0, 10); g.clip();
+  for (let y = VY0; y < VY1; y += 28) { g.fillRect(-WX, y, 14, 14); g.fillRect(WX - 14, y + 14, 14, 14); }
+  for (let x = -WX; x < WX; x += 28) { g.fillRect(x, VY0, 14, 8); g.fillRect(x + 14, VY1 - 8, 14, 8); }
+  g.restore();
+  // ice
+  const ix0 = -HALF_W, iw = HALF_W * 2, iy0 = VY0 + 8, ih = VY1 - VY0 - 16;
+  const ig = g.createLinearGradient(ix0, 0, ix0 + iw, 0); ig.addColorStop(0, '#cfe8fb'); ig.addColorStop(0.18, '#ecf8ff'); ig.addColorStop(0.5, '#f6fcff'); ig.addColorStop(0.82, '#ecf8ff'); ig.addColorStop(1, '#cfe8fb');
+  g.fillStyle = ig; g.fillRect(ix0, iy0, iw, ih);
+  g.save(); g.beginPath(); g.rect(ix0, iy0, iw, ih); g.clip();
+  const sg = g.createLinearGradient(ix0, iy0, ix0 + iw * 0.8, iy0 + ih * 0.2); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.45)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sg; g.fillRect(ix0, iy0, iw, ih);
+  // pebbles
+  for (let i = 0; i < 520; i++) {
+    const x = ix0 + hash2(i, 5, 11) * iw, y = iy0 + hash2(i, 6, 11) * ih, k = hash2(i, 7, 11);
+    g.fillStyle = k < 0.5 ? 'rgba(255,255,255,0.9)' : 'rgba(150,195,235,0.35)';
+    ell(g, x, y, 0.7 + k * 0.9, 0.7 + k * 0.9); g.fill();
+  }
+  // scratches
+  g.strokeStyle = 'rgba(140,185,225,0.28)'; g.lineWidth = 0.6;
+  for (let i = 0; i < 26; i++) {
+    const x = ix0 + hash2(i, 8, 5) * iw, y = iy0 + hash2(i, 9, 5) * ih, a = (hash2(i, 10, 5) - 0.5) * 1.2, l = 20 + hash2(i, 11, 5) * 70;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.sin(a) * l, y + Math.cos(a) * l); g.stroke();
+  }
+  g.restore();
+  // lines: centre, tee, back, hog, throw line
+  const line = (x0, y0, x1, y1, w, col, dash) => { g.strokeStyle = col; g.lineWidth = w; if (dash) g.setLineDash(dash); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); g.setLineDash([]); };
+  line(0, geo.startY, 0, geo.backY, 1.6, 'rgba(70,130,215,0.55)');
+  line(-HALF_W, TEE_Y, HALF_W, TEE_Y, 1.6, 'rgba(70,130,215,0.55)');
+  line(-HALF_W, geo.backY, HALF_W, geo.backY, 2.4, 'rgba(70,130,215,0.7)');
+  line(-HALF_W, HOG_Y, HALF_W, HOG_Y, 6, 'rgba(255,98,112,0.8)');
+  line(-HALF_W, HOG_Y, HALF_W, HOG_Y, 1.2, 'rgba(255,255,255,0.8)');
+  line(-70, geo.startY, 70, geo.startY, 2, 'rgba(70,130,215,0.7)', [6, 5]);
+  g.fillStyle = '#34415f'; rrect(g, -17, geo.startY - 8, 11, 5, 2); g.fill(); rrect(g, 6, geo.startY - 8, 11, 5, 2); g.fill();
+  // the house
+  const cols = ['#4f93f0', '#f7fcff', '#ff6270', '#f7fcff'];
+  for (let i = 0; i < 4; i++) {
+    ell(g, 0, TEE_Y, geo.rings[i], geo.rings[i]); g.fillStyle = cols[i]; g.fill(); g.strokeStyle = 'rgba(25,60,130,0.55)'; g.lineWidth = 1.4; g.stroke();
+  }
+  line(-geo.outer, TEE_Y, geo.outer, TEE_Y, 1, 'rgba(25,60,130,0.35)'); line(0, TEE_Y - geo.outer, 0, TEE_Y + geo.outer, 1, 'rgba(25,60,130,0.35)');
+  ell(g, 0, TEE_Y, 1.8, 1.8); g.fillStyle = 'rgba(25,60,130,0.6)'; g.fill();
+  S.bgDirty = false; S.bgKey = S.sig;
+}
+function resetTrail() {
+  if (!S.trail) S.trail = makeCv(1, 1);
+  const c = S.trail, w = Math.round(S.W * S.dpr), h = Math.round(S.H * S.dpr);
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } else c.getContext('2d').clearRect(0, 0, w, h);
+  S.trailDirty = false; S.lastTrail = null;
+}
+
+// ---- the stone: granite body, team cap, handle ----
+function drawStone(g, x, y, r, team, rot, o) {
+  o = o || {};
+  const T = TEAMS[team], a = o.alpha === undefined ? 1 : o.alpha;
+  g.save();
+  if (a < 1) g.globalAlpha = a;
+  if (o.scale && o.scale !== 1) { g.translate(x, y); g.scale(o.scale, o.scale); g.translate(-x, -y); }
+  const h = r * 0.34, lw = Math.max(1.3, r * 0.1), ry = r * 0.93;
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  if (!o.noShadow) { g.fillStyle = 'rgba(15,45,110,0.24)'; ell(g, x + r * 0.14, y + h + r * 0.26, r * 1.05, ry * 0.98); g.fill(); }
+  g.strokeStyle = INK; g.lineWidth = lw;
+  g.fillStyle = '#7f8aa3'; ell(g, x, y + h, r, ry); g.fill();
+  g.fillStyle = '#a3aec3'; g.fillRect(x - r, y, r * 2, h);
+  g.beginPath(); g.moveTo(x - r, y); g.lineTo(x - r, y + h); g.moveTo(x + r, y); g.lineTo(x + r, y + h); g.stroke();
+  g.beginPath(); g.ellipse(x, y + h, r, ry, 0, 0, Math.PI); g.stroke();
+  const tg = g.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r * 1.1); tg.addColorStop(0, '#f1f4fa'); tg.addColorStop(0.6, '#cdd5e4'); tg.addColorStop(1, '#a9b4c9');
+  g.fillStyle = tg; ell(g, x, y, r, ry); g.fill(); g.stroke();
+  // team cap
+  const cg = g.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.05, x, y, r * 0.75); cg.addColorStop(0, T.l); cg.addColorStop(0.5, T.c); cg.addColorStop(1, T.d);
+  g.fillStyle = cg; g.lineWidth = lw * 0.8; ell(g, x, y, r * 0.72, r * 0.67); g.fill(); g.stroke();
+  // handle + marks (rotate with the stone)
+  g.save(); g.translate(x, y); g.rotate(rot || 0);
+  g.fillStyle = 'rgba(255,255,255,0.92)';
+  for (const sy of [-1, 1]) {
+    const py = sy * r * 0.4;
+    if (T.mark === 'ring') { g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = Math.max(1, r * 0.09); ell(g, 0, py, r * 0.11, r * 0.11); g.stroke(); }
+    else { g.beginPath(); g.moveTo(0, py - r * 0.15); g.lineTo(r * 0.1, py); g.lineTo(0, py + r * 0.15); g.lineTo(-r * 0.1, py); g.closePath(); g.fill(); }
+  }
+  g.strokeStyle = INK; g.lineWidth = lw * 0.8; g.fillStyle = '#f2f6fc'; rrect(g, -r * 0.5, -r * 0.14, r, r * 0.28, r * 0.14); g.fill(); g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.9)'; rrect(g, -r * 0.34, -r * 0.08, r * 0.46, r * 0.08, r * 0.04); g.fill();
+  g.restore();
+  g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = Math.max(1, r * 0.08); g.beginPath(); g.arc(x, y, r * 0.88, Math.PI * 1.08, Math.PI * 1.36); g.stroke();
+  if (o.flash > 0) { g.strokeStyle = 'rgba(255,255,255,' + clamp(o.flash * 3, 0, 0.9) + ')'; g.lineWidth = lw * 1.5; ell(g, x, y, r * 1.12, ry * 1.12); g.stroke(); }
+  g.restore();
+}
+
+// =====================================================================
+// FX
+// =====================================================================
+function burst(x, y, cols, n, speed, o) {
+  if (reduceMotion) n = Math.min(n, 3);
+  o = o || {};
+  for (let i = 0; i < n && S.parts.length < 260; i++) {
+    const a = (o.dir !== undefined ? o.dir + (Math.random() - 0.5) * (o.spread || 1) : Math.random() * TAU), sp = speed * vr(0.35, 1);
+    S.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: o.g === undefined ? 200 : o.g, life: vr(0.6, 1) * (o.life || 0.8), max: o.life || 0.8, col: cols[i % cols.length], sz: (o.sz || 1) * vr(1.6, 3.4), shape: o.shape || 'c', rot: Math.random() * TAU, vr: vr(-9, 9) });
+  }
+}
+function confetti(x, y, n) {
+  if (reduceMotion) return;
+  const cols = ['#ff5d63', '#ffc83a', '#59b4ff', '#2fb872', '#ffffff', '#c58cff'];
+  for (let i = 0; i < n && S.parts.length < 260; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, sp = vr(140, 420);
+    S.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 420, life: vr(1.1, 1.9), max: 1.9, col: cols[i % cols.length], sz: vr(3, 6), shape: 'r', rot: Math.random() * TAU, vr: vr(-10, 10) });
+  }
+}
+function ringFx(x, y, col, r, life) { S.rings.push({ x, y, col, r, life, max: life }); }
+function floatText(x, y, text, col, size) { S.floats.push({ x, y, text, col: col || '#fff', size: size || 22, life: 1.3, max: 1.3 }); }
+function tickFx(dt) {
+  for (let i = S.parts.length - 1; i >= 0; i--) {
+    const p = S.parts[i]; p.life -= dt;
+    if (p.life <= 0) { S.parts.splice(i, 1); continue; }
+    p.vy += p.g * dt; p.vx *= (1 - 0.6 * dt); p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+  }
+  for (let i = S.rings.length - 1; i >= 0; i--) { S.rings[i].life -= dt; if (S.rings[i].life <= 0) S.rings.splice(i, 1); }
+  for (let i = S.floats.length - 1; i >= 0; i--) { const f = S.floats[i]; f.life -= dt; f.y -= 30 * dt; if (f.life <= 0) S.floats.splice(i, 1); }
+  for (let i = S.outAnim.length - 1; i >= 0; i--) {
+    const o = S.outAnim[i]; o.t += dt;
+    const k = Math.exp(-2.4 * dt); o.vx *= k; o.vy *= k; o.x += o.vx * dt; o.y += o.vy * dt; o.rot += o.spin * dt;
+    if (o.t > 0.9) S.outAnim.splice(i, 1);
+  }
+  if (S.shake > 0) S.shake = Math.max(0, S.shake - dt);
+  if (S.flash > 0) S.flash = Math.max(0, S.flash - dt);
+  if (S.bannerT > 0) { S.bannerT -= dt; if (S.bannerT <= 0) el.banner.className = ''; }
+  if (S.toastT > 0) { S.toastT -= dt; if (S.toastT <= 0) el.toast.classList.remove('show'); }
+  if (S.coachT > 0) { S.coachT -= dt; if (S.coachT <= 0) S.coachMsg = ''; }
+}
+function drawFx(g) {
+  for (const r of S.rings) {
+    const k = 1 - r.life / r.max;
+    g.strokeStyle = r.col; g.globalAlpha = clamp(1 - k, 0, 1) * 0.9; g.lineWidth = 3 * (1 - k) + 1; ell(g, r.x, r.y, r.r * (0.35 + k * 0.9), r.r * (0.35 + k * 0.9)); g.stroke();
+  }
+  g.globalAlpha = 1;
+  for (const p of S.parts) {
+    g.globalAlpha = clamp(p.life / p.max * 1.6, 0, 1); g.fillStyle = p.col;
+    if (p.shape === 'r') { g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.fillRect(-p.sz, -p.sz * 0.5, p.sz * 2, p.sz); g.restore(); }
+    else if (p.shape === 's') { g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.beginPath(); g.moveTo(0, -p.sz * 1.4); g.lineTo(p.sz * 0.4, -p.sz * 0.4); g.lineTo(p.sz * 1.4, 0); g.lineTo(p.sz * 0.4, p.sz * 0.4); g.lineTo(0, p.sz * 1.4); g.lineTo(-p.sz * 0.4, p.sz * 0.4); g.lineTo(-p.sz * 1.4, 0); g.lineTo(-p.sz * 0.4, -p.sz * 0.4); g.closePath(); g.fill(); g.restore(); }
+    else { ell(g, p.x, p.y, p.sz, p.sz); g.fill(); }
+  }
+  g.globalAlpha = 1;
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  for (const f of S.floats) {
+    const k = f.life / f.max; g.globalAlpha = clamp(k * 2, 0, 1);
+    g.font = f.size + 'px ' + FONT_D; g.strokeStyle = INK; g.lineWidth = f.size * 0.3; g.strokeText(f.text, f.x, f.y); g.fillStyle = f.col; g.fillText(f.text, f.x, f.y);
+  }
+  g.globalAlpha = 1;
+}
+
+// =====================================================================
+// RENDER
+// =====================================================================
+const KB = { set: false, ang: 0, p: 0, dir: 1, charging: false, used: false, lastP: 0.45 };
+function maxPullPx() { const a = S.area; return clamp(Math.min(S.W, S.H) * 0.3, 96, 200) + (a ? 0 : 0); }
+function hackScreen() { const G = S.G; if (!G || !S.vw) return null; const [x, y] = toScr(0, G.geo.startY); return { x, y }; }
+function curAim() {
+  const G = S.G; if (!G) return null;
+  if (S.aim.active) return { ang: S.aim.ang, power: S.aim.power, pulling: true };
+  if (KB.set) return { ang: KB.ang, power: KB.charging ? KB.p : 0, pulling: false, kb: true };
+  return null;
+}
+let pvKey = '', pvVal = null;
+function previewFor(G, ang, power, spin) {
+  const k = ang.toFixed(4) + '|' + power.toFixed(3) + '|' + spin + '|' + G.geo.k + '|' + G.iceK;
+  if (k !== pvKey) { pvKey = k; pvVal = previewPath(G, ang, Math.max(power, 0.03), spin, 0); }
+  return pvVal;
+}
+function drawPending(g, dt) {
+  const G = S.G, s = S.vw.s, r = R * s;
+  if (!G || (G.phase !== 'ready' && G.phase !== 'intro')) return;
+  const team = G.phase === 'ready' ? G.cur : G.first, ai = isAI(G, team);
+  const hs = hackScreen(); let px = hs.x, py = hs.y;
+  const am = G.phase === 'ready' && !ai ? curAim() : null;
+  const fw = vecToScr(0, 1), fl = Math.hypot(fw[0], fw[1]) || 1, fx = fw[0] / fl, fy = fw[1] / fl;   // forward on screen
+  const left = G.left[team];
+  // the next stones wait behind the hack
+  const bob = reduceMotion ? 0 : Math.sin(S.clock * 3) * r * 0.06;
+  if (am && am.power > 0.02 || (am && am.pulling)) {
+    const mp = maxPullPx(), pull = (am.pulling ? Math.min(S.aim.dist, mp) : am.power * mp) * 0.5;
+    // elastic band from the hack to the pulled stone
+    const sx = px - fx * pull, sy = py - fy * pull;
+    g.strokeStyle = 'rgba(27,42,74,0.55)'; g.lineWidth = Math.max(2, r * 0.22); g.lineCap = 'round';
+    g.beginPath(); g.moveTo(px - fy * r * 0.7, py + fx * r * 0.7); g.lineTo(sx, sy); g.lineTo(px + fy * r * 0.7, py - fx * r * 0.7); g.stroke();
+    ell(g, px, py, r * 1.15, r * 1.1); g.strokeStyle = 'rgba(255,255,255,0.9)'; g.setLineDash([4, 4]); g.lineWidth = 2; g.stroke(); g.setLineDash([]);
+    px = sx; py = sy;
+  }
+  drawStone(g, px, py + bob, r, team, 0, { scale: ai ? 1 + Math.sin(S.clock * 9) * 0.03 : 1 });
+  if (ai && G.phase === 'ready') { g.fillStyle = '#fff'; g.font = Math.round(r * 1.5) + 'px ' + FONT_D; g.textAlign = 'center'; g.textBaseline = 'middle'; const k = ((S.clock * 3) | 0) % 3 + 1; g.strokeStyle = INK; g.lineWidth = 4; const txt = '...'.slice(0, k); g.strokeText(txt, px, py - r * 2.1); g.fillText(txt, px, py - r * 2.1); }
+  if (ai || G.phase !== 'ready') return;
+  if (!am) {
+    if (!S.aimTipShown && G.humanThrows === 0 && !KB.used && !reduceMotion) {
+      // a ghost finger shows the pull
+      const mp = maxPullPx(), ph = (S.clock % 2.2) / 2.2, e = ph < 0.7 ? ph / 0.7 : 1, pull = mp * 0.5 * (1 - Math.pow(1 - e, 2));
+      const qx = hs.x - fx * pull, qy = hs.y - fy * pull;
+      g.strokeStyle = 'rgba(27,42,74,0.55)'; g.lineWidth = 3; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(hs.x, hs.y); g.lineTo(qx, qy); g.stroke(); g.setLineDash([]);
+      g.fillStyle = 'rgba(255,255,255,' + (ph < 0.85 ? 0.85 : 0.85 * (1 - (ph - 0.85) / 0.15)) + ')'; ell(g, qx, qy, r * 1.3, r * 1.3); g.fill();
+      g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
+      g.fillStyle = 'rgba(27,42,74,0.85)'; g.font = Math.round(r * 1.1) + 'px ' + FONT_D; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('쭉', qx, qy + r * 0.1);
+    }
+    return;
+  }
+  // aids
+  const aid = G.geo.easy ? 2 : G.aid, spin = G.spinSel[G.cur];
+  const power = am.power, ang = am.ang;
+  if (am.pulling || am.kb) {
+    const pv = (aid >= 1 || am.kb) && (power > 0.02 || am.kb) ? previewFor(G, ang, am.kb && power < 0.03 ? KB.lastP : power, spin) : null;
+    if (pv && aid >= 1) {
+      let acc = 0, lastx = null, lasty = null, drawn = 0;
+      const lim = aid >= 2 ? 1e9 : 150;
+      g.fillStyle = '#2a62c8'; g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = Math.max(1, r * 0.1);
+      let wl = 0;
+      for (let i = 0; i < pv.pts.length; i++) {
+        const [qx, qy] = toScr(pv.pts[i].x, pv.pts[i].y);
+        if (lastx !== null) { const d = Math.hypot(qx - lastx, qy - lasty); acc += d; wl += d / s; }
+        if (lastx === null || acc >= r * 1.1) { if (lastx !== null) acc = 0; if (wl > lim) break; ell(g, qx, qy, r * 0.2, r * 0.2); g.fill(); g.stroke(); drawn++; }
+        lastx = qx; lasty = qy;
+      }
+      if (aid >= 2 && !pv.out) { const [gx, gy] = toScr(pv.stop.x, pv.stop.y); drawStone(g, gx, gy, r, G.cur, 0, { alpha: 0.4, noShadow: true }); }
+    }
+    // power gauge ring around the hack
+    const gr = r * 2.5, gap = Math.atan2(-fy, -fx), a0 = gap + 0.7, sw = (TAU - 1.4) * clamp(power, 0, 1);
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(12,32,66,0.55)'; g.lineWidth = Math.max(7, r * 0.55); g.beginPath(); g.arc(hs.x, hs.y, gr, a0, a0 + TAU - 1.4); g.stroke();
+    if (power > 0.01) { g.strokeStyle = gaugeCol(power); g.lineWidth = Math.max(5, r * 0.4); g.beginPath(); g.arc(hs.x, hs.y, gr, a0, a0 + sw); g.stroke(); }
+    g.font = Math.max(13, Math.round(r * 1.05)) + 'px ' + FONT_D; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+    const tx = hs.x + fx * (gr + r * 1.5), ty = hs.y + fy * (gr + r * 1.5);
+    g.strokeStyle = INK; g.lineWidth = 4; g.strokeText('세기 ' + Math.round(power * 100), tx, ty); g.fillStyle = '#fff'; g.fillText('세기 ' + Math.round(power * 100), tx, ty);
+  }
+}
+function drawSweepHints(g) {
+  const G = S.G, s = S.vw.s, r = R * s, st = G.active;
+  if (!G || G.phase !== 'rolling' || !st || !st.alive) return;
+  const human = !isAI(G, G.cur);
+  const sw = G.sw;
+  const [px, py] = toScr(st.x, st.y), v = Math.hypot(st.vx, st.vy);
+  if (v < 1) return;
+  const [hx0, hy0] = vecToScr(st.vx / v, st.vy / v), hl = Math.hypot(hx0, hy0) || 1, hx = hx0 / hl, hy = hy0 / hl;
+  const lx = -hy, ly = hx;   // across the heading on screen
+  const ahead = r * 2.6;
+  if (sw > 0.04 || !human) {
+    // two brushes in front of the stone
+    const amp = r * 0.75 * (0.25 + 0.75 * sw), ph = reduceMotion ? 0 : Math.sin(S.clock * 34) * amp;
+    for (const side of [-1, 1]) {
+      const cx = px + hx * (ahead + side * r * 0.4) + lx * (side * r * 0.95 + ph * side), cy = py + hy * (ahead + side * r * 0.4) + ly * (side * r * 0.95 + ph * side);
+      g.save(); g.translate(cx, cy); g.rotate(Math.atan2(hy, hx));
+      g.globalAlpha = clamp(0.35 + sw, 0, 1);
+      g.fillStyle = '#ffffff'; g.strokeStyle = INK; g.lineWidth = Math.max(1.5, r * 0.1);
+      rrect(g, -r * 0.2, -r * 0.55, r * 0.5, r * 1.1, r * 0.18); g.fill(); g.stroke();
+      g.fillStyle = TEAMS[G.cur].c; rrect(g, -r * 0.62, -r * 0.18, r * 0.5, r * 0.36, r * 0.12); g.fill(); g.stroke();
+      g.restore();
+    }
+    g.globalAlpha = 1;
+    if (sw > 0.25 && !reduceMotion && Math.random() < 0.5 + sw * 0.4) {
+      const o = (Math.random() - 0.5) * 2 * r * 1.6;
+      burst(px + hx * ahead + lx * o, py + hy * ahead + ly * o, ['#ffffff', '#cfe9ff'], 1, 70, { dir: Math.atan2(hy, hx) + Math.PI + (Math.random() - 0.5), spread: 1.4, g: 30, life: 0.45, sz: 0.7 });
+    }
+    if (sw > 0.5 && S.clock - (S.lastScrubText || 0) > 0.55) { S.lastScrubText = S.clock; floatText(px + hx * ahead * 1.6 + lx * r * 1.4, py + hy * ahead * 1.6 + ly * r * 1.4, '쓱쓱!', '#bfe6ff', Math.round(r * 1.3 + 8)); }
+  } else if (human && G.humanThrows <= 3 && !S.usedSweep && G.mode !== 'coop' && !reduceMotion) {
+    // a ghost finger scribbles ahead of the stone
+    const cx = px + hx * ahead * 1.5 + lx * Math.sin(S.clock * 9) * r * 1.3, cy = py + hy * ahead * 1.5 + ly * Math.sin(S.clock * 9) * r * 1.3;
+    g.fillStyle = 'rgba(255,255,255,0.75)'; ell(g, cx, cy, r * 1.15, r * 1.15); g.fill(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
+  }
+}
+function drawStonesAndMarks(g) {
+  const G = S.G, s = S.vw.s, r = R * s;
+  const live = G.stones.filter((st) => st.alive).sort((a, b) => toScr(a.x, a.y)[1] - toScr(b.x, b.y)[1]);
+  const fxs = S.scoreFx;
+  if (fxs && fxs.team >= 0) {
+    const [bx, by] = toScr(0, TEE_Y);
+    g.strokeStyle = 'rgba(255,214,64,0.8)'; g.lineWidth = Math.max(2, r * 0.14); g.setLineDash([r * 0.5, r * 0.4]);
+    for (const st of G.stones) if (st.alive && fxs.ids.indexOf(st.id) >= 0) { const [qx, qy] = toScr(st.x, st.y); g.beginPath(); g.moveTo(bx, by); g.lineTo(qx, qy); g.stroke(); }
+    g.setLineDash([]);
+  }
+  for (const st of live) {
+    const [x, y] = toScr(st.x, st.y);
+    if (fxs && fxs.ids.indexOf(st.id) >= 0) {
+      const pu = 0.5 + 0.5 * Math.sin(S.clock * 7);
+      g.fillStyle = 'rgba(255,214,64,' + (0.25 + 0.2 * pu) + ')'; ell(g, x, y, r * (1.55 + 0.15 * pu), r * (1.5 + 0.15 * pu)); g.fill();
+      g.strokeStyle = '#ffd23f'; g.lineWidth = Math.max(2, r * 0.16); ell(g, x, y, r * 1.4, r * 1.35); g.stroke();
+    }
+    drawStone(g, x, y, r, st.team, st.rot, { flash: st.hitT });
+  }
+  for (const o of S.outAnim) {
+    const [x, y] = toScr(o.x, o.y), k = o.t / 0.9;
+    drawStone(g, x, y, r, o.team, o.rot, { alpha: clamp(1 - k, 0, 1), scale: 1 - 0.25 * k, noShadow: k > 0.4 });
+  }
+}
+function drawPad(g) {
+  const G = S.G, p = S.pad; if (!p) return;
+  const act = G.phase === 'rolling', lvl = S.sweepLvl;
+  g.save();
+  const gr = g.createLinearGradient(p.x, p.y, p.x, p.y + p.h); gr.addColorStop(0, act ? '#2b8fb8' : '#2a5f94'); gr.addColorStop(1, act ? '#1d6a97' : '#1b4373');
+  g.fillStyle = gr; rrect(g, p.x, p.y, p.w, p.h, 18); g.fill();
+  g.strokeStyle = act ? '#bff1ff' : 'rgba(244,250,255,0.55)'; g.lineWidth = act ? 3.5 : 2.5; g.stroke();
+  g.save(); rrect(g, p.x, p.y, p.w, p.h, 18); g.clip();
+  g.strokeStyle = 'rgba(255,255,255,' + (0.1 + 0.25 * lvl) + ')'; g.lineWidth = 8;
+  const off = reduceMotion ? 0 : (S.clock * (30 + 160 * lvl)) % 36;
+  for (let x = p.x - p.h + off; x < p.x + p.w + p.h; x += 36) { g.beginPath(); g.moveTo(x, p.y + p.h); g.lineTo(x + p.h * 0.6, p.y); g.stroke(); }
+  // finger trails
+  for (const ct of contacts.values()) if (!ct.dead && ct.role === 'sweep' && ct.pts && ct.pts.length > 1) {
+    g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath();
+    const t = nowS(); let first = true;
+    for (const q of ct.pts) { if (t - q.t > 0.35) continue; if (first) { g.moveTo(q.x, q.y); first = false; } else g.lineTo(q.x, q.y); }
+    g.stroke();
+  }
+  g.restore();
+  g.font = Math.round(clamp(p.h * 0.3, 15, 24)) + 'px ' + FONT_D; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  const who = coopWho(G), t1 = '쓱쓱 패드', t2 = act ? '좌우로 빠르게 문질러요!' : (who.sweeper + ' 담당 · 스톤이 굴러갈 때 문질러요');
+  g.strokeStyle = INK; g.lineWidth = 5; g.fillStyle = '#fff';
+  g.strokeText(t1, p.x + p.w / 2, p.y + p.h * 0.3); g.fillText(t1, p.x + p.w / 2, p.y + p.h * 0.3);
+  g.font = Math.round(clamp(p.h * 0.19, 12, 16)) + 'px ' + FONT_B; g.lineWidth = 4;
+  g.strokeText(t2, p.x + p.w / 2, p.y + p.h * 0.68); g.fillText(t2, p.x + p.w / 2, p.y + p.h * 0.68);
+  // sweep meter
+  g.fillStyle = 'rgba(0,0,0,0.3)'; rrect(g, p.x + 14, p.y + p.h - 12, p.w - 28, 6, 3); g.fill();
+  if (lvl > 0.02) { g.fillStyle = '#9be8ff'; rrect(g, p.x + 14, p.y + p.h - 12, (p.w - 28) * lvl, 6, 3); g.fill(); }
+  g.restore();
+}
+function coopWho(G) {
+  const t = G.cur, k = G.perTeam - G.left[t] - (G.phase === 'rolling' ? 0 : 0), idx = G.phase === 'rolling' ? k - 1 : k;
+  const base = t * 2, a = (Math.max(0, idx) % 2 === 0) ? 0 : 1;
+  return { thrower: (base + 1 + a) + 'P', sweeper: (base + 1 + (1 - a)) + 'P' };
+}
+function renderPlay(g, dt) {
+  const G = S.G;
+  if (S.bgDirty || !S.bg) buildBg();
+  if (S.trailDirty || !S.trail) resetTrail();
+  g.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+  if (S.shake > 0 && !reduceMotion) g.translate((Math.random() - 0.5) * 6 * S.shake * 4, (Math.random() - 0.5) * 6 * S.shake * 4);
+  g.drawImage(S.bg, 0, 0, S.W, S.H);
+  g.drawImage(S.trail, 0, 0, S.W, S.H);
+  // ice glints
+  if (!reduceMotion) {
+    const b = S.vw.box;
+    for (let i = 0; i < 6; i++) {
+      const ph = (S.clock * 0.7 + hash2(i, 4, 9) * 7) % 1, k = Math.sin(ph * Math.PI);
+      const x = b.x + hash2(i, 1, (S.clock * 0.7 + hash2(i, 4, 9) * 7) | 0) * b.w, y = b.y + hash2(i, 2, (S.clock * 0.7 + hash2(i, 4, 9) * 7) | 0) * b.h;
+      g.fillStyle = 'rgba(255,255,255,' + 0.9 * k + ')'; const z = 1.5 + 3 * k;
+      g.beginPath(); g.moveTo(x, y - z * 1.6); g.lineTo(x + z * 0.4, y - z * 0.4); g.lineTo(x + z * 1.6, y); g.lineTo(x + z * 0.4, y + z * 0.4); g.lineTo(x, y + z * 1.6); g.lineTo(x - z * 0.4, y + z * 0.4); g.lineTo(x - z * 1.6, y); g.lineTo(x - z * 0.4, y - z * 0.4); g.closePath(); g.fill();
+    }
+  }
+  drawStonesAndMarks(g);
+  drawPending(g, dt);
+  drawSweepHints(g);
+  if (S.pad) drawPad(g);
+  drawFx(g);
+  if (S.flash > 0) { g.fillStyle = 'rgba(255,255,255,' + S.flash * 0.6 + ')'; g.fillRect(0, 0, S.W, S.H); }
+}
+// title screen: the rink behind the card, with a few stones in the house
+function renderTitle(g, dt) {
+  if (S.bgDirty || !S.bg) buildBg();
+  g.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+  g.drawImage(S.bg, 0, 0, S.W, S.H);
+  const r = R * S.vw.s;
+  const spots = [[0, TEE_Y - 3, 0], [-22, TEE_Y + 24, 1], [30, TEE_Y + 16, 1], [-34, TEE_Y - 30, 0], [14, TEE_Y - 120, 0], [-6, TEE_Y - 190, 1]];
+  const slide = reduceMotion ? 0 : (S.clock * 40) % 360;
+  spots.forEach((sp, i) => { const [x, y] = toScr(sp[0], sp[1]); drawStone(g, x, y, r, sp[2], i * 1.3); });
+  const [x, y] = toScr(10, 60 + slide); drawStone(g, x, y, r, 1, S.clock * 0.7);
+  g.globalAlpha = 1;
+}
+function mascotScene(t) {
+  const cv = el.mascot; if (!cv || !cv.clientWidth) return;
+  const w = cv.width, h = cv.height, g = cv.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a5aa0'); gr.addColorStop(1, '#122b5a'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  const ig = g.createLinearGradient(0, h * 0.25, 0, h); ig.addColorStop(0, '#f6fcff'); ig.addColorStop(1, '#cfe8fb'); g.fillStyle = ig; rrect(g, 14, h * 0.22, w - 28, h * 0.74, 16); g.fill();
+  // house
+  const cx = w * 0.72, cy = h * 0.62, cols = ['#4f93f0', '#f7fcff', '#ff6270', '#f7fcff'], rs = [86, 58, 32, 13];
+  for (let i = 0; i < 4; i++) { ell(g, cx, cy, rs[i], rs[i] * 0.78); g.fillStyle = cols[i]; g.fill(); g.strokeStyle = 'rgba(25,60,130,0.5)'; g.lineWidth = 2; g.stroke(); }
+  g.strokeStyle = 'rgba(80,140,220,0.45)'; g.lineWidth = 2; g.setLineDash([8, 8]); g.beginPath(); g.moveTo(30, cy); g.lineTo(cx - 90, cy); g.stroke(); g.setLineDash([]);
+  const slide = reduceMotion ? 0.55 : (t * 0.18) % 1, sx = 70 + slide * (cx - 70 - 10), sy = cy + Math.sin(slide * 3) * 4;
+  drawStone(g, cx + 14, cy - 8, 20, 0, 0.6);
+  drawStone(g, cx - 34, cy + 22, 20, 1, 1.9);
+  // brushes + speed lines
+  g.strokeStyle = 'rgba(120,170,230,0.6)'; g.lineWidth = 3; g.lineCap = 'round';
+  for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(sx - 30 - i * 16, sy - 12 + i * 8); g.lineTo(sx - 52 - i * 16, sy - 12 + i * 8); g.stroke(); }
+  const wob = reduceMotion ? 0 : Math.sin(t * 14) * 7;
+  for (const sgn of [-1, 1]) { g.save(); g.translate(sx + 36, sy + sgn * 26 + wob * sgn); g.fillStyle = '#fff'; g.strokeStyle = INK; g.lineWidth = 2.5; rrect(g, -6, -14, 14, 28, 5); g.fill(); g.stroke(); g.fillStyle = sgn < 0 ? '#ff5d63' : '#ffc83a'; rrect(g, -26, -5, 20, 10, 4); g.fill(); g.stroke(); g.restore(); }
+  drawStone(g, sx, sy, 22, 1, t * 0.8);
+}
+
+// =====================================================================
+// HUD
+// =====================================================================
+function showBanner(b1, b2, cls, team) {
+  setText(el.b1, b1); setText(el.b2, b2 || '');
+  el.banner.className = ''; void el.banner.offsetWidth; el.banner.className = 'on ' + (cls || '') + (team !== undefined && team >= 0 ? ' t' + team : '');
+  S.bannerT = cls === 'long' ? 2.6 : cls === 'short' ? 1 : 1.5;
+}
+function showToast(text, dur, warn) {
+  setText(el.toastTxt, text); el.toast.classList.toggle('warn', !!warn); el.toast.classList.add('show'); S.toastT = dur || 2.2;
+  say(text);
+}
+function coach(text, secs) { S.coachMsg = text; S.coachT = text ? (secs || 4) : 0; }
+const ICE_SHORT = ['빠름', '보통', '느림'];
+function levelNo(G) { const lv = G.lv[1]; return lv === null || lv < 0 ? 1 : Math.min(10, Math.floor(lv) + 1); }
+function panelInfo(G, t) {
+  const left = G.left[t];
+  if (G.mode === 'solo') return t === 0 ? (S.streak > 0 ? S.streak + '연승 중' : '나') : '수준 ' + levelNo(G);
+  if (G.mode === 'coop') {
+    if (G.cur === t && (G.phase === 'ready' || G.phase === 'rolling')) { const w = coopWho(G); return '던지기 ' + w.thrower + ' · 쓱쓱 ' + w.sweeper; }
+    return (t * 2 + 1) + 'P · ' + (t * 2 + 2) + 'P';
+  }
+  return '돌 ' + left + '개';
+}
+function refreshHud() {
+  const G = S.G; if (!G) return;
+  setText(el.eV, String(G.endNo)); setText(el.eMax, '/' + (G.ends + G.extra));
+  setText(el.iceV, ICE_SHORT[G.ice + 1]); setCls(el.pIce, 'slow', G.ice > 0); setCls(el.pIce, 'fast', G.ice < 0);
+  const ht = isHumanTurn(G), shown = ht ? Math.max(0, Math.ceil(G.turnT)) : 0;
+  setText(el.tV, ht ? String(shown) : '-'); setCls(el.pTime, 'off', !ht);
+  const low = ht && G.turnT <= 5;
+  setCls(el.pTime, 'low', low);
+  if (low && !reduceMotion && S.lowTick !== shown && shown > 0 && shown <= 5) { S.lowTick = shown; if (shown <= 3) Sound.tickLast(); else Sound.tick(); }
+  if (!ht) S.lowTick = -1;
+  setText(el.stV, String(S.streak));
+  const cls = S.cls;
+  for (let t = 0; t < 2; t++) {
+    const tp = el.tp[t];
+    setText(tp.querySelector('.nm'), teamName(G, t)); setText(tp.querySelector('.role'), panelInfo(G, t));
+    setCls(tp.querySelector('.ham'), 'on', G.hammer === t);
+    setCls(tp, 'on', G.cur === t && G.phase !== 'endResult' && G.phase !== 'over' && G.phase !== 'intro');
+    const sc = tp.querySelector('.sc'); const tot = String(G.total[t]); if (sc._t !== tot) { if (sc._t !== undefined) { sc.classList.remove('pop'); void sc.offsetWidth; sc.classList.add('pop'); } setText(sc, tot); }
+    const used = G.perTeam - G.left[t], sig = G.perTeam + ':' + used + ':' + (G.ends + G.extra) + ':' + G.score[t].join(',') + ':' + G.endNo + ':' + cls;
+    if (tp._sig !== sig) {
+      tp._sig = sig;
+      const pips = tp.querySelector('.pips'); let h = '';
+      for (let i = 0; i < G.perTeam; i++) h += '<i class="' + (i < used ? 'used' : '') + '"></i>';
+      pips.innerHTML = h;
+      const ends = tp.querySelector('.ends'); h = '';
+      for (let i = 0; i < G.ends + G.extra; i++) h += '<i class="' + (i === G.endNo - 1 ? 'cur' : '') + '">' + (i < G.score[t].length ? G.score[t][i] : '·') + '</i>';
+      ends.innerHTML = h;
+    }
+  }
+  const sp = G.spinSel[G.cur], showSpin = ht && !(G.phase !== 'ready');
+  setStyle(el.spinL, 'display', showSpin ? 'grid' : 'none'); setStyle(el.spinR, 'display', showSpin ? 'grid' : 'none');
+  setCls(el.spinL, 'on', sp < 0); setCls(el.spinR, 'on', sp > 0);
+  el.spinL.setAttribute('aria-pressed', sp < 0 ? 'true' : 'false'); el.spinR.setAttribute('aria-pressed', sp > 0 ? 'true' : 'false');
+  const showNext = G.phase === 'endResult';
+  setStyle(el.btnNext, 'display', showNext ? 'block' : 'none'); setText(el.btnNext, G.final ? '결과 보기 ▶' : '다음 엔드 ▶');
+  const ct = S.coachT > 0 ? S.coachMsg : '';
+  setText(el.coach, ct); setCls(el.coach, 'off', !ct);
+  if (S.cls === 'port' && S.vw) {   // portrait: the bubble waits above the stone while aiming and drops behind the hack once the stone is away
+    const sy0 = toScr(0, G.geo.startY)[1], bx = S.vw.box, ch = 62;
+    setStyle(el.coach, 'top', Math.round(G.phase === 'rolling' ? Math.min(sy0 + 24, bx.y + bx.h - ch - 4) : Math.max(bx.y + 4, sy0 - ch - 16)) + 'px');
+  }
+}
+
+// =====================================================================
+// GAME EVENTS -> sound, particles, toasts
+// =====================================================================
+const scrPt = (e) => toScr(e.x, e.y);
+function turnCoach(G, e) {
+  if (!e.human) { coach('컴퓨터가 생각 중이에요...', 2.2); return; }
+  const touch = S.isTouch;
+  if (G.mode === 'coop') {
+    const w = coopWho(G);
+    coach(TEAMS[G.cur].name + ' 팀 차례! ' + w.thrower + '이 던지고, ' + w.sweeper + '은 패드를 쓱쓱!', 4);
+  } else if (G.humanThrows === 0 && !S.aimTipShown) coach(touch ? '스톤을 눌러 뒤로 쭉 당겼다 놓아요!' : '스톤 근처를 누르고 뒤로 끌었다 놓아요! (← → 각도 · 스페이스 길게 눌러 세기)', 7);
+  else if (G.mode === 'versus') coach(TEAMS[G.cur].name + ' 팀 차례예요! 뒤로 당겼다 놓아요', 3);
+  else if (G.humanThrows === 3 && G.streak === 0 && G.endNo === 1) coach('좌우 회전 버튼으로 스톤을 휘게 할 수도 있어요', 4);
+}
+function handleEvents(G) {
+  const ev = G.ev; if (!ev.length) return;
+  for (let i = 0; i < ev.length; i++) {
+    const e = ev[i], s = S.vw ? S.vw.s : 1;
+    switch (e.t) {
+      case 'endStart': {
+        S.parts.length = 0; S.rings.length = 0; S.floats.length = 0; S.outAnim.length = 0; S.scoreFx = null; S.trailDirty = true; S.bgDirty = true;
+        cancelAll(); KB.set = false; KB.charging = false; KB.p = 0;
+        const first = TEAMS[1 - e.hammer].name, ham = TEAMS[e.hammer].name;
+        const last = G.endNo > G.ends;
+        showBanner(last ? '연장 엔드!' : G.endNo + '엔드', e.easy ? '연습 엔드예요! 과녁이 크고 가까워요' : (G.mode === 'solo' ? (e.hammer === 1 ? '내가 먼저 던져요 · 컴퓨터가 마지막 돌' : '컴퓨터가 먼저 던져요 · 내가 마지막 돌') : first + ' 팀이 먼저 · ' + ham + ' 팀이 마지막 돌'), 'short');
+        Sound.end(); say(G.endNo + '엔드');
+        break;
+      }
+      case 'turn':
+        if (S.aim.active) cancelAim();   // the turn changed under a finger: never throw for the next team
+        Sound.turn(); KB.set = false; KB.charging = false; KB.p = 0; turnCoach(G, e);
+        if (G.mode !== 'solo' && G.throwNo === 0 && S.clock - (S.startClock || 0) > 2) showBanner(TEAMS[e.team].name + ' 팀', '먼저 던져요', 'short', e.team);
+        break;
+      case 'throw': {
+        const [sx, sy] = scrPt(e);
+        Sound.throw(e.power); vib(12);
+        ringFx(sx, sy, 'rgba(255,255,255,0.95)', R * s * 2.4, 0.4);
+        coach('', 0); S.aim.active = false; S.lastTrail = null; S.aimTipShown = true;
+        if (!isAI(G, e.team) && G.humanThrows <= 2 && !S.usedSweep) coach(G.mode === 'coop' ? '쓱쓱 담당은 아래 패드를 좌우로 빠르게 문질러요!' : (S.isTouch ? '손가락을 좌우로 빠르게 쓱쓱 문질러요! 더 멀리 가요' : '마우스를 누른 채 좌우로 쓱쓱! (← → 연타도 돼요)'), 5);
+        break;
+      }
+      case 'hit': {
+        const [sx, sy] = scrPt(e), [nx, ny] = vecToScr(e.nx, e.ny);
+        Sound.clack(e.s); if (e.s > 60) vib(10);
+        burst(sx, sy, ['#ffffff', '#cfe9ff', '#9fd0ff'], 4 + Math.min(8, (e.s / 25) | 0), 90 + e.s * 0.6, { g: 80, life: 0.55, sz: 0.8 });
+        ringFx(sx, sy, '#fff', R * s * 1.8, 0.28);
+        if (e.s > 130) S.shake = Math.max(S.shake, 0.12);
+        break;
+      }
+      case 'house': {
+        const [sx, sy] = scrPt(e); Sound.house(); ringFx(sx, sy, '#ffd23f', R * s * 2.6, 0.55);
+        if (!reduceMotion) burst(sx, sy, ['#ffd23f', '#fff'], 8, 120, { g: 0, life: 0.6, shape: 's', sz: 0.7 });
+        break;
+      }
+      case 'out': {
+        const [sx, sy] = scrPt(e);
+        S.outAnim.push({ x: e.x, y: e.y, vx: e.vx || 0, vy: e.vy || 0, team: e.team, rot: 0, spin: 2, t: 0 });
+        Sound.out();
+        if (e.why === 'hog') { showToast('호그 라인을 넘지 못해서 빠졌어요', 2, true); floatText(sx, sy, '짧아요!', '#ffb4a8', 20); }
+        else if (e.why === 'side') { showToast('옆선 밖으로 나갔어요', 1.8, true); }
+        else { showToast('뒷선 밖으로 나갔어요', 1.8, true); }
+        break;
+      }
+      case 'timeout': showToast('시간이 다 됐어요! 그냥 던져요', 2, true); Sound.tickLast(); break;
+      case 'endScore': {
+        S.scoreFx = { ids: e.ids, team: e.team, t: 0 };
+        const [bx, by] = toScr(0, TEE_Y);
+        if (e.team >= 0) {
+          const mine = G.mode !== 'solo' || e.team === 0;
+          Sound.score(e.pts);
+          for (const st of G.stones) if (e.ids.indexOf(st.id) >= 0) { const [qx, qy] = toScr(st.x, st.y); floatText(qx, qy - R * s * 1.6, '+1', TEAMS[e.team].l, Math.round(R * s * 1.7 + 8)); }
+          if (mine) { confetti(bx, by, e.pts >= 3 ? 90 : 46); S.flash = reduceMotion ? 0 : 0.12; }
+          showBanner(teamName(G, e.team) + ' ' + e.pts + '점!', e.pts >= 3 ? '와! 크게 득점했어요' : '과녁 한가운데에 가장 가까워요', '', e.team);
+          say(teamName(G, e.team) + ' ' + e.pts + '점');
+          const sc = el.tp[e.team].querySelector('.sc'); sc.classList.remove('pop');
+        } else {
+          Sound.blank();
+          showBanner(e.tie ? '똑같이 가까워요!' : '무득점', e.tie ? '이번 엔드는 점수 없이 넘어가요' : '과녁 안에 스톤이 없어요', '');
+          say('무득점');
+        }
+        coach('', 0);
+        break;
+      }
+      case 'over': onOver(G, e); break;
+      default: break;
+    }
+  }
+  ev.length = 0;
+}
+
+// =====================================================================
+// FLOW: title, play, pause, result
+// =====================================================================
+const MODE_LINES = {
+  solo: '<b>컴퓨터와 연승 도전!</b> 이길 때마다 상대가 더 정확해지고 제한 시간도 줄어요. 기록은 <b>연승 횟수</b>예요. 처음 엔드는 과녁이 크고 가까워서 한 번에 들어가요.',
+  versus: '<b>한 화면에서 두 팀이 번갈아</b> 던져요. 스톤을 던진 사람이 굴러가는 동안 직접 쓱쓱 문질러요.',
+  coop: '<b>한 팀 두 명이 한 스톤을 함께!</b> 한 명은 스톤을 던지고, 다른 한 명은 아래 쓱쓱 패드를 문질러요. 최대 4명까지 놀 수 있어요.',
+};
+function setSel(mode) {
+  S.mode = mode;
+  for (const k of Object.keys(el.modes)) { el.modes[k].classList.toggle('on', k === mode); el.modes[k].setAttribute('aria-checked', k === mode ? 'true' : 'false'); }
+  el.modeLine.innerHTML = MODE_LINES[mode];
+  setStyle(el.aidRow, 'display', mode === 'solo' ? 'none' : 'flex');
+  setStyle(el.bestLine, 'display', mode === 'solo' ? 'block' : 'none');
+  refreshTitleBest();
+}
+function setEnds(n) { S.ends = n; el.btnE.forEach((b, i) => { const on = [3, 4, 5][i] === n; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); }); }
+function setStones(n) { S.perTeam = n; el.btnS.forEach((b, i) => { const on = [4, 5, 6][i] === n; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); }); }
+function setAid(on) { S.aidOn = on; el.btnAid.classList.toggle('on', on); el.btnAid.setAttribute('aria-checked', on ? 'true' : 'false'); setText(el.aidTxt, on ? '조준 도우미 켜짐' : '조준 도우미 꺼짐'); }
+function refreshTitleBest() {
+  const b = $('tBest'); b.classList.toggle('none', !S.best);
+  setText(b, S.best ? S.best + '연승' : '아직 없어요');
+}
+function resetPlayView() {
+  S.parts.length = 0; S.rings.length = 0; S.floats.length = 0; S.outAnim.length = 0; S.scoreFx = null; S.trailDirty = true;
+  S.bannerT = 0; S.toastT = 0; S.coachT = 0; S.coachMsg = ''; el.banner.className = ''; el.toast.classList.remove('show');
+  S.aim.active = false; S.aim.power = 0; S.sweepLvl = 0; S.usedSweep = false; S.shake = 0; S.flash = 0;
+  KB.set = false; KB.charging = false; KB.p = 0; KB.used = false; pvKey = '';
+  for (const t of el.tp) t._sig = '';
+  cancelAll();
+}
+function startGame(cont) {
+  Sound.ensure();
+  if (S.mode === 'solo' && !cont) { S.streak = 0; S.newRecord = false; }
+  S.gameNo++;
+  const seed = BASE_SEED !== null ? (BASE_SEED + S.gameNo - 1) | 0 : ((Math.random() * 4294967296) >>> 0);
+  const solo = S.mode === 'solo';
+  const G = newGame({ seed, mode: S.mode, ends: S.ends, perTeam: S.perTeam, streak: solo ? S.streak : 0, easyIce: solo && S.streak === 0, aid: solo ? undefined : (S.aidOn ? 2 : 0) });
+  S.G = G; S.view = 'play'; S.paused = false; S.resultShown = false; S.pendingOver = 0; S.startClock = S.clock;
+  document.body.classList.remove('paused');
+  resetPlayView();
+  el.stage.hidden = false; el.stage.classList.remove('dim');
+  el.scrTitle.hidden = true; el.scrPause.hidden = true; el.scrOver.hidden = true;
+  layout(); handleEvents(G); refreshHud();
+  say('경기를 시작해요');
+}
+function toTitle() {
+  S.view = 'title'; S.G = null; S.paused = false; S.resultShown = false; S.pendingOver = 0; S.pad = null;
+  document.body.classList.remove('paused');
+  cancelAll(); Sound.loops(0, 0);
+  el.stage.hidden = true; el.scrTitle.hidden = false; el.scrPause.hidden = true; el.scrOver.hidden = true;
+  refreshTitleBest(); layout();
+}
+function playable() { const G = S.G; return S.view === 'play' && G && !S.paused && !S.resultShown && G.phase !== 'over'; }
+function pauseGame() {
+  const G = S.G; if (S.view !== 'play' || !G || S.paused || S.resultShown) return;
+  S.paused = true; cancelAll(); KB.charging = false; Sound.loops(0, 0);
+  document.body.classList.add('paused');
+  el.scrPause.hidden = false; setText($('btnMuteP'), Sound.muted ? '소리 켜기' : '소리 끄기');
+}
+function resumeGame() {
+  if (!S.paused) return;
+  S.paused = false; el.scrPause.hidden = true; document.body.classList.remove('paused'); lastTs = 0;
+}
+function uiMute() {
+  const m = Sound.muted; el.btnMute.classList.toggle('muted', m); el.btnMute.setAttribute('aria-label', m ? '소리 켜기' : '소리 끄기'); setText($('btnMuteP'), m ? '소리 켜기' : '소리 끄기');
+}
+function onOver(G, e) {
+  let win = false;
+  if (G.mode === 'solo') {
+    win = e.winner === 0;
+    if (win) {
+      S.streak++;
+      if (S.streak > S.best) { S.best = S.streak; store.set(KEY_BEST, S.best); S.newRecord = true; }
+    }
+  }
+  S.pendingOver = 2.0;
+  const mine = G.mode !== 'solo' || win;
+  if (G.mode === 'solo') showBanner(win ? '이겼어요!' : '졌어요...', win ? S.streak + '연승이에요' : S.streak + '연승으로 끝', 'long', win ? 0 : 1);
+  else showBanner(TEAMS[e.winner].name + ' 팀 승리!', '', 'long', e.winner);
+  if (mine) { const [bx, by] = toScr(0, TEE_Y); confetti(bx, by, 120); }
+  if (G.mode === 'solo' && win) Sound.win(); else if (G.mode === 'solo') Sound.over(); else Sound.win();
+  say(G.mode === 'solo' ? (win ? '이겼어요' : '졌어요') : TEAMS[e.winner].name + ' 팀 승리');
+}
+function sbHtml(G) {
+  const n = G.score[0].length, W = G.winner;
+  let h = '<tr><th></th>';
+  for (let i = 0; i < n; i++) h += '<th>' + (i < G.ends ? i + 1 : '연' + (i - G.ends + 1)) + '</th>';
+  h += '<th>합계</th></tr>';
+  for (let t = 0; t < 2; t++) {
+    h += '<tr class="' + (W === t ? 'w' : '') + '"><td class="nm d' + t + '">' + teamName(G, t) + '</td>';
+    for (let i = 0; i < n; i++) h += '<td>' + G.score[t][i] + '</td>';
+    h += '<td class="tot">' + G.total[t] + '</td></tr>';
+  }
+  return h;
+}
+function showResult() {
+  const G = S.G; if (!G || S.resultShown) return;
+  S.resultShown = true; Sound.loops(0, 0);
+  el.stage.classList.add('dim'); el.scrOver.hidden = false;
+  const solo = G.mode === 'solo', win = solo && G.winner === 0;
+  $('rSb').innerHTML = sbHtml(G);
+  $('rBigBox').innerHTML = '<span class="t0">' + G.total[0] + '</span><span class="vs">:</span><span class="t1">' + G.total[1] + '</span>';
+  if (solo) {
+    setText($('rTitle'), win ? '이겼어요!' : '아쉽게 졌어요');
+    $('rBadge').hidden = !S.newRecord; setText($('rBadge'), '새 기록! ' + S.best + '연승');
+    setText($('rS1l'), '연승'); setText($('rS1'), S.streak + '회'); setText($('rS2l'), win ? '다음 상대 수준' : '이번 상대 수준'); setText($('rS2'), String(win ? Math.min(10, Math.floor(aiLevelFor(S.streak, 0)) + 1) : levelNo(G)));
+    setText($('rS3l'), '얼음'); setText($('rS3'), ICE_SHORT[G.ice + 1]);
+    setText($('rLine'), win ? '이겼어요! 다음 상대는 더 정확하게 던지고, 제한 시간도 조금 줄어요.' : S.streak + '연승으로 끝났어요. 다시 도전해서 기록을 늘려 보세요!');
+    setText($('btnAgain'), win ? '다음 상대와 대결!' : '다시 도전');
+    $('rBestLine').hidden = false; $('rBest').classList.toggle('none', !S.best); setText($('rBest'), S.best ? S.best + '연승' : '아직 없어요');
+  } else {
+    setText($('rTitle'), TEAMS[G.winner].name + ' 팀 승리!');
+    $('rBadge').hidden = true;
+    setText($('rS1l'), '엔드'); setText($('rS1'), G.score[0].length + '엔드'); setText($('rS2l'), '스톤'); setText($('rS2'), G.perTeam + '개씩'); setText($('rS3l'), '얼음'); setText($('rS3'), ICE_SHORT[G.ice + 1]);
+    setText($('rLine'), G.coin ? '비겨서 동전을 던져 정했어요!' : (G.extra > 0 ? '연장 엔드 끝에 가려졌어요!' : '수고했어요! 한 판 더 해요.'));
+    setText($('btnAgain'), '한 판 더');
+    $('rBestLine').hidden = true;
+  }
+  say($('rTitle').textContent);
+}
+
+// =====================================================================
+// INPUT
+// One finger can arrive as pointer events, touch events and emulated mouse events (some whiteboards only send mouse), so every path feeds pressAt /
+// moveAt / pressEnd. A press seen again through another path within 120 ms is the same finger (de-dupe). Contacts are tracked one by one:
+// one 'aim' contact pulls the stone back, any number of 'sweep' contacts scrub. In the 2:2 mode the sweep pad and the rest of the screen are
+// separate zones, so the thrower and the sweeper can use their fingers at the same time.
+// =====================================================================
+const contacts = new Map(), recent = [], keySw = makeSweeper();
+let lastTouchAt = -1e9;
+const ctKey = (src, id) => src + ':' + id;
+function uniqueContacts() { return Array.from(new Set(contacts.values())); }
+function aimContact() { for (const ct of contacts.values()) if (!ct.dead && ct.role === 'aim') return ct; return null; }
+function cancelAim() { for (const ct of uniqueContacts()) if (ct.role === 'aim') { ct.dead = true; for (const k of ct.keys) contacts.delete(k); } S.aim.active = false; S.aim.power = 0; }
+function cancelAll() {
+  for (const ct of uniqueContacts()) { ct.dead = true; sweepClear(ct.sw); }
+  contacts.clear(); recent.length = 0; sweepClear(keySw);
+  S.aim.active = false; S.aim.power = 0; S.sweepLvl = 0;
+  if (S.G && S.G.phase === 'rolling') setSweep(S.G, 0);
+}
+const DEAD_PX = 10;
+function aimFrom(x, y) {
+  const A = S.aim, dx = A.ax - x, dy = A.ay - y, dist = Math.hypot(dx, dy), mx = maxPullPx();
+  A.px = x; A.py = y; A.dist = dist;
+  const [wx, wy] = vecToWorld(dx, dy);
+  if (dist > 1.5) A.ang = clamp(Math.atan2(wx, Math.max(wy, 1e-3)), -MAX_ANG, MAX_ANG);
+  A.power = wy > 0 ? clamp((dist - DEAD_PX) / (mx - DEAD_PX), 0, 1) : 0;
+}
+function doShoot(ang, power) {
+  const G = S.G; if (!G) return false;
+  const ok = shoot(G, ang, power);
+  if (ok) { KB.lastP = Math.max(0.2, power); handleEvents(G); refreshHud(); }
+  return ok;
+}
+function endContact(ct, fire) {
+  if (ct.dead) return; ct.dead = true;
+  for (const k of ct.keys) contacts.delete(k);
+  if (ct.role === 'sweep') { sweepClear(ct.sw); return; }
+  const A = S.aim, was = A.active; A.active = false;
+  if (!fire || !was) { A.power = 0; return; }
+  if (isHumanTurn(S.G) && playable() && A.power >= 0.04) doShoot(A.ang, A.power);
+  else if (isHumanTurn(S.G) && A.dist > 4) showToast('조금 더 뒤로 당겨야 던져요', 1.3);
+  A.power = 0;
+}
+function pressAt(src, id, x, y, isTouch) {
+  const now = performance.now();
+  if (isTouch) { lastTouchAt = now; S.isTouch = true; } else if (src === 'mouse' && now - lastTouchAt < 700) return false;
+  Sound.ensure();
+  const k = ctKey(src, id);
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const r = recent[i];
+    if (now - r.t > 400) { recent.splice(i, 1); continue; }
+    if (now - r.t < 120 && !r.srcs.has(src) && Math.abs(r.x - x) < 14 && Math.abs(r.y - y) < 14) {   // the same finger seen through another event path
+      r.srcs.add(src);
+      if (r.ct && !r.ct.dead) { r.ct.keys.add(k); contacts.set(k, r.ct); }
+      return false;
+    }
+  }
+  const ex = contacts.get(k); if (ex) endContact(ex, false);   // the old contact's "up" never came
+  const rec = { t: now, src, x, y, srcs: new Set([src]), ct: null };
+  recent.push(rec);
+  const G = S.G;
+  if (S.view !== 'play' || !G || S.paused || !S.vw || S.resultShown) return false;
+  if (G.phase === 'endResult') { if (G.endT < END_T - 0.5) skipEnd(G); return true; }
+  const p = S.pad, inPad = !!p && x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
+  let role = null;
+  if (inPad) role = 'sweep';
+  else if (isHumanTurn(G) && !aimContact()) role = 'aim';
+  else if (G.phase === 'rolling' && !isAI(G, G.cur) && G.mode !== 'coop') role = 'sweep';
+  if (!role) return false;
+  const ct = { keys: new Set([k]), dead: false, role, x, y, pts: [], sw: makeSweeper() };
+  rec.ct = ct; contacts.set(k, ct);
+  if (role === 'aim') {
+    const hs = hackScreen(), onHack = Math.hypot(x - hs.x, y - hs.y) < R * S.vw.s * 2.4 + 30;
+    const A = S.aim;
+    A.active = true; A.ax = onHack ? hs.x : x; A.ay = onHack ? hs.y : y; A.power = 0; A.dist = 0; A.ang = 0;
+    aimFrom(x, y); KB.set = false; coach('', 0);
+  } else { const t = nowS(); sweepPush(ct.sw, t, x, y); ct.pts.push({ x, y, t }); }
+  return true;
+}
+function moveAt(src, id, x, y) {
+  const ct = contacts.get(ctKey(src, id));
+  if (!ct || ct.dead) return;
+  ct.x = x; ct.y = y;
+  if (ct.role === 'aim') { if (S.aim.active) aimFrom(x, y); }
+  else { const t = nowS(); sweepPush(ct.sw, t, x, y); ct.pts.push({ x, y, t }); if (ct.pts.length > 30) ct.pts.shift(); }
+}
+function pressEnd(src, id, fire) { const ct = contacts.get(ctKey(src, id)); if (ct) endContact(ct, fire !== false); }
+const cvEl = el.cv;
+cvEl.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button > 0) return;   // left button only (touch and pen report 0 or -1)
+  if (pressAt('pointer', e.pointerId, e.clientX, e.clientY, e.pointerType !== 'mouse') && e.cancelable) e.preventDefault();
+});
+window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && !(e.buttons & 1)) return; moveAt('pointer', e.pointerId, e.clientX, e.clientY); });
+window.addEventListener('pointerup', (e) => pressEnd('pointer', e.pointerId, true));
+window.addEventListener('pointercancel', (e) => pressEnd('pointer', e.pointerId, false));
+cvEl.addEventListener('touchstart', (e) => {
+  lastTouchAt = performance.now();
+  for (const t of e.changedTouches) pressAt('touch', t.identifier, t.clientX, t.clientY, true);
+  if (e.cancelable) e.preventDefault();   // no emulated mouse events, no scrolling
+}, { passive: false });
+window.addEventListener('touchmove', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) moveAt('touch', t.identifier, t.clientX, t.clientY); }, { passive: true });
+window.addEventListener('touchend', (e) => { lastTouchAt = performance.now(); for (const t of e.changedTouches) pressEnd('touch', t.identifier, true); }, { passive: true });
+window.addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) pressEnd('touch', t.identifier, false); cancelAll(); }, { passive: true });
+cvEl.addEventListener('mousedown', (e) => { if (e.button > 0) return; pressAt('mouse', 0, e.clientX, e.clientY, false); });
+window.addEventListener('mousemove', (e) => { if (e.buttons & 1) moveAt('mouse', 0, e.clientX, e.clientY); });
+window.addEventListener('mouseup', () => pressEnd('mouse', 0, true));
+window.addEventListener('blur', () => { /* focus can shift right after a touch starts on some boards: do not pause or cancel here */ });
+
+// keyboard: left/right turn the aim, space (held) charges the power and releasing throws. While the stone rolls, mashing ← → or space brushes.
+const keys = new Set();
+function kbDefault() { KB.ang = 0; KB.set = true; }
+function kbTick(dt) {
+  const G = S.G; if (!G || !playable() || !isHumanTurn(G)) { KB.charging = false; return; }
+  if (!KB.set) return;
+  const fine = keys.has('ShiftLeft') || keys.has('ShiftRight'), rate = fine ? 0.35 : 1.0;
+  if (keys.has('ArrowLeft')) { KB.ang = clamp(KB.ang - rate * dt, -MAX_ANG, MAX_ANG); KB.used = true; }
+  if (keys.has('ArrowRight')) { KB.ang = clamp(KB.ang + rate * dt, -MAX_ANG, MAX_ANG); KB.used = true; }
+  if (KB.charging) { KB.p += KB.dir * dt * 0.95; if (KB.p >= 1) { KB.p = 1; KB.dir = -1; } if (KB.p <= 0) { KB.p = 0; KB.dir = 1; } }
+}
+const AIM_KEYS = new Set(['ArrowLeft', 'ArrowRight']);
+function keyTapSweep() { sweepTap(keySw, nowS()); S.usedSweep = true; }
+window.addEventListener('keyup', (e) => {
+  if (AIM_KEYS.has(e.code)) keys.delete(e.code);
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.delete(e.code);
+  if (e.code === 'Space' && KB.charging) {
+    KB.charging = false; const p = KB.p; KB.p = 0;
+    if (playable() && isHumanTurn(S.G) && p >= 0.04) doShoot(KB.ang, p);
+  }
+});
+function toggleSpin(v) {
+  const G = S.G; if (!G || !isHumanTurn(G)) return;
+  setSpin(G, G.cur, G.spinSel[G.cur] === v ? 0 : v); Sound.ui(); refreshHud(); pvKey = '';
+}
+window.addEventListener('keydown', (e) => {
+  const code = e.code;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const onBtn = document.activeElement && (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'A');
+  const G = S.G;
+  if (S.view === 'play' && playable() && G.phase === 'rolling' && !isAI(G, G.cur) && (AIM_KEYS.has(code) || code === 'Space' || code === 'KeyS')) {
+    e.preventDefault(); Sound.ensure(); if (!e.repeat) keyTapSweep(); return;
+  }
+  if (S.view === 'play' && playable() && isHumanTurn(G) && (AIM_KEYS.has(code) || code === 'ShiftLeft' || code === 'ShiftRight')) {
+    e.preventDefault(); if (!KB.set) kbDefault();
+    keys.add(code); KB.used = true; return;
+  }
+  if (S.view === 'play' && playable() && isHumanTurn(G) && code === 'KeyQ') { toggleSpin(-1); return; }
+  if (S.view === 'play' && playable() && isHumanTurn(G) && code === 'KeyE') { toggleSpin(1); return; }
+  if (code === 'Space' && S.view === 'play' && playable() && isHumanTurn(G) && !onBtn) {
+    e.preventDefault(); if (e.repeat) return;
+    Sound.ensure(); if (!KB.set) kbDefault();
+    KB.used = true; KB.charging = true; KB.p = 0; KB.dir = 1; coach('', 0); return;
+  }
+  if (code === 'Enter' || code === 'Space') {
+    if (onBtn) return;   // the browser clicks the focused button itself
+    if (e.repeat) { e.preventDefault(); return; }
+    Sound.ensure();
+    if (S.paused) { e.preventDefault(); resumeGame(); return; }
+    if (S.view === 'title') { e.preventDefault(); onStart(); return; }
+    if (S.view === 'play' && G && G.phase === 'endResult') { e.preventDefault(); skipEnd(G); return; }
+    if (G && G.phase === 'over' && S.resultShown) { e.preventDefault(); onAgain(); return; }
+    return;
+  }
+  if (code === 'Escape' || code === 'KeyP') { if (S.paused) resumeGame(); else pauseGame(); return; }
+  if (code === 'KeyM') { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); return; }
+  if (code === 'KeyR') {
+    if (S.paused) { e.preventDefault(); resumeGame(); startGame(false); return; }
+    if (G && G.phase === 'over' && S.resultShown) { e.preventDefault(); onAgain(); return; }
+    return;
+  }
+  if (S.view === 'title' && !S.paused && (code === 'ArrowLeft' || code === 'ArrowRight')) {
+    e.preventDefault(); const ms = ['solo', 'versus', 'coop'], i = ms.indexOf(S.mode); setSel(ms[clamp(i + (code === 'ArrowRight' ? 1 : -1), 0, 2)]); Sound.ui();
+  }
+});
+
+// buttons: a 120 ms window per control keeps one tap = one action
+function onTap(node, fn) {
+  let sx0 = 0, sy0 = 0, armed = false, lastAt = -1e9;
+  const fire = (e) => { const t = performance.now(); if (t - lastAt < 120) return; lastAt = t; fn(e); };
+  const down = (x, y) => { sx0 = x; sy0 = y; armed = true; };
+  const up = (x, y) => { const ok = armed && Math.hypot(x - sx0, y - sy0) < 16; armed = false; return ok; };
+  node.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button > 0) return; if (e.pointerType !== 'mouse') lastTouchAt = performance.now(); down(e.clientX, e.clientY); });
+  node.addEventListener('pointerup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('pointercancel', () => { armed = false; });
+  node.addEventListener('touchstart', (e) => { lastTouchAt = performance.now(); const t = e.changedTouches[0]; if (t) down(t.clientX, t.clientY); }, { passive: true });
+  node.addEventListener('touchend', (e) => {
+    lastTouchAt = performance.now();
+    const t = e.changedTouches[0];
+    if (t && up(t.clientX, t.clientY)) fire(e);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  node.addEventListener('touchcancel', () => { armed = false; }, { passive: true });
+  node.addEventListener('mousedown', (e) => { if (e.button <= 0 && performance.now() - lastTouchAt > 700) down(e.clientX, e.clientY); });
+  node.addEventListener('mouseup', (e) => { if (up(e.clientX, e.clientY)) fire(e); });
+  node.addEventListener('click', (e) => { armed = false; fire(e); });
+}
+function onStart() { Sound.ensure(); Sound.ui(); startGame(false); }
+function onAgain() { Sound.ensure(); const G = S.G; startGame(!!(G && G.mode === 'solo' && G.winner === 0)); }
+onTap($('btnStart'), () => onStart());
+for (const k of Object.keys(el.modes)) onTap(el.modes[k], () => { Sound.ensure(); Sound.ui(); setSel(k); });
+el.btnE.forEach((b, i) => onTap(b, () => { Sound.ensure(); Sound.ui(); setEnds([3, 4, 5][i]); }));
+el.btnS.forEach((b, i) => onTap(b, () => { Sound.ensure(); Sound.ui(); setStones([4, 5, 6][i]); }));
+onTap(el.btnAid, () => { Sound.ensure(); Sound.ui(); setAid(!S.aidOn); });
+onTap($('btnAgain'), () => onAgain());
+onTap($('btnOverTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap($('btnResume'), () => { Sound.ensure(); resumeGame(); });
+onTap($('btnPauseRetry'), () => { Sound.ensure(); resumeGame(); startGame(false); });
+onTap($('btnPauseTitle'), () => { Sound.ensure(); Sound.ui(); toTitle(); });
+onTap($('btnMuteP'), () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+onTap(el.btnPause, () => { Sound.ensure(); Sound.ui(); pauseGame(); });
+onTap(el.btnMute, () => { Sound.ensure(); Sound.setMuted(!Sound.muted); uiMute(); Sound.ui(); });
+onTap(el.spinL, () => { Sound.ensure(); toggleSpin(-1); });
+onTap(el.spinR, () => { Sound.ensure(); toggleSpin(1); });
+onTap(el.btnNext, () => { Sound.ensure(); const G = S.G; if (G) skipEnd(G); });
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
+// pause when the page is hidden. (No pause on window blur: focus can shift right after a touch starts on some boards.)
+document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelAll(); keys.clear(); KB.charging = false; pauseGame(); } });
+window.addEventListener('pagehide', () => { cancelAll(); keys.clear(); KB.charging = false; pauseGame(); });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (!e.target.closest || !e.target.closest('.overlay')) e.preventDefault(); }, { passive: false });
+for (const a of document.querySelectorAll('a.back, #lnkMenu')) {
+  a.addEventListener('click', (e) => {
+    try { if (document.referrer && new URL(document.referrer).origin === location.origin) { e.preventDefault(); history.back(); } } catch (err) { /* follow the link */ }
+  });
+}
+let lastW = 0, lastH = 0;
+function onResize() {
+  const changed = Math.abs(window.innerWidth - lastW) > 1 || Math.abs(window.innerHeight - lastH) > 1;
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  if (changed) cancelAll();
+  layout();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+
+// =====================================================================
+// LOOP + BOOT
+// =====================================================================
+let lastTs = 0, slowN = 0, slowSum = 0, mascotAcc = 0;
+function updateTrail() {
+  const G = S.G, st = G.active;
+  if (G.phase !== 'rolling' || !st || !st.alive || !S.trail) { S.lastTrail = null; return; }
+  const [x, y] = toScr(st.x, st.y), r = R * S.vw.s;
+  if (S.lastTrail && Math.hypot(x - S.lastTrail[0], y - S.lastTrail[1]) < 2.5) return;
+  if (S.lastTrail) {
+    const tg = S.trail.getContext('2d'); tg.setTransform(S.dpr, 0, 0, S.dpr, 0, 0); tg.lineCap = 'butt';
+    tg.strokeStyle = 'rgba(105,155,215,0.16)'; tg.lineWidth = r * 1.5; tg.beginPath(); tg.moveTo(S.lastTrail[0], S.lastTrail[1]); tg.lineTo(x, y); tg.stroke();
+    if (G.sw > 0.12) { tg.strokeStyle = 'rgba(255,255,255,' + clamp(G.sw * 0.7, 0, 0.7) + ')'; tg.lineWidth = r * 2.3; tg.beginPath(); tg.moveTo(S.lastTrail[0], S.lastTrail[1]); tg.lineTo(x, y); tg.stroke(); }
+  }
+  S.lastTrail = [x, y];
+}
+function tickPlay(dt) {
+  const G = S.G; if (!G || S.paused) return;
+  kbTick(dt);
+  // brush input -> logic
+  const t = nowS(); let lvl = 0;
+  for (const ct of uniqueContacts()) if (!ct.dead && ct.role === 'sweep') lvl = Math.max(lvl, sweepLevel(ct.sw, t));
+  lvl = Math.max(lvl, sweepLevel(keySw, t));
+  S.sweepLvl = lvl;
+  if (G.phase === 'rolling' && !isAI(G, G.cur)) { setSweep(G, lvl); if (lvl > 0.3) S.usedSweep = true; }
+  else if (G.phase === 'ready' && !isAI(G, G.cur)) {
+    const A = S.aim;
+    if (A.active && A.power > 0.03) setAim(G, A.ang, A.power, G.spinSel[G.cur]); else if (KB.set) setAim(G, KB.ang, KB.charging ? KB.p : KB.lastP, G.spinSel[G.cur]); else setAim(G, 0, 0.42, G.spinSel[G.cur]);
+  }
+  if (G.ev.length) handleEvents(G);
+  update(G, dt);
+  if (G.ev.length) handleEvents(G);
+  updateTrail();
+  tickFx(dt);
+  const st = G.active;
+  Sound.loops(G.phase === 'rolling' && st && st.alive ? Math.hypot(st.vx, st.vy) : 0, G.phase === 'rolling' ? G.sw : 0);
+  if (S.pendingOver > 0) { S.pendingOver -= dt; if (S.pendingOver <= 0) showResult(); }
+  refreshHud();
+}
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!lastTs) lastTs = ts;
+  let dt = (ts - lastTs) / 1000; lastTs = ts;
+  // low-end devices: if frames keep taking too long, render at a lower resolution (2 -> 1.5 -> 1)
+  if (!S.paused && !document.hidden && dt > 0 && dt < 0.5 && dprCap > 1) {
+    slowSum += dt; slowN++;
+    if (slowN >= 90) { if (slowSum / slowN > 0.0235 && (window.devicePixelRatio || 1) > dprCap - 0.01) { dprCap = dprCap > 1.5 ? 1.5 : 1; layout(); } slowN = 0; slowSum = 0; }
+  }
+  if (dt < 0) dt = 0; if (dt > 0.05) dt = 0.05;
+  const t0 = performance.now();
+  if (layoutSig() !== S.sig) layout();
+  if (!S.paused) S.clock += dt;
+  if (S.view === 'play' && S.G) {
+    if (!S.paused) { tickPlay(dt); renderPlay(ctx, dt); }
+  } else if (!S.paused) {
+    renderTitle(ctx, dt);
+    if (!el.scrTitle.hidden) { mascotAcc += dt; if (mascotAcc > 1 / 24) { mascotAcc = 0; mascotScene(S.clock); } }
+  }
+  const ms = performance.now() - t0, P = S.perf;
+  P.ms = P.ms * 0.95 + ms * 0.05; if (ms > P.max) P.max = ms; P.frames++;
+}
+function stoneScreen(id) { const G = S.G; if (!G || !S.vw) return null; const st = G.stones.find((q) => q.id === id) || G.active; if (!st) return null; const [x, y] = toScr(st.x, st.y); return { x, y }; }
+function snapshot() {
+  const G = S.G;
+  return {
+    view: S.view, mode: S.mode, ends: S.ends, perTeam: S.perTeam, paused: S.paused, best: S.best, streak: S.streak, newRecord: S.newRecord, resultShown: S.resultShown, cls: S.cls,
+    phase: G ? G.phase : '', gmode: G ? G.mode : '', endNo: G ? G.endNo : 0, cur: G ? G.cur : 0, left: G ? G.left.slice() : null, total: G ? G.total.slice() : null, score: G ? G.score.map((a) => a.slice()) : null,
+    hammer: G ? G.hammer : 0, ice: G ? G.ice : 0, winner: G ? G.winner : -1, turnT: G ? G.turnT : 0, sw: G ? G.sw : 0, sweepLvl: S.sweepLvl, humanThrows: G ? G.humanThrows : 0, lv: G ? G.lv.slice() : null,
+    stones: G ? G.stones.filter((s) => s.alive).map((s) => ({ id: s.id, team: s.team, x: s.x, y: s.y, vx: s.vx, vy: s.vy })) : [], thrownAll: G ? G.nextId - 1 : 0,
+    aim: { active: S.aim.active, power: S.aim.power, ang: S.aim.ang }, contacts: uniqueContacts().filter((c) => !c.dead).map((c) => c.role), dpr: S.dpr, muted: Sound.muted, audio: Sound.ctx ? Sound.ctx.state : 'none',
+    aid: G ? (G.geo.easy ? 2 : G.aid) : 0, easy: G ? G.geo.easy : false, seed: G ? G.seed : 0,
+  };
+}
+window.__game = {
+  get state() { return snapshot(); },
+  get layout() {
+    return {
+      W: window.innerWidth, H: window.innerHeight, cls: S.cls, safe: safeInsets(), area: S.area, sheet: S.vw ? S.vw.box : null, scale: S.vw ? S.vw.s : 0, pad: S.pad,
+      hud: rectOf(el.hud), pause: rectOf(el.btnPause), mute: rectOf(el.btnMute), time: rectOf(el.pTime), panelA: rectOf(el.tp[0]), panelB: rectOf(el.tp[1]),
+      spinL: rectOf(el.spinL), spinR: rectOf(el.spinR), next: rectOf(el.btnNext), coach: rectOf(el.coach),
+      start: rectOf($('btnStart')), titleCard: rectOf(el.scrTitle.querySelector('.card')), resume: rectOf($('btnResume')), again: rectOf($('btnAgain')),
+      modes: { solo: rectOf(el.modes.solo), versus: rectOf(el.modes.versus), coop: rectOf(el.modes.coop) }, aid: rectOf(el.btnAid), ends: el.btnE.map(rectOf), stones: el.btnS.map(rectOf),
+      pauseRetry: rectOf($('btnPauseRetry')), pauseTitle: rectOf($('btnPauseTitle')), overTitle: rectOf($('btnOverTitle')),
+    };
+  },
+  get G() { return S.G; },
+  get perf() { return Object.assign({}, S.perf); },
+  hackScreen, stoneScreen, toScreen: (x, y) => { const [sx, sy] = toScr(x, y); return { x: sx, y: sy }; },
+  forward() { const [x, y] = vecToScr(0, 1), l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; },
+  dirScreen(ang) { const [x, y] = vecToScr(Math.sin(ang), Math.cos(ang)), l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; },
+  maxPull: maxPullPx,
+  start(o) { o = o || {}; if (o.mode) setSel(o.mode); if (o.ends) setEnds(o.ends); if (o.perTeam) setStones(o.perTeam); if (o.streak !== undefined) S.streak = o.streak; startGame(o.streak !== undefined); },
+  pause() { pauseGame(); }, resume() { resumeGame(); }, title() { toTitle(); },
+  setStreak(n) { S.streak = n; },
+  // QA: step the game faster than real time
+  advance(sec) { const G = S.G; if (!G) return; const n = Math.round(sec * 60); for (let i = 0; i < n; i++) { if (G.phase === 'over') break; update(G, 1 / 60); if (G.ev.length) handleEvents(G); } tickFx(Math.min(sec, 1)); refreshHud(); },
+  // QA: let the strategy bot throw for the current (human) team
+  botThrow(lv) { const G = S.G; if (!G || G.phase !== 'ready') return false; const p = planShot(G, G.cur, lv === undefined ? 9 : lv); return doShoot(p.ang, p.power); },
+  logic: { newGame, update, shoot, planShot, houseScore, simLone, previewPath, aiBaseLevel, aiLevelFor, turnLimitFor, aidFor, noiseFor, physStep, makeSweeper, sweepPush, sweepTap, sweepLevel, STEP, R, HALF_W, TEE_Y, HOG_Y, RINGS, A0, SWEEP_FRIC, ICE_K },
+};
+
+(function boot() {
+  S.best = readNum(KEY_BEST);
+  try { S.isTouch = window.matchMedia('(pointer: coarse)').matches; } catch (e) { S.isTouch = false; }
+  setSel('solo'); setEnds(3); setStones(4); setAid(true);
+  lastW = window.innerWidth; lastH = window.innerHeight;
+  uiMute();
+  toTitle();
+  requestAnimationFrame(frame);
+  (function waitFonts() {
+    try {
+      if (!document.fonts || !document.fonts.load) return;
+      const t = new Promise((res) => setTimeout(res, 1500));
+      Promise.race([Promise.all([document.fonts.load('30px "Jua"'), document.fonts.load('20px "Gowun Dodum"')]), t]).then(() => { S.bgDirty = true; }).catch(() => { /* fallback fonts are fine */ });
+    } catch (e) { /* ignore */ }
+  })();
+})();
+
+})();
+</script>
+</body>
+</html>
